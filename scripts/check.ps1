@@ -2,8 +2,14 @@ $ErrorActionPreference = "Stop"
 
 Push-Location (Split-Path -Parent $PSScriptRoot)
 try {
-    lua5.1 tests\run.lua
-    luac5.1 -p DoYouNeedIt_Core.lua DoYouNeedIt.lua
+    & lua5.1 tests\run.lua
+    if ($LASTEXITCODE -ne 0) {
+        throw "lua5.1 tests\run.lua failed with exit code $LASTEXITCODE"
+    }
+    & luac5.1 -p DoYouNeedIt_Core.lua DoYouNeedIt.lua
+    if ($LASTEXITCODE -ne 0) {
+        throw "luac5.1 syntax check failed with exit code $LASTEXITCODE"
+    }
 
     $forbidden = @(
         'C:\Users',

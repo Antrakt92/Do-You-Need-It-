@@ -1,6 +1,6 @@
 local Core = {}
 
-Core.VERSION = "0.1.6"
+Core.VERSION = "0.1.7"
 
 local DEFAULTS = {
     autoWhisper = false,
@@ -37,6 +37,31 @@ local VALID_EQUIP_LOCS = {
     INVTYPE_RANGEDRIGHT = true,
 }
 
+local PERSISTED_ROW_KEYS = {
+    id = true,
+    looter = true,
+    itemLink = true,
+    equipLoc = true,
+    itemID = true,
+    instanceName = true,
+    encounterName = true,
+    timestamp = true,
+    reason = true,
+    statusText = true,
+    equippedText = true,
+    unsafe = true,
+    manualWhispered = true,
+    autoWhispered = true,
+}
+
+local PERSISTED_GROUP_KEYS = {
+    title = true,
+    instanceName = true,
+    encounterName = true,
+    startedAt = true,
+    endedAt = true,
+}
+
 local function asNumber(value, fallback)
     local number = tonumber(value)
     if number == nil then
@@ -71,6 +96,44 @@ local function pruneListStart(list, limit)
     while #list > limit do
         table.remove(list, 1)
     end
+end
+
+local function copyPrimitiveFields(source, allowedKeys)
+    local copy = {}
+    if type(source) ~= "table" then
+        return copy
+    end
+    for key in pairs(allowedKeys) do
+        local value = source[key]
+        local valueType = type(value)
+        if valueType == "string" or valueType == "number" or valueType == "boolean" then
+            copy[key] = value
+        end
+    end
+    return copy
+end
+
+local function snapshotRowForSave(row)
+    local saved = copyPrimitiveFields(row, PERSISTED_ROW_KEYS)
+    if saved.statusText and saved.statusText:find("auto in", 1, true) == 1 then
+        saved.statusText = "candidate"
+    end
+    return saved
+end
+
+local function snapshotRowsForSave(rows, limit)
+    local saved = {}
+    if type(rows) == "table" then
+        for index = 1, #rows do
+            if type(rows[index]) == "table" then
+                saved[#saved + 1] = snapshotRowForSave(rows[index])
+            end
+        end
+    end
+    if limit ~= nil then
+        pruneListStart(saved, limit)
+    end
+    return saved
 end
 
 local function baseName(name)
@@ -238,16 +301,27 @@ function Core.NormalizeSettings(saved)
 end
 
 function Core.NormalizeSavedRows(rows, limit)
-    local normalized = {}
-    if type(rows) == "table" then
-        for index = 1, #rows do
-            if type(rows[index]) == "table" then
-                normalized[#normalized + 1] = rows[index]
+    return snapshotRowsForSave(rows, limit or DEFAULTS.maxSessionRows)
+end
+
+function Core.SnapshotRowsForSave(rows, limit)
+    return snapshotRowsForSave(rows, limit or DEFAULTS.maxSessionRows)
+end
+
+function Core.SnapshotHistoryForSave(history, limit)
+    local saved = {}
+    if type(history) == "table" then
+        for index = 1, #history do
+            local group = history[index]
+            if type(group) == "table" then
+                local savedGroup = copyPrimitiveFields(group, PERSISTED_GROUP_KEYS)
+                savedGroup.rows = snapshotRowsForSave(group.rows)
+                saved[#saved + 1] = savedGroup
             end
         end
     end
-    pruneListStart(normalized, limit or DEFAULTS.maxSessionRows)
-    return normalized
+    pruneListStart(saved, limit or DEFAULTS.maxHistoryGroups)
+    return saved
 end
 
 function Core.GetNewestRowsFirst(rows, limit)

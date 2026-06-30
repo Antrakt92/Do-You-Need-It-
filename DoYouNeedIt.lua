@@ -406,9 +406,10 @@ end
 
 local function SaveDB()
     DoYouNeedItDB = DoYouNeedItDB or {}
-    DoYouNeedItDB.settings = Addon.state and Addon.state.settings or Core.NormalizeSettings({})
-    DoYouNeedItDB.history = Addon.state and Addon.state.history or {}
-    DoYouNeedItDB.sessionRows = Addon.state and Addon.state.sessionRows or {}
+    local settings = Addon.state and Addon.state.settings or Core.NormalizeSettings({})
+    DoYouNeedItDB.settings = settings
+    DoYouNeedItDB.history = Addon.state and Core.SnapshotHistoryForSave(Addon.state.history, settings.maxHistoryGroups) or {}
+    DoYouNeedItDB.sessionRows = Addon.state and Core.SnapshotRowsForSave(Addon.state.sessionRows, settings.maxSessionRows) or {}
     DoYouNeedItDB.diagnostics = Addon.diagnostics or {}
 end
 
@@ -437,6 +438,7 @@ local function SendWhisper(row, isAuto)
         row.manualWhispered = true
         row.statusText = "sent"
     end
+    SaveDB()
     RefreshRows()
 end
 
@@ -978,6 +980,7 @@ local function HandleSlash(message)
         Print("auto=" .. tostring(Addon.state.settings.autoWhisper)
             .. ", delay=" .. tostring(Addon.state.settings.autoDelay)
             .. "s, saved groups=" .. tostring(#Addon.state.history)
+            .. ", session drops=" .. tostring(#Addon.state.sessionRows)
             .. ", debug=" .. tostring(Addon.state.settings.debug)
             .. ", diagnostics=" .. tostring(#(Addon.diagnostics or {}))
             .. ", build=" .. tostring(Core.VERSION)
@@ -991,7 +994,7 @@ local function Initialize()
     DoYouNeedItDB = DoYouNeedItDB or {}
     local settings = Core.NormalizeSettings(DoYouNeedItDB.settings or {})
     Addon.state = Core.CreateState(settings)
-    Addon.state.history = type(DoYouNeedItDB.history) == "table" and DoYouNeedItDB.history or {}
+    Addon.state.history = Core.SnapshotHistoryForSave(DoYouNeedItDB.history, Addon.state.settings.maxHistoryGroups)
     Addon.state.sessionRows = Core.NormalizeSavedRows(DoYouNeedItDB.sessionRows, Addon.state.settings.maxSessionRows)
     Addon.diagnostics = type(DoYouNeedItDB.diagnostics) == "table" and DoYouNeedItDB.diagnostics or {}
     Addon.lootPatterns = Core.CreateLootMessagePatterns({
@@ -1081,6 +1084,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             if ClearInspectPlayer then
                 SafeCall(ClearInspectPlayer)
             end
+            SaveDB()
             RefreshRows()
         end
     end

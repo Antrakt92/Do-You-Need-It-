@@ -128,6 +128,50 @@ local loadedSessionRows = Core.NormalizeSavedRows({
 assertEqual(#loadedSessionRows, 2, "loaded session rows prune to limit")
 assertEqual(loadedSessionRows[1].id, "middle", "loaded session rows keep retained order")
 assertEqual(loadedSessionRows[2].id, "new", "loaded session rows keep newest retained row")
+local persistedRows = Core.SnapshotRowsForSave({
+    {
+        id = "pending",
+        looter = "Otherplayer",
+        itemLink = "|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r",
+        statusText = "auto in 10s",
+        pendingAutoWhisper = true,
+        autoToken = {},
+        runtimeOnly = {},
+    },
+    {
+        id = "sent",
+        looter = "Otherplayer",
+        itemLink = "|cff0070dd|Hitem:19020:::::::::::::|h[Test Chest]|h|r",
+        statusText = "sent",
+        manualWhispered = true,
+    },
+}, 10)
+assertEqual(#persistedRows, 2, "save snapshot keeps persistable rows")
+assertEqual(persistedRows[1].statusText, "candidate", "save snapshot clears stale pending auto status")
+assertEqual(persistedRows[1].pendingAutoWhisper, nil, "save snapshot drops pending auto flag")
+assertEqual(persistedRows[1].autoToken, nil, "save snapshot drops runtime auto token")
+assertEqual(persistedRows[1].runtimeOnly, nil, "save snapshot drops non-primitive runtime fields")
+assertEqual(persistedRows[2].manualWhispered, true, "save snapshot keeps sent whisper state")
+local persistedHistory = Core.SnapshotHistoryForSave({
+    {
+        title = "Dungeon - Boss (1 drop)",
+        rows = {
+            {
+                id = "history-pending",
+                looter = "Otherplayer",
+                itemLink = "|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r",
+                statusText = "auto in 10s",
+                pendingAutoWhisper = true,
+                autoToken = {},
+            },
+        },
+        transient = {},
+    },
+}, 10)
+assertEqual(#persistedHistory, 1, "history save snapshot keeps group")
+assertEqual(persistedHistory[1].rows[1].statusText, "candidate", "history snapshot clears stale pending auto status")
+assertEqual(persistedHistory[1].rows[1].autoToken, nil, "history snapshot drops runtime auto token")
+assertEqual(persistedHistory[1].transient, nil, "history snapshot drops runtime group fields")
 
 local auto = Core.GetAutoWhisperDecision(
     Core.NormalizeSettings({ autoWhisper = true, autoDelay = 12 }),
@@ -267,7 +311,7 @@ assertEqual(#diagnostics, 10, "diagnostics prune to limit")
 assertEqual(diagnostics[1].stage, "stage12", "newest diagnostic first")
 assertEqual(diagnostics[10].stage, "stage3", "oldest retained diagnostic kept at limit")
 
-assertEqual(Core.VERSION, "0.1.6", "core exposes current version")
+assertEqual(Core.VERSION, "0.1.7", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -278,7 +322,7 @@ end
 
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
-assertTruthy(toc:find("## Version: 0.1.6", 1, true), "toc version present")
+assertTruthy(toc:find("## Version: 0.1.7", 1, true), "toc version present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")
 assertTruthy(toc:find("DoYouNeedIt.lua", 1, true), "toc loads runtime")
@@ -305,6 +349,9 @@ assertTruthy(runtime:find("ResolveLootMessageLooter", 1, true), "runtime resolve
 assertTruthy(runtime:find("ContinueOnItemLoad", 1, true), "runtime waits for uncached item data")
 assertTruthy(runtime:find("BuildItemMetadata", 1, true), "runtime maps item info through core metadata helper")
 assertTruthy(runtime:find("DoYouNeedItDB.sessionRows", 1, true), "runtime persists session rows")
+assertTruthy(runtime:find("SnapshotRowsForSave", 1, true), "runtime sanitizes saved session rows")
+assertTruthy(runtime:find("SnapshotHistoryForSave", 1, true), "runtime sanitizes saved history")
+assertTruthy(runtime:find("session drops=", 1, true), "runtime reports saved session drop count in status")
 assertTruthy(runtime:find("Core.GetNewestRowsFirst", 1, true), "runtime displays newest rows first")
 assertEqual(runtime:find("UnitExistsClean", 1, true), nil, "runtime does not gate roster building through UnitExists")
 assertTruthy(runtime:find("layout=460x310", 1, true), "runtime reports compact layout in status")
