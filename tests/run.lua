@@ -24,6 +24,9 @@ local repairedDelay = Core.NormalizeSettings({ minDelay = 50, maxDelay = 3, auto
 assertEqual(repairedDelay.minDelay, 3, "invalid min delay resets to default")
 assertEqual(repairedDelay.maxDelay, 30, "invalid max delay resets to default")
 assertEqual(repairedDelay.autoDelay, 10, "auto delay survives repaired bounds")
+local clampedMaxDelay = Core.NormalizeSettings({ minDelay = 3, maxDelay = 90, autoDelay = 80 })
+assertEqual(clampedMaxDelay.maxDelay, 30, "oversized max delay resets to default")
+assertEqual(clampedMaxDelay.autoDelay, 30, "auto delay clamps to repaired max delay")
 
 local accepted = Core.ClassifyTradeCandidate({
     link = "|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r",
@@ -49,6 +52,14 @@ local selfLoot = Core.ClassifyTradeCandidate({
     equipLoc = "INVTYPE_WEAPON",
 }, "Player", "Player")
 assertEqual(selfLoot.visible, false, "player's own loot hidden")
+
+local sameBaseDifferentRealm = Core.ClassifyTradeCandidate({
+    link = "|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r",
+    quality = 3,
+    classID = 2,
+    equipLoc = "INVTYPE_WEAPON",
+}, "Player-OtherRealm", "Player-Ravencrest")
+assertEqual(sameBaseDifferentRealm.visible, true, "same short name on a different realm is not self loot")
 
 local reagent = Core.ClassifyTradeCandidate({
     link = "|cff1eff00|Hitem:190456:::::::::::::|h[Test Reagent]|h|r",
@@ -229,7 +240,7 @@ assertEqual(#diagnostics, 10, "diagnostics prune to limit")
 assertEqual(diagnostics[1].stage, "stage12", "newest diagnostic first")
 assertEqual(diagnostics[10].stage, "stage3", "oldest retained diagnostic kept at limit")
 
-assertEqual(Core.VERSION, "0.1.4", "core exposes current version")
+assertEqual(Core.VERSION, "0.1.5", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -240,7 +251,7 @@ end
 
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
-assertTruthy(toc:find("## Version: 0.1.4", 1, true), "toc version present")
+assertTruthy(toc:find("## Version: 0.1.5", 1, true), "toc version present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")
 assertTruthy(toc:find("DoYouNeedIt.lua", 1, true), "toc loads runtime")

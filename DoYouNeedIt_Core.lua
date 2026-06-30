@@ -1,6 +1,6 @@
 local Core = {}
 
-Core.VERSION = "0.1.4"
+Core.VERSION = "0.1.5"
 
 local DEFAULTS = {
     autoWhisper = false,
@@ -72,9 +72,21 @@ local function baseName(name)
     return name:match("^([^-]+)") or name
 end
 
+local function realmName(name)
+    if type(name) ~= "string" or name == "" then
+        return nil
+    end
+    return name:match("^[^-]+%-(.+)$")
+end
+
 local function samePlayerName(left, right)
     local leftBase = baseName(left)
     local rightBase = baseName(right)
+    local leftRealm = realmName(left)
+    local rightRealm = realmName(right)
+    if leftRealm and rightRealm then
+        return left == right
+    end
     return leftBase ~= nil and rightBase ~= nil and leftBase == rightBase
 end
 
@@ -204,7 +216,7 @@ function Core.NormalizeSettings(saved)
     settings.debug = saved.debug == true
     local minDelay = asNumber(saved.minDelay, DEFAULTS.minDelay)
     local maxDelay = asNumber(saved.maxDelay, DEFAULTS.maxDelay)
-    if minDelay < 0 or minDelay > DEFAULTS.maxDelay or maxDelay < minDelay then
+    if minDelay < 0 or minDelay > DEFAULTS.maxDelay or maxDelay < minDelay or maxDelay > DEFAULTS.maxDelay then
         minDelay = DEFAULTS.minDelay
         maxDelay = DEFAULTS.maxDelay
     end
