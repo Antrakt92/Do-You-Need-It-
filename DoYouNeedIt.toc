@@ -1,0 +1,9 @@
+## Interface: 120005, 120007
+## Title: Do You Need It?
+## Notes: Shows likely-tradeable gear drops and helps ask group members if they need them.
+## Author: Antrakt92
+## Version: 0.1.0
+## SavedVariables: DoYouNeedItDB
+
+DoYouNeedIt_Core.lua
+DoYouNeedIt.lua
