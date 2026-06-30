@@ -1,6 +1,6 @@
 local Core = {}
 
-Core.VERSION = "0.1.13"
+Core.VERSION = "0.1.14"
 
 local DEFAULTS = {
     autoWhisper = false,
@@ -138,6 +138,22 @@ local function snapshotRowsForSave(rows, limit)
         pruneListStart(saved, limit)
     end
     return saved
+end
+
+local function copyEquipmentSlots(slots)
+    local copy = {}
+    if type(slots) ~= "table" then
+        return copy, 0
+    end
+
+    local count = 0
+    for equipLoc, text in pairs(slots) do
+        if type(equipLoc) == "string" and equipLoc ~= "" and type(text) == "string" and text ~= "" then
+            copy[equipLoc] = text
+            count = count + 1
+        end
+    end
+    return copy, count
 end
 
 local function baseName(name)
@@ -345,6 +361,56 @@ function Core.GetNewestRowsFirst(rows, limit)
         end
     end
     return result
+end
+
+function Core.StoreEquipmentCache(cache, names, equippedByLoc, timestamp)
+    if type(cache) ~= "table" then
+        return false
+    end
+
+    local slots, slotCount = copyEquipmentSlots(equippedByLoc)
+    if slotCount == 0 then
+        return false
+    end
+
+    local nameList = {}
+    if type(names) == "string" then
+        nameList[1] = names
+    elseif type(names) == "table" then
+        for index = 1, #names do
+            nameList[#nameList + 1] = names[index]
+        end
+    end
+
+    local wrote = false
+    for index = 1, #nameList do
+        local name = nameList[index]
+        if type(name) == "string" and name ~= "" then
+            cache[name] = {
+                slots = slots,
+                timestamp = timestamp,
+            }
+            wrote = true
+        end
+    end
+    return wrote
+end
+
+function Core.GetCachedEquippedText(cache, name, equipLoc)
+    if type(cache) ~= "table" or type(name) ~= "string" or name == "" or type(equipLoc) ~= "string" or equipLoc == "" then
+        return nil
+    end
+
+    local entry = cache[name]
+    if type(entry) ~= "table" or type(entry.slots) ~= "table" then
+        return nil
+    end
+
+    local text = entry.slots[equipLoc]
+    if type(text) == "string" and text ~= "" then
+        return text
+    end
+    return nil
 end
 
 function Core.FindRosterNameInMessage(message, roster, playerName)

@@ -6,6 +6,11 @@ local Addon = {
     rows = {},
     rowFrames = {},
     pendingInspect = {},
+    pendingEquipmentScan = {},
+    equipmentCache = {},
+    equipmentScanQueue = {},
+    equipmentScanActive = nil,
+    equipmentScanScheduled = false,
     selectedHistoryIndex = nil,
     selectedView = "current",
     selectedTab = "askable",
@@ -32,11 +37,15 @@ local MAX_ITEM_RETRIES = 5
 local ITEM_RETRY_DELAY = 0.7
 local MAX_INSPECT_RETRIES = 8
 local INSPECT_RETRY_DELAY = 0.8
+local MAX_EQUIPMENT_SCAN_ATTEMPTS = 2
+local EQUIPMENT_SCAN_DELAY = 1.1
+local EQUIPMENT_SCAN_TIMEOUT = 2.5
 local MAX_DIAGNOSTICS = 20
 local ENCOUNTER_LOOT_GRACE = 120
 local UNKNOWN_EQUIPPED = "Equipped: unknown"
 local EQUIPPED_PENDING = "Equipped: checking..."
 local EQUIPPED_UNAVAILABLE = "Equipped: unavailable"
+local CACHED_EQUIPPED_PREFIX = "Cached: "
 local WHISPER_TEMPLATE = "Hey, do you need %s?"
 
 local EQUIP_LOC_SLOTS = {
@@ -485,10 +494,10 @@ local function ReadItemMetadata(itemLink)
     })
 end
 
-local function FormatEquippedText(unit, equipLoc)
+local function ReadEquippedLinks(unit, equipLoc)
     local slotNames = EQUIP_LOC_SLOTS[equipLoc]
     if not slotNames then
-        return UNKNOWN_EQUIPPED
+        return {}
     end
 
     local links = {}
@@ -502,11 +511,27 @@ local function FormatEquippedText(unit, equipLoc)
             end
         end
     end
+    return links
+end
 
+local function FormatEquippedLinks(prefix, links)
+    links = type(links) == "table" and links or {}
     if #links == 0 then
         return UNKNOWN_EQUIPPED
     end
-    return "Equipped: " .. table.concat(links, " / ")
+    return prefix .. table.concat(links, " / ")
+end
+
+local function FormatEquippedText(unit, equipLoc)
+    return FormatEquippedLinks("Equipped: ", ReadEquippedLinks(unit, equipLoc))
+end
+
+local function FormatCachedEquippedTextFromLinks(links)
+    return FormatEquippedLinks(CACHED_EQUIPPED_PREFIX, links)
+end
+
+local function IsCachedEquippedText(text)
+    return type(text) == "string" and text:find(CACHED_EQUIPPED_PREFIX, 1, true) == 1
 end
 
 local function CanInspectClean(unit)
@@ -515,6 +540,212 @@ local function CanInspectClean(unit)
     end
     local result = SafeCall(CanInspect, unit, false)
     return CleanBoolean(result) == true
+end
+
+local StartEquipmentScan
+
+local function CountEquipmentCacheEntries()
+    local count = 0
+    for _ in pairs(Addon.equipmentCache or {}) do
+        count = count + 1
+    end
+    return count
+end
+
+local function HasPendingLootInspect()
+    for _, rows in pairs(Addon.pendingInspect or {}) do
+        if type(rows) == "table" and #rows > 0 then
+            return true
+        end
+    end
+    return false
+end
+
+local function ScheduleEquipmentScan(delay)
+    if Addon.equipmentScanScheduled then
+        return
+    end
+    Addon.equipmentScanScheduled = true
+    C_Timer.After(delay or EQUIPMENT_SCAN_DELAY, function()
+        Addon.equipmentScanScheduled = false
+        if StartEquipmentScan then
+            StartEquipmentScan()
+        end
+    end)
+end
+
+local function CaptureEquipmentForUnit(unit, source)
+    local fullName, shortName = SafeUnitName(unit)
+    if not fullName and not shortName then
+        return false
+    end
+
+    local equippedByLoc = {}
+    for equipLoc in pairs(EQUIP_LOC_SLOTS) do
+        local text = FormatCachedEquippedTextFromLinks(ReadEquippedLinks(unit, equipLoc))
+        if text ~= UNKNOWN_EQUIPPED then
+            equippedByLoc[equipLoc] = text
+        end
+    end
+
+    local names = {}
+    if fullName then
+        names[#names + 1] = fullName
+    end
+    if shortName and shortName ~= fullName then
+        names[#names + 1] = shortName
+    end
+
+    local captured = Core.StoreEquipmentCache(Addon.equipmentCache, names, equippedByLoc, Now())
+    RecordDiagnostic(captured and "scan_cached" or "scan_empty", {
+        reason = source or "scan",
+        looter = fullName or shortName,
+        slots = captured and "cached" or "none",
+    })
+    return captured
+end
+
+local function RequeueEquipmentScan(scan, reason)
+    if type(scan) ~= "table" then
+        return
+    end
+    local attempt = (scan.attempt or 0) + 1
+    if attempt > MAX_EQUIPMENT_SCAN_ATTEMPTS then
+        RecordDiagnostic("scan_failed", {
+            reason = reason or "unknown",
+            looter = scan.name,
+            attempt = attempt - 1,
+        })
+        return
+    end
+    scan.attempt = attempt
+    table.insert(Addon.equipmentScanQueue, scan)
+    RecordDiagnostic("scan_retry", {
+        reason = reason or "unknown",
+        looter = scan.name,
+        attempt = attempt,
+    })
+    ScheduleEquipmentScan(EQUIPMENT_SCAN_DELAY)
+end
+
+local function CancelActiveEquipmentScan(reason, requeue)
+    local active = Addon.equipmentScanActive
+    if not active then
+        return
+    end
+    if active.guid then
+        Addon.pendingEquipmentScan[active.guid] = nil
+    end
+    Addon.equipmentScanActive = nil
+    RecordDiagnostic("scan_cancelled", {
+        reason = reason or "unknown",
+        looter = active.name,
+        attempt = active.attempt or 0,
+    })
+    if requeue then
+        table.insert(Addon.equipmentScanQueue, 1, active)
+        ScheduleEquipmentScan(EQUIPMENT_SCAN_DELAY)
+    end
+end
+
+local function AddScanUnit(queue, seen, unit, source)
+    local fullName, shortName = SafeUnitName(unit)
+    local key = fullName or shortName
+    if not key or seen[key] then
+        return
+    end
+    seen[key] = true
+    queue[#queue + 1] = {
+        unit = unit,
+        name = key,
+        source = source,
+        attempt = 0,
+    }
+end
+
+local function QueueEquipmentScan(source, quiet)
+    if not Addon.state then
+        return 0
+    end
+
+    BuildRoster()
+    local queue = {}
+    local seen = {}
+    AddScanUnit(queue, seen, "player", source)
+    for index = 1, 4 do
+        AddScanUnit(queue, seen, "party" .. index, source)
+    end
+    for index = 1, 40 do
+        AddScanUnit(queue, seen, "raid" .. index, source)
+    end
+
+    Addon.equipmentScanQueue = queue
+    RecordDiagnostic("scan_queued", {
+        reason = source or "manual",
+        count = #queue,
+    })
+    if not quiet then
+        Print("equipment scan queued: " .. tostring(#queue) .. " units")
+    end
+    ScheduleEquipmentScan(0)
+    return #queue
+end
+
+StartEquipmentScan = function()
+    if Addon.equipmentScanActive then
+        return
+    end
+    if HasPendingLootInspect() then
+        ScheduleEquipmentScan(EQUIPMENT_SCAN_DELAY)
+        return
+    end
+    if InCombatLockdown and InCombatLockdown() then
+        RecordDiagnostic("scan_deferred", { reason = "combat_lockdown" })
+        ScheduleEquipmentScan(3)
+        return
+    end
+
+    local scan = table.remove(Addon.equipmentScanQueue, 1)
+    if not scan then
+        return
+    end
+
+    if scan.unit == "player" then
+        CaptureEquipmentForUnit(scan.unit, scan.source or "scan")
+        ScheduleEquipmentScan(EQUIPMENT_SCAN_DELAY)
+        return
+    end
+    if not CanInspectClean(scan.unit) then
+        RequeueEquipmentScan(scan, "inspect_blocked")
+        return
+    end
+
+    local guid = SafeUnitGUID(scan.unit)
+    if not guid then
+        RequeueEquipmentScan(scan, "guid_missing")
+        return
+    end
+
+    scan.guid = guid
+    scan.token = {}
+    Addon.equipmentScanActive = scan
+    Addon.pendingEquipmentScan[guid] = scan
+    RecordDiagnostic("scan_requested", {
+        reason = scan.source or "scan",
+        looter = scan.name,
+        attempt = scan.attempt or 0,
+    })
+    SafeCall(NotifyInspect, scan.unit)
+
+    local token = scan.token
+    C_Timer.After(EQUIPMENT_SCAN_TIMEOUT, function()
+        if Addon.equipmentScanActive ~= scan or scan.token ~= token then
+            return
+        end
+        Addon.pendingEquipmentScan[guid] = nil
+        Addon.equipmentScanActive = nil
+        RequeueEquipmentScan(scan, "inspect_timeout")
+    end)
 end
 
 local function RowsForSelectedView()
@@ -703,7 +934,9 @@ local function FailInspectRow(row, reason)
     end
     row.inspectPending = false
     row.inspectToken = nil
-    if row.equippedText == EQUIPPED_PENDING or row.equippedText == UNKNOWN_EQUIPPED then
+    if IsCachedEquippedText(row.equippedText) then
+        -- Keep the pre-scan fallback visible when live inspect fails.
+    elseif row.equippedText == EQUIPPED_PENDING or row.equippedText == UNKNOWN_EQUIPPED then
         row.equippedText = EQUIPPED_UNAVAILABLE
     end
     RecordDiagnostic("inspect_failed", {
@@ -729,7 +962,9 @@ local function ScheduleInspectRetry(row, reason)
         return false
     end
 
-    row.equippedText = EQUIPPED_PENDING
+    if not IsCachedEquippedText(row.equippedText) then
+        row.equippedText = EQUIPPED_PENDING
+    end
     local token = {}
     row.inspectToken = token
     RecordDiagnostic("inspect_retry", {
@@ -766,6 +1001,7 @@ RequestInspectForRow = function(row)
 
     local equippedText = FormatEquippedText(unit, row.equipLoc)
     if equippedText ~= UNKNOWN_EQUIPPED then
+        CaptureEquipmentForUnit(unit, "loot_live")
         CompleteInspectRow(row, equippedText)
         return
     end
@@ -776,7 +1012,10 @@ RequestInspectForRow = function(row)
         return
     end
 
-    row.equippedText = EQUIPPED_PENDING
+    CancelActiveEquipmentScan("loot_inspect", true)
+    if not IsCachedEquippedText(row.equippedText) then
+        row.equippedText = EQUIPPED_PENDING
+    end
     row.inspectPending = true
     Addon.pendingInspect[guid] = Addon.pendingInspect[guid] or {}
     table.insert(Addon.pendingInspect[guid], row)
@@ -831,6 +1070,7 @@ local function AddTradeCandidate(looter, itemLink, metadata)
         })
     end
 
+    local cachedEquippedText = Core.GetCachedEquippedText(Addon.equipmentCache, looter, metadata.equipLoc)
     local row = Core.AddVisibleRow(Addon.state, {
         looter = looter,
         itemLink = metadata.link or itemLink,
@@ -847,7 +1087,7 @@ local function AddTradeCandidate(looter, itemLink, metadata)
         timestamp = Now(),
         reason = askable and "trade candidate" or classification.reason,
         statusText = askable and "candidate" or (classification.reason or "not askable"),
-        equippedText = UNKNOWN_EQUIPPED,
+        equippedText = cachedEquippedText or UNKNOWN_EQUIPPED,
         unsafe = false,
     }, askable)
     if not row then
@@ -1339,6 +1579,8 @@ local function HandleSlash(message)
     elseif command == "test" then
         CreateUI()
         AddTestRow()
+    elseif command == "scan" then
+        QueueEquipmentScan("manual", false)
     elseif command == "debug" then
         rest = string.lower(rest or "")
         if rest == "on" then
@@ -1375,12 +1617,14 @@ local function HandleSlash(message)
             .. "s, saved groups=" .. tostring(#Addon.state.history)
             .. ", session drops=" .. tostring(#Addon.state.sessionRows)
             .. ", all gear=" .. tostring(#(Addon.state.sessionAllRows or {}))
+            .. ", cache=" .. tostring(CountEquipmentCacheEntries())
+            .. ", scan queue=" .. tostring(#(Addon.equipmentScanQueue or {}))
             .. ", debug=" .. tostring(Addon.state.settings.debug)
             .. ", diagnostics=" .. tostring(#(Addon.diagnostics or {}))
             .. ", build=" .. tostring(Core.VERSION)
             .. ", layout=460x310")
     else
-        Print("commands: /dyni, /dyni test, /dyni auto on|off, /dyni delay <seconds>, /dyni clear, /dyni history, /dyni debug on|off, /dyni diag, /dyni status")
+        Print("commands: /dyni, /dyni test, /dyni scan, /dyni auto on|off, /dyni delay <seconds>, /dyni clear, /dyni history, /dyni debug on|off, /dyni diag, /dyni status")
     end
 end
 
@@ -1392,6 +1636,11 @@ local function Initialize()
     Addon.state.sessionRows = Core.NormalizeSavedRows(DoYouNeedItDB.sessionRows, Addon.state.settings.maxSessionRows)
     Addon.state.sessionAllRows = Core.NormalizeSavedRows(DoYouNeedItDB.sessionAllRows, Addon.state.settings.maxSessionRows)
     Addon.diagnostics = type(DoYouNeedItDB.diagnostics) == "table" and DoYouNeedItDB.diagnostics or {}
+    Addon.equipmentCache = {}
+    Addon.pendingEquipmentScan = {}
+    Addon.equipmentScanQueue = {}
+    Addon.equipmentScanActive = nil
+    Addon.equipmentScanScheduled = false
     Addon.lootPatterns = Core.CreateLootMessagePatterns({
         lootSelf = LOOT_ITEM_SELF,
         lootSelfMultiple = LOOT_ITEM_SELF_MULTIPLE,
@@ -1407,12 +1656,15 @@ local function Initialize()
 
     SLASH_DOYOUNEEDIT1 = "/dyni"
     SlashCmdList.DOYOUNEEDIT = HandleSlash
+    QueueEquipmentScan("addon_loaded", true)
 end
 
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_LOGOUT")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+eventFrame:RegisterEvent("CHALLENGE_MODE_START")
 eventFrame:RegisterEvent("ENCOUNTER_START")
 eventFrame:RegisterEvent("ENCOUNTER_END")
 eventFrame:RegisterEvent("CHAT_MSG_LOOT")
@@ -1439,8 +1691,14 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         end
         Addon.currentInstanceName = instanceName
         BuildRoster()
+        QueueEquipmentScan("entering_world", true)
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        StartEquipmentScan()
+    elseif event == "CHALLENGE_MODE_START" then
+        QueueEquipmentScan("challenge_start", true)
     elseif event == "GROUP_ROSTER_UPDATE" then
         BuildRoster()
+        QueueEquipmentScan("group_roster_update", true)
     elseif event == "ENCOUNTER_START" then
         local encounterID, encounterName = ...
         if Addon.state and (#Addon.state.currentRows > 0 or #(Addon.state.allRows or {}) > 0) then
@@ -1451,6 +1709,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         Addon.currentEncounterID = encounterID
         Addon.currentEncounterName = CleanString(encounterName)
         Addon.currentEncounterStartedAt = Now()
+        QueueEquipmentScan("encounter_start", true)
     elseif event == "ENCOUNTER_END" then
         local encounterID, encounterName = ...
         Addon.currentEncounterID = encounterID or Addon.currentEncounterID
@@ -1466,6 +1725,20 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "INSPECT_READY" then
         local guid = ...
         guid = CleanString(guid)
+        local handledInspect = false
+        if guid and Addon.pendingEquipmentScan[guid] then
+            local scan = Addon.pendingEquipmentScan[guid]
+            Addon.pendingEquipmentScan[guid] = nil
+            if Addon.equipmentScanActive == scan then
+                Addon.equipmentScanActive = nil
+            end
+            if CaptureEquipmentForUnit(scan.unit, scan.source or "scan") then
+                handledInspect = true
+                ScheduleEquipmentScan(EQUIPMENT_SCAN_DELAY)
+            else
+                RequeueEquipmentScan(scan, "links_missing")
+            end
+        end
         if guid and Addon.pendingInspect[guid] then
             local rows = Addon.pendingInspect[guid]
             Addon.pendingInspect[guid] = nil
@@ -1476,6 +1749,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
                     row.inspectToken = nil
                     local unit = ResolveUnitForName(row.looter)
                     if unit then
+                        CaptureEquipmentForUnit(unit, "loot_ready")
                         local equippedText = FormatEquippedText(unit, row.equipLoc)
                         if equippedText ~= UNKNOWN_EQUIPPED then
                             CompleteInspectRow(row, equippedText)
@@ -1487,11 +1761,12 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
                     end
                 end
             end
-            if ClearInspectPlayer then
-                SafeCall(ClearInspectPlayer)
-            end
+            handledInspect = true
             SaveDB()
             RefreshRows()
+        end
+        if handledInspect and ClearInspectPlayer then
+            SafeCall(ClearInspectPlayer)
         end
     end
 end)

@@ -183,6 +183,35 @@ assertEqual(
     "askable loot opens askable"
 )
 
+local equipmentCache = {}
+local cachedWeapon = "Cached: |cff1eff00|Hitem:25:::::::::::::|h[Worn Shortsword]|h|r"
+assertEqual(
+    Core.StoreEquipmentCache(equipmentCache, { "Otherplayer", "Otherplayer-Realm" }, { INVTYPE_WEAPON = cachedWeapon }, 1234),
+    true,
+    "equipment cache stores usable slot text"
+)
+assertEqual(
+    Core.GetCachedEquippedText(equipmentCache, "Otherplayer", "INVTYPE_WEAPON"),
+    cachedWeapon,
+    "equipment cache returns cached text by short name"
+)
+assertEqual(
+    Core.GetCachedEquippedText(equipmentCache, "Otherplayer-Realm", "INVTYPE_WEAPON"),
+    cachedWeapon,
+    "equipment cache returns cached text by full name"
+)
+assertEqual(equipmentCache.Otherplayer.timestamp, 1234, "equipment cache keeps scan timestamp")
+assertEqual(
+    Core.GetCachedEquippedText(equipmentCache, "Otherplayer", "INVTYPE_CHEST"),
+    nil,
+    "equipment cache returns nil for missing slots"
+)
+assertEqual(
+    Core.StoreEquipmentCache(equipmentCache, "Emptyplayer", {}, 1235),
+    false,
+    "equipment cache rejects empty captures"
+)
+
 local sessionState = Core.CreateState({ maxSessionRows = 3 })
 for index = 1, 5 do
     Core.AddVisibleRow(sessionState, {
@@ -404,7 +433,7 @@ assertEqual(#diagnostics, 10, "diagnostics prune to limit")
 assertEqual(diagnostics[1].stage, "stage12", "newest diagnostic first")
 assertEqual(diagnostics[10].stage, "stage3", "oldest retained diagnostic kept at limit")
 
-assertEqual(Core.VERSION, "0.1.13", "core exposes current version")
+assertEqual(Core.VERSION, "0.1.14", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -415,7 +444,7 @@ end
 
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
-assertTruthy(toc:find("## Version: 0.1.13", 1, true), "toc version present")
+assertTruthy(toc:find("## Version: 0.1.14", 1, true), "toc version present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")
 assertTruthy(toc:find("DoYouNeedIt.lua", 1, true), "toc loads runtime")
@@ -434,6 +463,11 @@ assertTruthy(runtime:find("local MAX_VISIBLE_ROWS = 5", 1, true), "runtime limit
 assertTruthy(runtime:find("DoYouNeedItCore.ShouldAutoShowWindow", 1, true), "runtime auto-shows on new loot rows")
 assertTruthy(runtime:find("GetAutoShowTabForRow", 1, true), "runtime selects all gear when only non-askable loot drops")
 assertEqual(runtime:find("if askable and DoYouNeedItCore.ShouldAutoShowWindow", 1, true), nil, "runtime does not limit auto-show to askable rows")
+assertTruthy(runtime:find("QueueEquipmentScan", 1, true), "runtime queues equipment pre-scans")
+assertTruthy(runtime:find("StartEquipmentScan", 1, true), "runtime processes equipment scans one unit at a time")
+assertTruthy(runtime:find("Core.GetCachedEquippedText", 1, true), "runtime applies cached equipped fallback to loot rows")
+assertTruthy(runtime:find("command == \"scan\"", 1, true), "runtime wires /dyni scan")
+assertTruthy(runtime:find("Cached:", 1, true), "runtime labels cached equipped data distinctly")
 assertTruthy(runtime:find("AddTestRow", 1, true), "runtime has a local test row command")
 assertTruthy(runtime:find("command == \"test\"", 1, true), "runtime wires /dyni test")
 assertTruthy(runtime:find("/dyni test", 1, true), "runtime documents /dyni test in command help")
