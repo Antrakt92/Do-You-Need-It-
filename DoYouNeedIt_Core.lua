@@ -1,6 +1,6 @@
 local Core = {}
 
-Core.VERSION = "0.1.16"
+Core.VERSION = "0.1.17"
 
 local DEFAULTS = {
     autoWhisper = false,
@@ -179,6 +179,24 @@ local function samePlayerName(left, right)
         return left == right
     end
     return leftBase ~= nil and rightBase ~= nil and leftBase == rightBase
+end
+
+local function isSelfLootName(looter, playerName)
+    local looterBase = baseName(looter)
+    local playerBase = baseName(playerName)
+    if looterBase == nil or playerBase == nil or looterBase ~= playerBase then
+        return false
+    end
+
+    local looterRealm = realmName(looter)
+    local playerRealm = realmName(playerName)
+    if looterRealm and playerRealm then
+        return looter == playerName
+    end
+    if looterRealm and not playerRealm then
+        return false
+    end
+    return true
 end
 
 local function stripChatMarkup(text)
@@ -413,6 +431,29 @@ function Core.GetCachedEquippedText(cache, name, equipLoc)
     return nil
 end
 
+function Core.RemovePendingRow(pending, key, row)
+    if type(pending) ~= "table" or key == nil or row == nil then
+        return 0
+    end
+
+    local rows = pending[key]
+    if type(rows) ~= "table" then
+        return 0
+    end
+
+    local removed = 0
+    for index = #rows, 1, -1 do
+        if rows[index] == row then
+            table.remove(rows, index)
+            removed = removed + 1
+        end
+    end
+    if #rows == 0 then
+        pending[key] = nil
+    end
+    return removed
+end
+
 function Core.FindRosterNameInMessage(message, roster, playerName)
     if type(message) ~= "string" or type(roster) ~= "table" then
         return nil
@@ -438,7 +479,7 @@ function Core.FindRosterNameInMessage(message, roster, playerName)
 
     for index = 1, #candidates do
         local name = canonicalRosterName(candidates[index], roster)
-        if name and not samePlayerName(name, playerName) then
+        if name and not isSelfLootName(name, playerName) then
             return name
         end
     end
@@ -628,7 +669,7 @@ function Core.ClassifyTradeCandidate(item, looter, playerName, settings)
     if not gear.visible then
         return gear
     end
-    if samePlayerName(looter, playerName) then
+    if isSelfLootName(looter, playerName) then
         return { visible = false, reason = "self_loot" }
     end
     if item.playerCanEquip == false then

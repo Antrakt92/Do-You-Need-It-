@@ -1011,6 +1011,7 @@ RequestInspectForRow = function(row)
         row.equippedText = EQUIPPED_PENDING
     end
     row.inspectPending = true
+    Core.RemovePendingRow(Addon.pendingInspect, guid, row)
     Addon.pendingInspect[guid] = Addon.pendingInspect[guid] or {}
     table.insert(Addon.pendingInspect[guid], row)
     RecordDiagnostic("inspect_requested", {
@@ -1028,6 +1029,7 @@ RequestInspectForRow = function(row)
         end
         row.inspectPending = false
         row.inspectToken = nil
+        Core.RemovePendingRow(Addon.pendingInspect, guid, row)
         ScheduleInspectRetry(row, "inspect_timeout")
     end)
 end

@@ -102,6 +102,13 @@ local sameBaseDifferentRealm = Core.ClassifyTradeCandidate({
     equipLoc = "INVTYPE_WEAPON",
 }, "Player-OtherRealm", "Player-Ravencrest")
 assertEqual(sameBaseDifferentRealm.visible, true, "same short name on a different realm is not self loot")
+local sameBaseDifferentRealmWithShortPlayerName = Core.ClassifyTradeCandidate({
+    link = "|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r",
+    quality = 3,
+    classID = 2,
+    equipLoc = "INVTYPE_WEAPON",
+}, "Player-OtherRealm", "Player")
+assertEqual(sameBaseDifferentRealmWithShortPlayerName.visible, true, "same short name on another realm is not self loot when player realm is unavailable")
 
 local reagent = Core.ClassifyTradeCandidate({
     link = "|cff1eff00|Hitem:190456:::::::::::::|h[Test Reagent]|h|r",
@@ -211,6 +218,18 @@ assertEqual(
     false,
     "equipment cache rejects empty captures"
 )
+
+local pendingRow = { id = "pending" }
+local otherPendingRow = { id = "other" }
+local pendingRows = {
+    inspectGuid = { pendingRow, otherPendingRow, pendingRow },
+}
+assertEqual(Core.RemovePendingRow(pendingRows, "inspectGuid", pendingRow), 2, "pending inspect cleanup removes duplicate row references")
+assertEqual(#pendingRows.inspectGuid, 1, "pending inspect cleanup keeps unrelated rows")
+assertEqual(pendingRows.inspectGuid[1], otherPendingRow, "pending inspect cleanup preserves row order")
+assertEqual(Core.RemovePendingRow(pendingRows, "inspectGuid", otherPendingRow), 1, "pending inspect cleanup removes the final row")
+assertEqual(pendingRows.inspectGuid, nil, "pending inspect cleanup drops empty guid buckets")
+assertEqual(Core.RemovePendingRow(pendingRows, "missingGuid", pendingRow), 0, "pending inspect cleanup tolerates missing buckets")
 
 local sessionState = Core.CreateState({ maxSessionRows = 3 })
 for index = 1, 5 do
@@ -328,6 +347,16 @@ assertEqual(
 )
 local ownMessage = "Player receives loot: |cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r."
 assertEqual(Core.FindRosterNameInMessage(ownMessage, roster, "Player-Ravencrest"), nil, "loot parser ignores own drops")
+local sameBaseRealmRoster = {
+    Player = "player",
+    ["Player-OtherRealm"] = "party1",
+}
+local sameBaseRealmMessage = "|Hplayer:Player-OtherRealm:1|h[Player]|h receives loot: |cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r."
+assertEqual(
+    Core.FindRosterNameInMessage(sameBaseRealmMessage, sameBaseRealmRoster, "Player"),
+    "Player-OtherRealm",
+    "loot parser keeps same-base cross-realm looters when player realm is unavailable"
+)
 
 local lootPatterns = Core.CreateLootMessagePatterns({
     lootSelf = "You receive loot: %s.",
@@ -433,7 +462,7 @@ assertEqual(#diagnostics, 10, "diagnostics prune to limit")
 assertEqual(diagnostics[1].stage, "stage12", "newest diagnostic first")
 assertEqual(diagnostics[10].stage, "stage3", "oldest retained diagnostic kept at limit")
 
-assertEqual(Core.VERSION, "0.1.16", "core exposes current version")
+assertEqual(Core.VERSION, "0.1.17", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -444,7 +473,7 @@ end
 
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
-assertTruthy(toc:find("## Version: 0.1.16", 1, true), "toc version present")
+assertTruthy(toc:find("## Version: 0.1.17", 1, true), "toc version present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")
 assertTruthy(toc:find("DoYouNeedIt.lua", 1, true), "toc loads runtime")
