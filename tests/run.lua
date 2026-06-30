@@ -311,7 +311,7 @@ assertEqual(#diagnostics, 10, "diagnostics prune to limit")
 assertEqual(diagnostics[1].stage, "stage12", "newest diagnostic first")
 assertEqual(diagnostics[10].stage, "stage3", "oldest retained diagnostic kept at limit")
 
-assertEqual(Core.VERSION, "0.1.7", "core exposes current version")
+assertEqual(Core.VERSION, "0.1.8", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -322,7 +322,7 @@ end
 
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
-assertTruthy(toc:find("## Version: 0.1.7", 1, true), "toc version present")
+assertTruthy(toc:find("## Version: 0.1.8", 1, true), "toc version present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")
 assertTruthy(toc:find("DoYouNeedIt.lua", 1, true), "toc loads runtime")
@@ -341,6 +341,8 @@ assertTruthy(runtime:find("local MAX_VISIBLE_ROWS = 5", 1, true), "runtime limit
 assertTruthy(runtime:find("DoYouNeedItCore.ShouldAutoShowWindow", 1, true), "runtime auto-shows on new loot rows")
 assertTruthy(runtime:find("AddTestRow", 1, true), "runtime has a local test row command")
 assertTruthy(runtime:find("command == \"test\"", 1, true), "runtime wires /dyni test")
+assertTruthy(runtime:find("SLASH_DOYOUNEEDIT2 = \"/duni\"", 1, true), "runtime wires /duni alias")
+assertTruthy(runtime:find("/duni test", 1, true), "runtime documents /duni test in command help")
 assertTruthy(runtime:find("command == \"debug\"", 1, true), "runtime wires /dyni debug")
 assertTruthy(runtime:find("RecordDiagnostic", 1, true), "runtime records loot diagnostics")
 assertTruthy(runtime:find("HandleLootMessage(...)", 1, true), "runtime passes full loot event payload")

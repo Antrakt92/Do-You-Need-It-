@@ -17,12 +17,13 @@ The addon focuses on quiet signal:
 | Command | Action |
 |---|---|
 | `/dyni` | Toggle the loot window. |
+| `/duni` | Same as `/dyni`; short alias for the addon commands. |
 | `/dyni auto on` | Enable delayed auto-whisper. |
 | `/dyni auto off` | Disable auto-whisper. |
 | `/dyni delay <seconds>` | Set auto-whisper delay, clamped to 3-30 seconds. |
 | `/dyni clear` | Clear current live/session rows while keeping saved history. |
 | `/dyni history` | Cycle the history view. |
-| `/dyni test` | Add a local test row and auto-show the compact window. |
+| `/duni test` | Add a local test row and auto-show the compact window. |
 | `/dyni debug on` | Print loot-processing diagnostics and save the last 20 diagnostic entries. |
 | `/dyni diag` | Print the newest saved diagnostic entries. |
 | `/dyni status` | Print current settings, build, and layout. |
@@ -31,7 +32,7 @@ Auto-whisper is off by default. When enabled, it waits 10 seconds by default bef
 
 The loot window also has an auto-whisper checkbox and a 3-30 second delay slider next to it, so you do not need slash commands for normal adjustments.
 
-If you are checking whether the latest addon code loaded, run `/dyni status` and confirm it reports `build=0.1.7`, `session drops=...`, and `layout=460x310`, then run `/dyni test` to force a compact auto-show test row. For live loot debugging, run `/dyni debug on` before a boss or dungeon chest and `/dyni diag` afterward.
+If you are checking whether the latest addon code loaded, run `/dyni status` and confirm it reports `build=0.1.8`, `session drops=...`, and `layout=460x310`, then run `/duni test` to force a compact auto-show test row. For live loot debugging, run `/dyni debug on` before a boss or dungeon chest and `/dyni diag` afterward.
 
 ## Install
 
