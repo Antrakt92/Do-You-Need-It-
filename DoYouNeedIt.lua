@@ -986,7 +986,7 @@ local function HandleSlash(message)
             .. ", build=" .. tostring(Core.VERSION)
             .. ", layout=460x310")
     else
-        Print("commands: /dyni or /duni, /duni test, /dyni auto on|off, /dyni delay <seconds>, /dyni clear, /dyni history, /dyni debug on|off, /dyni diag, /dyni status")
+        Print("commands: /dyni, /dyni test, /dyni auto on|off, /dyni delay <seconds>, /dyni clear, /dyni history, /dyni debug on|off, /dyni diag, /dyni status")
     end
 end
 
@@ -1011,7 +1011,6 @@ local function Initialize()
     CreateUI()
 
     SLASH_DOYOUNEEDIT1 = "/dyni"
-    SLASH_DOYOUNEEDIT2 = "/duni"
     SlashCmdList.DOYOUNEEDIT = HandleSlash
 end
 
