@@ -100,7 +100,7 @@ assertEqual(blocked.shouldSchedule, false, "unsafe rows do not schedule auto whi
 assertEqual(Core.ShouldAutoShowWindow({ itemLink = "|cff0070dd|Hitem:1:::::::::::::|h[Test]|h|r" }), true, "new loot rows auto-show the window")
 assertEqual(Core.ShouldAutoShowWindow(nil), false, "missing rows do not auto-show the window")
 
-assertTruthy(Core.VERSION, "core exposes a version")
+assertEqual(Core.VERSION, "0.1.1", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -111,6 +111,7 @@ end
 
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
+assertTruthy(toc:find("## Version: 0.1.1", 1, true), "toc version present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")
 assertTruthy(toc:find("DoYouNeedIt.lua", 1, true), "toc loads runtime")
@@ -123,9 +124,12 @@ assertTruthy(runtime:find("DoYouNeedItCore.ClassifyTradeCandidate", 1, true), "r
 assertTruthy(runtime:find("OptionsSliderTemplate", 1, true), "runtime provides a delay slider")
 assertTruthy(runtime:find("autoCheck", 1, true), "runtime provides an auto whisper checkbox")
 assertTruthy(runtime:find("delaySlider", 1, true), "runtime wires the delay slider")
-assertTruthy(runtime:find("local WINDOW_WIDTH = 500", 1, true), "runtime uses compact window width")
-assertTruthy(runtime:find("local WINDOW_HEIGHT = 340", 1, true), "runtime uses compact window height")
-assertTruthy(runtime:find("local MAX_VISIBLE_ROWS = 6", 1, true), "runtime limits visible rows for compact height")
+assertTruthy(runtime:find("local WINDOW_WIDTH = 460", 1, true), "runtime uses tighter compact window width")
+assertTruthy(runtime:find("local WINDOW_HEIGHT = 310", 1, true), "runtime uses tighter compact window height")
+assertTruthy(runtime:find("local MAX_VISIBLE_ROWS = 5", 1, true), "runtime limits visible rows for compact height")
 assertTruthy(runtime:find("DoYouNeedItCore.ShouldAutoShowWindow", 1, true), "runtime auto-shows on new loot rows")
+assertTruthy(runtime:find("AddTestRow", 1, true), "runtime has a local test row command")
+assertTruthy(runtime:find("command == \"test\"", 1, true), "runtime wires /dyni test")
+assertTruthy(runtime:find("layout=460x310", 1, true), "runtime reports compact layout in status")
 
 print("tests ok")

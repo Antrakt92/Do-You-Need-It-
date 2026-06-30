@@ -19,13 +19,13 @@ local issecretvalue = _G.issecretvalue or function()
     return false
 end
 
-local WINDOW_WIDTH = 500
-local WINDOW_HEIGHT = 340
-local ROW_WIDTH = 470
+local WINDOW_WIDTH = 460
+local WINDOW_HEIGHT = 310
+local ROW_WIDTH = 430
 local ROW_HEIGHT = 30
 local ROW_START_Y = -72
 local ROW_STRIDE = 34
-local MAX_VISIBLE_ROWS = 6
+local MAX_VISIBLE_ROWS = 5
 local MAX_ITEM_RETRIES = 5
 local ITEM_RETRY_DELAY = 0.7
 local UNKNOWN_EQUIPPED = "Equipped: unknown"
@@ -471,6 +471,30 @@ local function AddTradeCandidate(looter, itemLink, metadata)
     return true
 end
 
+local function AddTestRow()
+    local row = Core.AddVisibleRow(Addon.state, {
+        looter = "Example",
+        itemLink = "|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r",
+        equipLoc = "INVTYPE_WEAPON",
+        itemID = 19019,
+        instanceName = Addon.currentInstanceName or SafeInstanceName(),
+        encounterName = Addon.currentEncounterName,
+        timestamp = Now(),
+        reason = "test row",
+        statusText = "test row",
+        equippedText = "Equipped: |cff1eff00|Hitem:25:::::::::::::|h[Worn Shortsword]|h|r",
+        unsafe = false,
+    })
+    Addon.selectedView = "current"
+    Addon.selectedHistoryIndex = nil
+    RefreshRows()
+    if DoYouNeedItCore.ShouldAutoShowWindow(row) then
+        CreateUI()
+        Addon.frame:Show()
+    end
+    Print("test row added; this should auto-show the compact window")
+end
+
 local function RetryItemLater(looter, itemLink)
     local count = (Addon.itemRetryCount[itemLink] or 0) + 1
     Addon.itemRetryCount[itemLink] = count
@@ -570,22 +594,22 @@ local function CreateRow(parent, index)
 
     row.looter = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     row.looter:SetPoint("LEFT", row, "LEFT", 8, 8)
-    row.looter:SetWidth(82)
+    row.looter:SetWidth(72)
     row.looter:SetJustifyH("LEFT")
 
     row.drop = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     row.drop:SetPoint("LEFT", row.looter, "RIGHT", 6, 0)
-    row.drop:SetWidth(155)
+    row.drop:SetWidth(140)
     row.drop:SetJustifyH("LEFT")
 
     row.equipped = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     row.equipped:SetPoint("LEFT", row.drop, "RIGHT", 8, 0)
-    row.equipped:SetWidth(135)
+    row.equipped:SetWidth(125)
     row.equipped:SetJustifyH("LEFT")
 
     row.status = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     row.status:SetPoint("TOPLEFT", row.looter, "BOTTOMLEFT", 0, -2)
-    row.status:SetWidth(380)
+    row.status:SetWidth(350)
     row.status:SetJustifyH("LEFT")
 
     row.whisper = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
@@ -632,7 +656,7 @@ CreateUI = function()
     frame.title:SetText("Do You Need It?")
 
     frame.historyButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    frame.historyButton:SetSize(160, 22)
+    frame.historyButton:SetSize(136, 22)
     frame.historyButton:SetPoint("LEFT", frame.title, "RIGHT", 12, 0)
     frame.historyButton:SetText("Current")
     frame.historyButton:SetScript("OnClick", function(button)
@@ -773,12 +797,17 @@ local function HandleSlash(message)
         CycleHistoryView()
         CreateUI()
         Addon.frame:Show()
+    elseif command == "test" then
+        CreateUI()
+        AddTestRow()
     elseif command == "status" then
         Print("auto=" .. tostring(Addon.state.settings.autoWhisper)
             .. ", delay=" .. tostring(Addon.state.settings.autoDelay)
-            .. "s, saved groups=" .. tostring(#Addon.state.history))
+            .. "s, saved groups=" .. tostring(#Addon.state.history)
+            .. ", build=" .. tostring(Core.VERSION)
+            .. ", layout=460x310")
     else
-        Print("commands: /dyni, /dyni auto on|off, /dyni delay <seconds>, /dyni clear, /dyni history, /dyni status")
+        Print("commands: /dyni, /dyni auto on|off, /dyni delay <seconds>, /dyni clear, /dyni history, /dyni test, /dyni status")
     end
 end
 
