@@ -105,9 +105,6 @@ local function Print(message)
 end
 
 local function Debug(message)
-    if Addon.state and Addon.state.settings and Addon.state.settings.debug == true then
-        Print("debug: " .. tostring(message))
-    end
 end
 
 local function IsSecret(value)
@@ -684,9 +681,6 @@ local function QueueEquipmentScan(source, quiet)
         reason = source or "manual",
         count = #queue,
     })
-    if not quiet then
-        Print("equipment scan queued: " .. tostring(#queue) .. " units")
-    end
     ScheduleEquipmentScan(0)
     return #queue
 end
@@ -1158,7 +1152,6 @@ local function AddTestRow()
         CreateUI()
         Addon.frame:Show()
     end
-    Print("test rows added; Askable shows one row, All Gear shows both")
 end
 
 local function TryProcessItemMetadata(looter, itemLink)
@@ -1517,7 +1510,6 @@ SetAutoWhisper = function(enabled)
     end
     SaveDB()
     RefreshRows()
-    Print("auto whisper " .. (Addon.state.settings.autoWhisper and "enabled" or "disabled"))
 end
 
 SetDelay = function(value, quiet)
@@ -1526,13 +1518,8 @@ SetDelay = function(value, quiet)
     Addon.state.settings = Core.NormalizeSettings(Addon.state.settings)
     SaveDB()
     RefreshRows()
-    if quiet then
-        return
-    end
-    if Addon.state.settings.autoDelay ~= tonumber(value) then
+    if not quiet and Addon.state.settings.autoDelay ~= tonumber(value) then
         Print("delay must be between " .. Addon.state.settings.minDelay .. " and " .. Addon.state.settings.maxDelay .. " seconds")
-    else
-        Print("auto whisper delay set to " .. Addon.state.settings.autoDelay .. " seconds")
     end
 end
 
@@ -1571,7 +1558,6 @@ local function HandleSlash(message)
         Addon.selectedHistoryIndex = nil
         SaveDB()
         RefreshRows()
-        Print("current session rows cleared; saved history kept")
     elseif command == "history" then
         CycleHistoryView()
         CreateUI()
@@ -1586,11 +1572,9 @@ local function HandleSlash(message)
         if rest == "on" then
             Addon.state.settings.debug = true
             SaveDB()
-            Print("debug enabled")
         elseif rest == "off" then
             Addon.state.settings.debug = false
             SaveDB()
-            Print("debug disabled")
         else
             Print("debug=" .. tostring(Addon.state.settings.debug)
                 .. ", diagnostics=" .. tostring(#(Addon.diagnostics or {}))
