@@ -63,6 +63,34 @@ local EQUIP_LOC_SLOTS = {
     INVTYPE_RANGEDRIGHT = { "RangedSlot" },
 }
 
+local PREFERRED_ARMOR_SUBCLASS_BY_CLASS = {
+    DEATHKNIGHT = 4,
+    DEMONHUNTER = 2,
+    DRUID = 2,
+    EVOKER = 3,
+    HUNTER = 3,
+    MAGE = 1,
+    MONK = 2,
+    PALADIN = 4,
+    PRIEST = 1,
+    ROGUE = 2,
+    SHAMAN = 3,
+    WARLOCK = 1,
+    WARRIOR = 4,
+}
+
+local ARMOR_SPECIALIZATION_EQUIP_LOCS = {
+    INVTYPE_HEAD = true,
+    INVTYPE_SHOULDER = true,
+    INVTYPE_CHEST = true,
+    INVTYPE_ROBE = true,
+    INVTYPE_WAIST = true,
+    INVTYPE_LEGS = true,
+    INVTYPE_FEET = true,
+    INVTYPE_WRIST = true,
+    INVTYPE_HAND = true,
+}
+
 local function Print(message)
     DEFAULT_CHAT_FRAME:AddMessage("|cff7ccfffDo You Need It?|r " .. tostring(message))
 end
@@ -135,6 +163,17 @@ local function CleanBoolean(value)
     end)
     if okFalse and isFalse then
         return false
+    end
+    return nil
+end
+
+local function CleanNumber(value)
+    if IsSecret(value) then
+        return nil
+    end
+    local ok, number = pcall(tonumber, value)
+    if ok then
+        return number
     end
     return nil
 end
@@ -318,6 +357,70 @@ local function GetItemInfoInstantCompat(itemLink)
     return nil
 end
 
+local function GetPlayerClassToken()
+    if type(UnitClassBase) == "function" then
+        local classToken = CleanString(SafeCall(UnitClassBase, "player"))
+        if classToken then
+            return classToken
+        end
+    end
+
+    local _, classToken = SafeCall(UnitClass, "player")
+    return CleanString(classToken)
+end
+
+local function PlayerArmorSubclassAllows(equipLoc, classID, subclassID)
+    if ARMOR_SPECIALIZATION_EQUIP_LOCS[equipLoc or ""] ~= true then
+        return nil
+    end
+    if CleanNumber(classID) ~= 4 then
+        return nil
+    end
+
+    local subclass = CleanNumber(subclassID)
+    local preferred = PREFERRED_ARMOR_SUBCLASS_BY_CLASS[GetPlayerClassToken() or ""]
+    if not subclass or not preferred then
+        return nil
+    end
+    return subclass == preferred
+end
+
+local function CanPlayerEquipItem(itemLink, classID, subclassID, equipLoc)
+    if type(itemLink) ~= "string" or itemLink == "" then
+        return nil
+    end
+
+    local isEquippable
+    if C_Item and type(C_Item.IsEquippableItem) == "function" then
+        isEquippable = CleanBoolean(SafeCall(C_Item.IsEquippableItem, itemLink))
+    elseif type(IsEquippableItem) == "function" then
+        isEquippable = CleanBoolean(SafeCall(IsEquippableItem, itemLink))
+    end
+    if isEquippable == false then
+        return false
+    end
+
+    local isUsable
+    if C_Item and type(C_Item.IsUsableItem) == "function" then
+        isUsable = CleanBoolean(SafeCall(C_Item.IsUsableItem, itemLink))
+    elseif type(IsUsableItem) == "function" then
+        isUsable = CleanBoolean(SafeCall(IsUsableItem, itemLink))
+    end
+    if isUsable == false then
+        return false
+    end
+
+    local armorAllowed = PlayerArmorSubclassAllows(equipLoc, classID, subclassID)
+    if armorAllowed == false then
+        return false
+    end
+
+    if isEquippable == true or isUsable == true or armorAllowed == true then
+        return true
+    end
+    return nil
+end
+
 local function TooltipHasTradeTimer(itemLink)
     if type(itemLink) ~= "string" or itemLink == "" or not C_TooltipInfo or type(C_TooltipInfo.GetHyperlink) ~= "function" then
         return false
@@ -358,6 +461,9 @@ local function ReadItemMetadata(itemLink)
     local itemName, resolvedLink, quality, itemLevel, requiredLevel, itemTypeText, itemSubTypeText, stackCount,
         equipLoc, itemIcon, sellPrice, detailedClassID, detailedSubclassID, bindType, expansionID, setID, isCraftingReagent =
         GetItemInfoCompat(itemLink)
+    local metadataClassID = detailedClassID or classID
+    local metadataSubclassID = detailedSubclassID or subclassID
+    local metadataEquipLoc = CleanString(equipLoc) or CleanString(itemEquipLoc)
 
     return Core.BuildItemMetadata(itemLink, {
         itemID = itemID,
@@ -369,11 +475,12 @@ local function ReadItemMetadata(itemLink)
         link = CleanString(resolvedLink),
         quality = quality,
         itemLevel = itemLevel,
-        classID = detailedClassID or classID,
-        subclassID = detailedSubclassID or subclassID,
-        equipLoc = CleanString(equipLoc),
+        classID = metadataClassID,
+        subclassID = metadataSubclassID,
+        equipLoc = metadataEquipLoc,
         bindType = bindType,
         tradeTimeRemaining = TooltipHasTradeTimer(itemLink),
+        playerCanEquip = CanPlayerEquipItem(itemLink, metadataClassID, metadataSubclassID, metadataEquipLoc),
         isCraftingReagent = isCraftingReagent == true,
     })
 end
@@ -704,6 +811,7 @@ local function AddTradeCandidate(looter, itemLink, metadata)
             classID = metadata and metadata.classID,
             quality = metadata and metadata.quality,
             bindType = metadata and metadata.bindType,
+            playerCanEquip = metadata and metadata.playerCanEquip,
         })
         return false, gearClassification.reason
     end
@@ -719,6 +827,7 @@ local function AddTradeCandidate(looter, itemLink, metadata)
             classID = metadata and metadata.classID,
             quality = metadata and metadata.quality,
             bindType = metadata and metadata.bindType,
+            playerCanEquip = metadata and metadata.playerCanEquip,
         })
     end
 
@@ -756,6 +865,7 @@ local function AddTradeCandidate(looter, itemLink, metadata)
         equipLoc = metadata.equipLoc,
         itemID = metadata.itemID,
         askable = askable,
+        playerCanEquip = metadata.playerCanEquip,
     })
     RequestInspectForRow(row)
     if askable then

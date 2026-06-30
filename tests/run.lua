@@ -37,6 +37,7 @@ local accepted = Core.ClassifyTradeCandidate({
     equipLoc = "INVTYPE_WEAPON",
     canTrade = nil,
     bindType = 2,
+    playerCanEquip = true,
 }, "Otherplayer", "Player")
 assertEqual(accepted.visible, true, "weapon from another player is visible")
 
@@ -59,9 +60,24 @@ local tradeWarningGear = {
     equipLoc = "INVTYPE_CHEST",
     bindType = 1,
     tradeTimeRemaining = true,
+    playerCanEquip = true,
 }
 local tradeWarningAskable = Core.ClassifyTradeCandidate(tradeWarningGear, "Otherplayer", "Player")
 assertEqual(tradeWarningAskable.visible, true, "bind-on-pickup gear with trade warning is askable")
+
+local unusableForPlayer = {
+    link = "|cffa335ee|Hitem:19022:::::::::::::|h[Other Class Chest]|h|r",
+    quality = 4,
+    classID = 4,
+    equipLoc = "INVTYPE_CHEST",
+    bindType = 2,
+    playerCanEquip = false,
+}
+local unusableAllGear = Core.ClassifyGearLoot(unusableForPlayer, "Otherplayer", Core.NormalizeSettings({}))
+assertEqual(unusableAllGear.visible, true, "gear the player cannot equip stays visible in all gear")
+local unusableAskable = Core.ClassifyTradeCandidate(unusableForPlayer, "Otherplayer", "Player")
+assertEqual(unusableAskable.visible, false, "gear the player cannot equip is not askable")
+assertEqual(unusableAskable.reason, "player_cannot_equip", "player equip rejection is explicit")
 
 local currency = Core.ClassifyTradeCandidate({
     link = "|Hcurrency:3008:1|h[Currency]|h",
@@ -319,6 +335,7 @@ local metadata = Core.BuildItemMetadata("|cff0070dd|Hitem:19019:::::::::::::|h[T
     classID = 2,
     subclassID = 7,
     bindType = 1,
+    playerCanEquip = false,
     isCraftingReagent = false,
 })
 assertEqual(metadata.itemID, 19019, "metadata keeps item id from instant info")
@@ -326,6 +343,7 @@ assertEqual(metadata.quality, 3, "metadata maps quality from detailed info")
 assertEqual(metadata.itemLevel, 42, "metadata maps item level from detailed info")
 assertEqual(metadata.equipLoc, "INVTYPE_WEAPON", "metadata maps equip location")
 assertEqual(metadata.classID, 2, "metadata maps class id")
+assertEqual(metadata.playerCanEquip, false, "metadata maps player equip usability")
 
 local missingMetadata = Core.BuildItemMetadata("|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r", {
     itemID = 19019,
@@ -370,7 +388,7 @@ assertEqual(#diagnostics, 10, "diagnostics prune to limit")
 assertEqual(diagnostics[1].stage, "stage12", "newest diagnostic first")
 assertEqual(diagnostics[10].stage, "stage3", "oldest retained diagnostic kept at limit")
 
-assertEqual(Core.VERSION, "0.1.11", "core exposes current version")
+assertEqual(Core.VERSION, "0.1.12", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -381,7 +399,7 @@ end
 
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
-assertTruthy(toc:find("## Version: 0.1.11", 1, true), "toc version present")
+assertTruthy(toc:find("## Version: 0.1.12", 1, true), "toc version present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")
 assertTruthy(toc:find("DoYouNeedIt.lua", 1, true), "toc loads runtime")
@@ -424,6 +442,9 @@ assertTruthy(runtime:find("DoYouNeedItDB.sessionAllRows", 1, true), "runtime per
 assertTruthy(runtime:find("selectedTab", 1, true), "runtime has askable/all gear tabs")
 assertTruthy(runtime:find("tabAllGear", 1, true), "runtime creates all gear tab")
 assertTruthy(runtime:find("TooltipHasTradeTimer", 1, true), "runtime detects trade timer tooltip lines")
+assertTruthy(runtime:find("CanPlayerEquipItem", 1, true), "runtime detects whether the player can equip a drop")
+assertTruthy(runtime:find("C_Item.IsUsableItem", 1, true), "runtime asks WoW whether the player can use the item")
+assertTruthy(runtime:find("PREFERRED_ARMOR_SUBCLASS_BY_CLASS", 1, true), "runtime filters askable armor by player class armor type")
 assertTruthy(runtime:find("ClassifyGearLoot", 1, true), "runtime classifies all gear before askable filtering")
 assertTruthy(runtime:find("SnapshotRowsForSave", 1, true), "runtime sanitizes saved session rows")
 assertTruthy(runtime:find("SnapshotHistoryForSave", 1, true), "runtime sanitizes saved history")

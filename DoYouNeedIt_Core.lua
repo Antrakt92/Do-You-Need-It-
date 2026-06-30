@@ -1,6 +1,6 @@
 local Core = {}
 
-Core.VERSION = "0.1.11"
+Core.VERSION = "0.1.12"
 
 local DEFAULTS = {
     autoWhisper = false,
@@ -475,6 +475,10 @@ function Core.BuildItemMetadata(itemLink, instant, detailed)
     if itemID == nil or quality == nil or equipLoc == nil then
         return nil
     end
+    local playerCanEquip
+    if type(detailed.playerCanEquip) == "boolean" then
+        playerCanEquip = detailed.playerCanEquip
+    end
 
     return {
         itemID = itemID,
@@ -487,6 +491,7 @@ function Core.BuildItemMetadata(itemLink, instant, detailed)
         equipLoc = equipLoc,
         bindType = detailed.bindType,
         tradeTimeRemaining = detailed.tradeTimeRemaining == true,
+        playerCanEquip = playerCanEquip,
         isCraftingReagent = detailed.isCraftingReagent == true,
     }
 end
@@ -559,6 +564,9 @@ function Core.ClassifyTradeCandidate(item, looter, playerName, settings)
     end
     if samePlayerName(looter, playerName) then
         return { visible = false, reason = "self_loot" }
+    end
+    if item.playerCanEquip == false then
+        return { visible = false, reason = "player_cannot_equip" }
     end
     if item.canTrade == false then
         return { visible = false, reason = "not_tradeable" }
