@@ -1,6 +1,6 @@
 local Core = {}
 
-Core.VERSION = "0.1.8"
+Core.VERSION = "0.1.9"
 
 local DEFAULTS = {
     autoWhisper = false,

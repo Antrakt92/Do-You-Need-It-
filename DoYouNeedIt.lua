@@ -82,6 +82,38 @@ local function CleanString(value)
     return nil
 end
 
+local function FirstItemLink(text)
+    if type(text) ~= "string" or text == "" then
+        return nil
+    end
+    return text:match("(|c%x%x%x%x%x%x%x%x|Hitem:.-|h%[.-%]|h|r)")
+end
+
+local function ShowItemTooltip(owner, itemLink)
+    if not owner or type(itemLink) ~= "string" or itemLink == "" or not GameTooltip then
+        return
+    end
+    GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    GameTooltip:SetHyperlink(itemLink)
+    GameTooltip:Show()
+end
+
+local function HideItemTooltip()
+    if GameTooltip then
+        GameTooltip:Hide()
+    end
+end
+
+local function OpenItemLink(owner, itemLink)
+    if type(itemLink) ~= "string" or itemLink == "" then
+        return
+    end
+    if HandleModifiedItemClick and HandleModifiedItemClick(itemLink) then
+        return
+    end
+    ShowItemTooltip(owner, itemLink)
+end
+
 local function CleanBoolean(value)
     if IsSecret(value) then
         return nil
@@ -381,6 +413,10 @@ local function RefreshRows()
             rowFrame.looter:SetText(row.looter or "?")
             rowFrame.drop:SetText(row.itemLink or "")
             rowFrame.equipped:SetText(row.equippedText or UNKNOWN_EQUIPPED)
+            rowFrame.dropLink.itemLink = row.itemLink
+            rowFrame.equippedLink.itemLink = FirstItemLink(row.equippedText)
+            rowFrame.dropLink:SetShown(rowFrame.dropLink.itemLink ~= nil)
+            rowFrame.equippedLink:SetShown(rowFrame.equippedLink.itemLink ~= nil)
             rowFrame.status:SetText(row.statusText or row.reason or "candidate")
             if Addon.selectedView == "history" then
                 rowFrame.whisper:Disable()
@@ -392,6 +428,10 @@ local function RefreshRows()
             rowFrame:Show()
         else
             rowFrame.row = nil
+            rowFrame.dropLink.itemLink = nil
+            rowFrame.equippedLink.itemLink = nil
+            rowFrame.dropLink:Hide()
+            rowFrame.equippedLink:Hide()
             rowFrame:Hide()
         end
     end
@@ -750,10 +790,36 @@ local function CreateRow(parent, index)
     row.drop:SetWidth(140)
     row.drop:SetJustifyH("LEFT")
 
+    row.dropLink = CreateFrame("Button", nil, row)
+    row.dropLink:SetPoint("LEFT", row.looter, "RIGHT", 4, 0)
+    row.dropLink:SetSize(146, ROW_HEIGHT)
+    row.dropLink:RegisterForClicks("AnyUp")
+    row.dropLink:SetScript("OnEnter", function(button)
+        ShowItemTooltip(button, button.itemLink)
+    end)
+    row.dropLink:SetScript("OnLeave", HideItemTooltip)
+    row.dropLink:SetScript("OnClick", function(button)
+        OpenItemLink(button, button.itemLink)
+    end)
+    row.dropLink:Hide()
+
     row.equipped = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     row.equipped:SetPoint("LEFT", row.drop, "RIGHT", 8, 0)
     row.equipped:SetWidth(125)
     row.equipped:SetJustifyH("LEFT")
+
+    row.equippedLink = CreateFrame("Button", nil, row)
+    row.equippedLink:SetPoint("LEFT", row.drop, "RIGHT", 6, 0)
+    row.equippedLink:SetSize(131, ROW_HEIGHT)
+    row.equippedLink:RegisterForClicks("AnyUp")
+    row.equippedLink:SetScript("OnEnter", function(button)
+        ShowItemTooltip(button, button.itemLink)
+    end)
+    row.equippedLink:SetScript("OnLeave", HideItemTooltip)
+    row.equippedLink:SetScript("OnClick", function(button)
+        OpenItemLink(button, button.itemLink)
+    end)
+    row.equippedLink:Hide()
 
     row.status = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     row.status:SetPoint("TOPLEFT", row.looter, "BOTTOMLEFT", 0, -2)

@@ -311,7 +311,7 @@ assertEqual(#diagnostics, 10, "diagnostics prune to limit")
 assertEqual(diagnostics[1].stage, "stage12", "newest diagnostic first")
 assertEqual(diagnostics[10].stage, "stage3", "oldest retained diagnostic kept at limit")
 
-assertEqual(Core.VERSION, "0.1.8", "core exposes current version")
+assertEqual(Core.VERSION, "0.1.9", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -322,7 +322,7 @@ end
 
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
-assertTruthy(toc:find("## Version: 0.1.8", 1, true), "toc version present")
+assertTruthy(toc:find("## Version: 0.1.9", 1, true), "toc version present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")
 assertTruthy(toc:find("DoYouNeedIt.lua", 1, true), "toc loads runtime")
@@ -344,6 +344,10 @@ assertTruthy(runtime:find("command == \"test\"", 1, true), "runtime wires /dyni 
 assertTruthy(runtime:find("/dyni test", 1, true), "runtime documents /dyni test in command help")
 assertEqual(runtime:find("/duni", 1, true), nil, "runtime does not register typo alias")
 assertEqual(runtime:find("SLASH_DOYOUNEEDIT2", 1, true), nil, "runtime keeps only the canonical slash command")
+assertTruthy(runtime:find("dropLink", 1, true), "runtime has a hover target for dropped item links")
+assertTruthy(runtime:find("equippedLink", 1, true), "runtime has a hover target for equipped item links")
+assertTruthy(runtime:find("GameTooltip:SetHyperlink", 1, true), "runtime shows real item tooltips from item links")
+assertTruthy(runtime:find("HandleModifiedItemClick", 1, true), "runtime supports standard modified item-link clicks")
 assertTruthy(runtime:find("command == \"debug\"", 1, true), "runtime wires /dyni debug")
 assertTruthy(runtime:find("RecordDiagnostic", 1, true), "runtime records loot diagnostics")
 assertTruthy(runtime:find("HandleLootMessage(...)", 1, true), "runtime passes full loot event payload")
