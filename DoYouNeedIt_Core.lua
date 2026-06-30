@@ -247,4 +247,8 @@ function Core.GetAutoWhisperDecision(settings, row)
     }
 end
 
+function Core.ShouldAutoShowWindow(row)
+    return type(row) == "table" and row.itemLink ~= nil and row.itemLink ~= ""
+end
+
 _G.DoYouNeedItCore = Core

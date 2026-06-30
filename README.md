@@ -10,6 +10,7 @@ The addon focuses on quiet signal:
 - keeps a lightweight history for the current view, session, and the last 10 completed boss/run groups;
 - sends whispers only from row actions unless auto-whisper is explicitly enabled.
 - includes an in-window auto-whisper checkbox and delay slider.
+- uses a compact loot window that appears automatically when a new trade-candidate gear drop is detected.
 
 ## Commands
 

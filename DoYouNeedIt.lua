@@ -13,12 +13,19 @@ local Addon = {
 
 local SetAutoWhisper
 local SetDelay
+local CreateUI
 
 local issecretvalue = _G.issecretvalue or function()
     return false
 end
 
-local MAX_VISIBLE_ROWS = 12
+local WINDOW_WIDTH = 500
+local WINDOW_HEIGHT = 340
+local ROW_WIDTH = 470
+local ROW_HEIGHT = 30
+local ROW_START_Y = -72
+local ROW_STRIDE = 34
+local MAX_VISIBLE_ROWS = 6
 local MAX_ITEM_RETRIES = 5
 local ITEM_RETRY_DELAY = 0.7
 local UNKNOWN_EQUIPPED = "Equipped: unknown"
@@ -457,7 +464,8 @@ local function AddTradeCandidate(looter, itemLink, metadata)
     Addon.selectedView = "current"
     Addon.selectedHistoryIndex = nil
     RefreshRows()
-    if Addon.frame then
+    if DoYouNeedItCore.ShouldAutoShowWindow(row) then
+        CreateUI()
         Addon.frame:Show()
     end
     return true
@@ -553,8 +561,8 @@ end
 
 local function CreateRow(parent, index)
     local row = CreateFrame("Frame", nil, parent)
-    row:SetSize(590, 34)
-    row:SetPoint("TOPLEFT", parent, "TOPLEFT", 10, -82 - ((index - 1) * 38))
+    row:SetSize(ROW_WIDTH, ROW_HEIGHT)
+    row:SetPoint("TOPLEFT", parent, "TOPLEFT", 10, ROW_START_Y - ((index - 1) * ROW_STRIDE))
 
     row.bg = row:CreateTexture(nil, "BACKGROUND")
     row.bg:SetAllPoints()
@@ -562,26 +570,26 @@ local function CreateRow(parent, index)
 
     row.looter = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     row.looter:SetPoint("LEFT", row, "LEFT", 8, 8)
-    row.looter:SetWidth(120)
+    row.looter:SetWidth(82)
     row.looter:SetJustifyH("LEFT")
 
     row.drop = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    row.drop:SetPoint("LEFT", row.looter, "RIGHT", 8, 0)
-    row.drop:SetWidth(190)
+    row.drop:SetPoint("LEFT", row.looter, "RIGHT", 6, 0)
+    row.drop:SetWidth(155)
     row.drop:SetJustifyH("LEFT")
 
     row.equipped = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    row.equipped:SetPoint("LEFT", row.drop, "RIGHT", 12, 0)
-    row.equipped:SetWidth(170)
+    row.equipped:SetPoint("LEFT", row.drop, "RIGHT", 8, 0)
+    row.equipped:SetWidth(135)
     row.equipped:SetJustifyH("LEFT")
 
     row.status = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     row.status:SetPoint("TOPLEFT", row.looter, "BOTTOMLEFT", 0, -2)
-    row.status:SetWidth(490)
+    row.status:SetWidth(380)
     row.status:SetJustifyH("LEFT")
 
     row.whisper = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    row.whisper:SetSize(62, 22)
+    row.whisper:SetSize(48, 20)
     row.whisper:SetPoint("RIGHT", row, "RIGHT", -6, 0)
     row.whisper:SetText("Ask")
     row.whisper:SetScript("OnClick", function(button)
@@ -596,13 +604,13 @@ local function CreateRow(parent, index)
     return row
 end
 
-local function CreateUI()
+CreateUI = function()
     if Addon.frame then
         return
     end
 
     local frame = CreateFrame("Frame", "DoYouNeedItFrame", UIParent, "BackdropTemplate")
-    frame:SetSize(620, 545)
+    frame:SetSize(WINDOW_WIDTH, WINDOW_HEIGHT)
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("DIALOG")
     frame:EnableMouse(true)
@@ -624,8 +632,8 @@ local function CreateUI()
     frame.title:SetText("Do You Need It?")
 
     frame.historyButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    frame.historyButton:SetSize(220, 24)
-    frame.historyButton:SetPoint("LEFT", frame.title, "RIGHT", 18, 0)
+    frame.historyButton:SetSize(160, 22)
+    frame.historyButton:SetPoint("LEFT", frame.title, "RIGHT", 12, 0)
     frame.historyButton:SetText("Current")
     frame.historyButton:SetScript("OnClick", function(button)
         OpenHistoryMenu(button)
@@ -633,14 +641,14 @@ local function CreateUI()
     Addon.historyButton = frame.historyButton
 
     frame.autoStatus = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    frame.autoStatus:SetPoint("LEFT", frame.historyButton, "RIGHT", 14, 0)
-    frame.autoStatus:SetWidth(80)
+    frame.autoStatus:SetPoint("LEFT", frame.historyButton, "RIGHT", 10, 0)
+    frame.autoStatus:SetWidth(62)
     frame.autoStatus:SetJustifyH("LEFT")
     Addon.autoStatus = frame.autoStatus
 
     frame.autoCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
     frame.autoCheck:SetSize(24, 24)
-    frame.autoCheck:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -42)
+    frame.autoCheck:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -42)
     frame.autoCheck:SetScript("OnClick", function(check)
         SetAutoWhisper(check:GetChecked() == true)
     end)
@@ -648,15 +656,15 @@ local function CreateUI()
 
     frame.autoCheckLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     frame.autoCheckLabel:SetPoint("LEFT", frame.autoCheck, "RIGHT", 2, 0)
-    frame.autoCheckLabel:SetText("Auto whisper")
+    frame.autoCheckLabel:SetText("Auto")
 
     frame.delayLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    frame.delayLabel:SetPoint("LEFT", frame.autoCheckLabel, "RIGHT", 18, 0)
+    frame.delayLabel:SetPoint("LEFT", frame.autoCheckLabel, "RIGHT", 14, 0)
     frame.delayLabel:SetText("Delay")
 
     frame.delaySlider = CreateFrame("Slider", nil, frame, "OptionsSliderTemplate")
-    frame.delaySlider:SetPoint("LEFT", frame.delayLabel, "RIGHT", 12, 0)
-    frame.delaySlider:SetSize(180, 18)
+    frame.delaySlider:SetPoint("LEFT", frame.delayLabel, "RIGHT", 10, 0)
+    frame.delaySlider:SetSize(135, 18)
     frame.delaySlider:SetMinMaxValues(3, 30)
     frame.delaySlider:SetValueStep(1)
     if frame.delaySlider.SetObeyStepOnDrag then

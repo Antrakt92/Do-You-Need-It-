@@ -97,6 +97,8 @@ local blocked = Core.GetAutoWhisperDecision(
     { looter = "Otherplayer", itemLink = "|cff0070dd|Hitem:1:::::::::::::|h[Test]|h|r", unsafe = true }
 )
 assertEqual(blocked.shouldSchedule, false, "unsafe rows do not schedule auto whisper")
+assertEqual(Core.ShouldAutoShowWindow({ itemLink = "|cff0070dd|Hitem:1:::::::::::::|h[Test]|h|r" }), true, "new loot rows auto-show the window")
+assertEqual(Core.ShouldAutoShowWindow(nil), false, "missing rows do not auto-show the window")
 
 assertTruthy(Core.VERSION, "core exposes a version")
 
@@ -121,5 +123,9 @@ assertTruthy(runtime:find("DoYouNeedItCore.ClassifyTradeCandidate", 1, true), "r
 assertTruthy(runtime:find("OptionsSliderTemplate", 1, true), "runtime provides a delay slider")
 assertTruthy(runtime:find("autoCheck", 1, true), "runtime provides an auto whisper checkbox")
 assertTruthy(runtime:find("delaySlider", 1, true), "runtime wires the delay slider")
+assertTruthy(runtime:find("local WINDOW_WIDTH = 500", 1, true), "runtime uses compact window width")
+assertTruthy(runtime:find("local WINDOW_HEIGHT = 340", 1, true), "runtime uses compact window height")
+assertTruthy(runtime:find("local MAX_VISIBLE_ROWS = 6", 1, true), "runtime limits visible rows for compact height")
+assertTruthy(runtime:find("DoYouNeedItCore.ShouldAutoShowWindow", 1, true), "runtime auto-shows on new loot rows")
 
 print("tests ok")
