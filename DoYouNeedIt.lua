@@ -348,6 +348,7 @@ local function RefreshRows()
         local group = Addon.state.history[Addon.selectedHistoryIndex]
         rows = group and group.rows or {}
     end
+    local displayRows = Core.GetNewestRowsFirst(rows, MAX_VISIBLE_ROWS)
 
     local title = "Current"
     if Addon.selectedView == "session" then
@@ -374,7 +375,7 @@ local function RefreshRows()
 
     for index = 1, MAX_VISIBLE_ROWS do
         local rowFrame = Addon.rowFrames[index]
-        local row = rows[index]
+        local row = displayRows[index]
         if row then
             rowFrame.row = row
             rowFrame.looter:SetText(row.looter or "?")
@@ -407,6 +408,7 @@ local function SaveDB()
     DoYouNeedItDB = DoYouNeedItDB or {}
     DoYouNeedItDB.settings = Addon.state and Addon.state.settings or Core.NormalizeSettings({})
     DoYouNeedItDB.history = Addon.state and Addon.state.history or {}
+    DoYouNeedItDB.sessionRows = Addon.state and Addon.state.sessionRows or {}
     DoYouNeedItDB.diagnostics = Addon.diagnostics or {}
 end
 
@@ -547,6 +549,7 @@ local function AddTradeCandidate(looter, itemLink, metadata)
     ScheduleAutoWhisper(row)
     Addon.selectedView = "current"
     Addon.selectedHistoryIndex = nil
+    SaveDB()
     RefreshRows()
     if DoYouNeedItCore.ShouldAutoShowWindow(row) then
         CreateUI()
@@ -989,6 +992,7 @@ local function Initialize()
     local settings = Core.NormalizeSettings(DoYouNeedItDB.settings or {})
     Addon.state = Core.CreateState(settings)
     Addon.state.history = type(DoYouNeedItDB.history) == "table" and DoYouNeedItDB.history or {}
+    Addon.state.sessionRows = Core.NormalizeSavedRows(DoYouNeedItDB.sessionRows, Addon.state.settings.maxSessionRows)
     Addon.diagnostics = type(DoYouNeedItDB.diagnostics) == "table" and DoYouNeedItDB.diagnostics or {}
     Addon.lootPatterns = Core.CreateLootMessagePatterns({
         lootSelf = LOOT_ITEM_SELF,

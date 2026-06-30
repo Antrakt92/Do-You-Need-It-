@@ -17,6 +17,7 @@ local settings = Core.NormalizeSettings({})
 assertEqual(settings.autoWhisper, false, "auto whisper defaults off")
 assertEqual(settings.autoDelay, 10, "auto delay defaults to 10")
 assertEqual(settings.debug, false, "debug defaults off")
+assertEqual(settings.maxSessionRows, 50, "session rows default to last 50")
 assertEqual(Core.NormalizeSettings({ autoDelay = 1 }).autoDelay, 3, "delay clamps low")
 assertEqual(Core.NormalizeSettings({ autoDelay = 45 }).autoDelay, 30, "delay clamps high")
 assertEqual(Core.NormalizeSettings({ debug = true }).debug, true, "debug can be enabled")
@@ -27,6 +28,7 @@ assertEqual(repairedDelay.autoDelay, 10, "auto delay survives repaired bounds")
 local clampedMaxDelay = Core.NormalizeSettings({ minDelay = 3, maxDelay = 90, autoDelay = 80 })
 assertEqual(clampedMaxDelay.maxDelay, 30, "oversized max delay resets to default")
 assertEqual(clampedMaxDelay.autoDelay, 30, "auto delay clamps to repaired max delay")
+assertEqual(Core.NormalizeSettings({ maxSessionRows = 2 }).maxSessionRows, 2, "session row limit can be lowered")
 
 local accepted = Core.ClassifyTradeCandidate({
     link = "|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r",
@@ -101,6 +103,31 @@ assertEqual(state.history[10].title, "Dungeon - Boss 3 (1 drop)", "oldest retain
 local emptyState = Core.CreateState({ maxHistoryGroups = 10 })
 Core.CompleteCurrentGroup(emptyState, { title = "No Drops", endedAt = 1 })
 assertEqual(#emptyState.history, 0, "empty groups are not saved")
+
+local sessionState = Core.CreateState({ maxSessionRows = 3 })
+for index = 1, 5 do
+    Core.AddVisibleRow(sessionState, {
+        id = "session" .. index,
+        looter = "Otherplayer",
+        itemLink = "|cff0070dd|Hitem:" .. index .. ":::::::::::::|h[Test]|h|r",
+        timestamp = index,
+    })
+end
+assertEqual(#sessionState.sessionRows, 3, "session rows prune to configured limit")
+assertEqual(sessionState.sessionRows[1].id, "session3", "session pruning keeps oldest retained row first")
+assertEqual(sessionState.sessionRows[3].id, "session5", "session pruning keeps newest row")
+local displayRows = Core.GetNewestRowsFirst(sessionState.sessionRows, 2)
+assertEqual(#displayRows, 2, "display rows respect visible limit")
+assertEqual(displayRows[1].id, "session5", "display rows show newest first")
+assertEqual(displayRows[2].id, "session4", "display rows show next newest second")
+local loadedSessionRows = Core.NormalizeSavedRows({
+    { id = "old" },
+    { id = "middle" },
+    { id = "new" },
+}, 2)
+assertEqual(#loadedSessionRows, 2, "loaded session rows prune to limit")
+assertEqual(loadedSessionRows[1].id, "middle", "loaded session rows keep retained order")
+assertEqual(loadedSessionRows[2].id, "new", "loaded session rows keep newest retained row")
 
 local auto = Core.GetAutoWhisperDecision(
     Core.NormalizeSettings({ autoWhisper = true, autoDelay = 12 }),
@@ -240,7 +267,7 @@ assertEqual(#diagnostics, 10, "diagnostics prune to limit")
 assertEqual(diagnostics[1].stage, "stage12", "newest diagnostic first")
 assertEqual(diagnostics[10].stage, "stage3", "oldest retained diagnostic kept at limit")
 
-assertEqual(Core.VERSION, "0.1.5", "core exposes current version")
+assertEqual(Core.VERSION, "0.1.6", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -251,7 +278,7 @@ end
 
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
-assertTruthy(toc:find("## Version: 0.1.5", 1, true), "toc version present")
+assertTruthy(toc:find("## Version: 0.1.6", 1, true), "toc version present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")
 assertTruthy(toc:find("DoYouNeedIt.lua", 1, true), "toc loads runtime")
@@ -277,6 +304,8 @@ assertTruthy(runtime:find("CreateLootMessagePatterns", 1, true), "runtime uses l
 assertTruthy(runtime:find("ResolveLootMessageLooter", 1, true), "runtime resolves looters through localized loot patterns")
 assertTruthy(runtime:find("ContinueOnItemLoad", 1, true), "runtime waits for uncached item data")
 assertTruthy(runtime:find("BuildItemMetadata", 1, true), "runtime maps item info through core metadata helper")
+assertTruthy(runtime:find("DoYouNeedItDB.sessionRows", 1, true), "runtime persists session rows")
+assertTruthy(runtime:find("Core.GetNewestRowsFirst", 1, true), "runtime displays newest rows first")
 assertEqual(runtime:find("UnitExistsClean", 1, true), nil, "runtime does not gate roster building through UnitExists")
 assertTruthy(runtime:find("layout=460x310", 1, true), "runtime reports compact layout in status")
 

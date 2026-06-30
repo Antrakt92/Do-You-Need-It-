@@ -7,7 +7,7 @@ The addon focuses on quiet signal:
 - shows likely-tradeable equipment drops only;
 - hides currency, reagents, recipes, consumables, quest items, and other non-gear loot;
 - shows the dropped item next to the looter's currently equipped item when inspection data is safely available;
-- keeps a lightweight history for the current view, session, and the last 10 completed boss/run groups;
+- keeps a lightweight history for the current view, the last 50 saved session drops, and the last 10 completed boss/run groups;
 - sends whispers only from row actions unless auto-whisper is explicitly enabled.
 - includes an in-window auto-whisper checkbox and delay slider.
 - uses a compact loot window that appears automatically when a new trade-candidate gear drop is detected.
@@ -31,7 +31,7 @@ Auto-whisper is off by default. When enabled, it waits 10 seconds by default bef
 
 The loot window also has an auto-whisper checkbox and a 3-30 second delay slider next to it, so you do not need slash commands for normal adjustments.
 
-If you are checking whether the latest addon code loaded, run `/dyni status` and confirm it reports `build=0.1.5` and `layout=460x310`, then run `/dyni test` to force a compact auto-show test row. For live loot debugging, run `/dyni debug on` before a boss or dungeon chest and `/dyni diag` afterward.
+If you are checking whether the latest addon code loaded, run `/dyni status` and confirm it reports `build=0.1.6` and `layout=460x310`, then run `/dyni test` to force a compact auto-show test row. For live loot debugging, run `/dyni debug on` before a boss or dungeon chest and `/dyni diag` afterward.
 
 ## Install
 

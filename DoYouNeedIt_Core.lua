@@ -1,6 +1,6 @@
 local Core = {}
 
-Core.VERSION = "0.1.5"
+Core.VERSION = "0.1.6"
 
 local DEFAULTS = {
     autoWhisper = false,
@@ -9,6 +9,7 @@ local DEFAULTS = {
     minDelay = 3,
     maxDelay = 30,
     maxHistoryGroups = 10,
+    maxSessionRows = 50,
     minQuality = 2,
 }
 
@@ -63,6 +64,13 @@ local function copyList(list)
         copy[index] = list[index]
     end
     return copy
+end
+
+local function pruneListStart(list, limit)
+    limit = math.max(1, math.floor(asNumber(limit, 1)))
+    while #list > limit do
+        table.remove(list, 1)
+    end
 end
 
 local function baseName(name)
@@ -224,8 +232,40 @@ function Core.NormalizeSettings(saved)
     settings.maxDelay = maxDelay
     settings.autoDelay = clamp(asNumber(saved.autoDelay, DEFAULTS.autoDelay), settings.minDelay, settings.maxDelay)
     settings.maxHistoryGroups = math.max(1, math.floor(asNumber(saved.maxHistoryGroups, DEFAULTS.maxHistoryGroups)))
+    settings.maxSessionRows = math.max(1, math.floor(asNumber(saved.maxSessionRows, DEFAULTS.maxSessionRows)))
     settings.minQuality = math.max(0, math.floor(asNumber(saved.minQuality, DEFAULTS.minQuality)))
     return settings
+end
+
+function Core.NormalizeSavedRows(rows, limit)
+    local normalized = {}
+    if type(rows) == "table" then
+        for index = 1, #rows do
+            if type(rows[index]) == "table" then
+                normalized[#normalized + 1] = rows[index]
+            end
+        end
+    end
+    pruneListStart(normalized, limit or DEFAULTS.maxSessionRows)
+    return normalized
+end
+
+function Core.GetNewestRowsFirst(rows, limit)
+    local result = {}
+    if type(rows) ~= "table" then
+        return result
+    end
+    limit = math.max(1, math.floor(asNumber(limit, #rows)))
+    for index = #rows, 1, -1 do
+        local row = rows[index]
+        if type(row) == "table" then
+            result[#result + 1] = row
+            if #result >= limit then
+                break
+            end
+        end
+    end
+    return result
 end
 
 function Core.FindRosterNameInMessage(message, roster, playerName)
@@ -467,6 +507,8 @@ function Core.AddVisibleRow(state, row)
 
     state.currentRows[#state.currentRows + 1] = saved
     state.sessionRows[#state.sessionRows + 1] = saved
+    local limit = state.settings and state.settings.maxSessionRows or DEFAULTS.maxSessionRows
+    pruneListStart(state.sessionRows, limit)
     return saved
 end
 
