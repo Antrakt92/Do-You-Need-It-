@@ -1,6 +1,6 @@
 local Core = {}
 
-Core.VERSION = "0.1.9"
+Core.VERSION = "0.1.10"
 
 local DEFAULTS = {
     autoWhisper = false,
@@ -117,6 +117,9 @@ local function snapshotRowForSave(row)
     local saved = copyPrimitiveFields(row, PERSISTED_ROW_KEYS)
     if saved.statusText and saved.statusText:find("auto in", 1, true) == 1 then
         saved.statusText = "candidate"
+    end
+    if saved.equippedText == "Equipped: checking..." then
+        saved.equippedText = "Equipped: unknown"
     end
     return saved
 end

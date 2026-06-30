@@ -14,6 +14,7 @@ local Addon = {
 local SetAutoWhisper
 local SetDelay
 local CreateUI
+local RequestInspectForRow
 
 local issecretvalue = _G.issecretvalue or function()
     return false
@@ -28,9 +29,13 @@ local ROW_STRIDE = 34
 local MAX_VISIBLE_ROWS = 5
 local MAX_ITEM_RETRIES = 5
 local ITEM_RETRY_DELAY = 0.7
+local MAX_INSPECT_RETRIES = 8
+local INSPECT_RETRY_DELAY = 0.8
 local MAX_DIAGNOSTICS = 20
 local ENCOUNTER_LOOT_GRACE = 120
 local UNKNOWN_EQUIPPED = "Equipped: unknown"
+local EQUIPPED_PENDING = "Equipped: checking..."
+local EQUIPPED_UNAVAILABLE = "Equipped: unavailable"
 local WHISPER_TEMPLATE = "Hey, do you need %s?"
 
 local EQUIP_LOC_SLOTS = {
@@ -517,25 +522,120 @@ local function ScheduleAutoWhisper(row)
     end)
 end
 
-local function RequestInspectForRow(row)
+local function CompleteInspectRow(row, equippedText)
+    if not row then
+        return
+    end
+    row.equippedText = equippedText
+    row.inspectPending = false
+    row.inspectToken = nil
+    row.inspectRetryCount = nil
+    RecordDiagnostic("inspect_ready", {
+        looter = row.looter,
+        equipLoc = row.equipLoc,
+    })
+end
+
+local function FailInspectRow(row, reason)
+    if not row then
+        return
+    end
+    row.inspectPending = false
+    row.inspectToken = nil
+    if row.equippedText == EQUIPPED_PENDING or row.equippedText == UNKNOWN_EQUIPPED then
+        row.equippedText = EQUIPPED_UNAVAILABLE
+    end
+    RecordDiagnostic("inspect_failed", {
+        reason = reason or "unknown",
+        looter = row.looter,
+        equipLoc = row.equipLoc,
+        attempt = row.inspectRetryCount or 0,
+    })
+end
+
+local function ScheduleInspectRetry(row, reason)
+    if not row then
+        return false
+    end
+
+    row.inspectPending = false
+    local attempt = (row.inspectRetryCount or 0) + 1
+    row.inspectRetryCount = attempt
+    if attempt > MAX_INSPECT_RETRIES then
+        FailInspectRow(row, reason or "retry_limit")
+        SaveDB()
+        RefreshRows()
+        return false
+    end
+
+    row.equippedText = EQUIPPED_PENDING
+    local token = {}
+    row.inspectToken = token
+    RecordDiagnostic("inspect_retry", {
+        reason = reason or "unknown",
+        looter = row.looter,
+        equipLoc = row.equipLoc,
+        attempt = attempt,
+    })
+    SaveDB()
+    RefreshRows()
+
+    C_Timer.After(INSPECT_RETRY_DELAY, function()
+        if row.inspectToken ~= token then
+            return
+        end
+        row.inspectToken = nil
+        RequestInspectForRow(row)
+        SaveDB()
+        RefreshRows()
+    end)
+    return true
+end
+
+RequestInspectForRow = function(row)
     local unit = ResolveUnitForName(row.looter)
-    if not unit or not CanInspectClean(unit) then
-        row.equippedText = UNKNOWN_EQUIPPED
+    if not unit then
+        ScheduleInspectRetry(row, "unit_missing")
+        return
+    end
+    if not CanInspectClean(unit) then
+        ScheduleInspectRetry(row, InCombatLockdown and InCombatLockdown() and "combat_lockdown" or "inspect_blocked")
         return
     end
 
-    row.equippedText = FormatEquippedText(unit, row.equipLoc)
-    if row.equippedText ~= UNKNOWN_EQUIPPED then
+    local equippedText = FormatEquippedText(unit, row.equipLoc)
+    if equippedText ~= UNKNOWN_EQUIPPED then
+        CompleteInspectRow(row, equippedText)
         return
     end
 
     local guid = SafeUnitGUID(unit)
     if not guid then
+        ScheduleInspectRetry(row, "guid_missing")
         return
     end
+
+    row.equippedText = EQUIPPED_PENDING
+    row.inspectPending = true
     Addon.pendingInspect[guid] = Addon.pendingInspect[guid] or {}
     table.insert(Addon.pendingInspect[guid], row)
+    RecordDiagnostic("inspect_requested", {
+        looter = row.looter,
+        equipLoc = row.equipLoc,
+        attempt = row.inspectRetryCount or 0,
+    })
     SafeCall(NotifyInspect, unit)
+
+    local token = {}
+    row.inspectToken = token
+    C_Timer.After(INSPECT_RETRY_DELAY, function()
+        if row.inspectToken ~= token or row.inspectPending ~= true then
+            return
+        end
+        row.inspectPending = false
+        row.inspectToken = nil
+        ScheduleInspectRetry(row, "inspect_timeout")
+    end)
 end
 
 local function AddTradeCandidate(looter, itemLink, metadata)
@@ -1040,6 +1140,8 @@ local function HandleSlash(message)
                 .. tostring(entry.stage or "?")
                 .. (entry.reason and (" reason=" .. tostring(entry.reason)) or "")
                 .. (entry.looter and (" looter=" .. tostring(entry.looter)) or "")
+                .. (entry.equipLoc and (" slot=" .. tostring(entry.equipLoc)) or "")
+                .. (entry.attempt and (" attempt=" .. tostring(entry.attempt)) or "")
                 .. (entry.itemLink and (" item=" .. tostring(entry.itemLink)) or ""))
         end
     elseif command == "status" then
@@ -1142,9 +1244,20 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             Addon.pendingInspect[guid] = nil
             for index = 1, #rows do
                 local row = rows[index]
-                local unit = ResolveUnitForName(row.looter)
-                if unit then
-                    row.equippedText = FormatEquippedText(unit, row.equipLoc)
+                if row.inspectPending == true then
+                    row.inspectPending = false
+                    row.inspectToken = nil
+                    local unit = ResolveUnitForName(row.looter)
+                    if unit then
+                        local equippedText = FormatEquippedText(unit, row.equipLoc)
+                        if equippedText ~= UNKNOWN_EQUIPPED then
+                            CompleteInspectRow(row, equippedText)
+                        else
+                            ScheduleInspectRetry(row, "links_missing")
+                        end
+                    else
+                        ScheduleInspectRetry(row, "unit_missing")
+                    end
                 end
             end
             if ClearInspectPlayer then

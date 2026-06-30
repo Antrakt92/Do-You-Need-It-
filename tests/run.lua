@@ -134,6 +134,7 @@ local persistedRows = Core.SnapshotRowsForSave({
         looter = "Otherplayer",
         itemLink = "|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r",
         statusText = "auto in 10s",
+        equippedText = "Equipped: checking...",
         pendingAutoWhisper = true,
         autoToken = {},
         runtimeOnly = {},
@@ -148,6 +149,7 @@ local persistedRows = Core.SnapshotRowsForSave({
 }, 10)
 assertEqual(#persistedRows, 2, "save snapshot keeps persistable rows")
 assertEqual(persistedRows[1].statusText, "candidate", "save snapshot clears stale pending auto status")
+assertEqual(persistedRows[1].equippedText, "Equipped: unknown", "save snapshot clears stale pending inspect status")
 assertEqual(persistedRows[1].pendingAutoWhisper, nil, "save snapshot drops pending auto flag")
 assertEqual(persistedRows[1].autoToken, nil, "save snapshot drops runtime auto token")
 assertEqual(persistedRows[1].runtimeOnly, nil, "save snapshot drops non-primitive runtime fields")
@@ -311,7 +313,7 @@ assertEqual(#diagnostics, 10, "diagnostics prune to limit")
 assertEqual(diagnostics[1].stage, "stage12", "newest diagnostic first")
 assertEqual(diagnostics[10].stage, "stage3", "oldest retained diagnostic kept at limit")
 
-assertEqual(Core.VERSION, "0.1.9", "core exposes current version")
+assertEqual(Core.VERSION, "0.1.10", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -322,7 +324,7 @@ end
 
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
-assertTruthy(toc:find("## Version: 0.1.9", 1, true), "toc version present")
+assertTruthy(toc:find("## Version: 0.1.10", 1, true), "toc version present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")
 assertTruthy(toc:find("DoYouNeedIt.lua", 1, true), "toc loads runtime")
@@ -348,6 +350,11 @@ assertTruthy(runtime:find("dropLink", 1, true), "runtime has a hover target for 
 assertTruthy(runtime:find("equippedLink", 1, true), "runtime has a hover target for equipped item links")
 assertTruthy(runtime:find("GameTooltip:SetHyperlink", 1, true), "runtime shows real item tooltips from item links")
 assertTruthy(runtime:find("HandleModifiedItemClick", 1, true), "runtime supports standard modified item-link clicks")
+assertTruthy(runtime:find("MAX_INSPECT_RETRIES", 1, true), "runtime retries equipped-item inspect")
+assertTruthy(runtime:find("EQUIPPED_PENDING", 1, true), "runtime shows pending equipped-item state")
+assertTruthy(runtime:find("inspect_retry", 1, true), "runtime records inspect retry diagnostics")
+assertTruthy(runtime:find("inspect_failed", 1, true), "runtime records inspect failure diagnostics")
+assertTruthy(runtime:find("attempt=", 1, true), "runtime prints inspect diagnostic attempt counts")
 assertTruthy(runtime:find("command == \"debug\"", 1, true), "runtime wires /dyni debug")
 assertTruthy(runtime:find("RecordDiagnostic", 1, true), "runtime records loot diagnostics")
 assertTruthy(runtime:find("HandleLootMessage(...)", 1, true), "runtime passes full loot event payload")
