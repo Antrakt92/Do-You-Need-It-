@@ -26,11 +26,11 @@ local issecretvalue = _G.issecretvalue or function()
     return false
 end
 
-local WINDOW_WIDTH = 460
-local WINDOW_HEIGHT = 310
-local ROW_WIDTH = 430
+local WINDOW_WIDTH = 540
+local WINDOW_HEIGHT = 330
+local ROW_WIDTH = 510
 local ROW_HEIGHT = 30
-local ROW_START_Y = -72
+local ROW_START_Y = -116
 local ROW_STRIDE = 34
 local MAX_VISIBLE_ROWS = 5
 local MAX_ITEM_RETRIES = 5
@@ -1317,17 +1317,17 @@ local function CreateRow(parent, index)
 
     row.looter = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     row.looter:SetPoint("LEFT", row, "LEFT", 8, 8)
-    row.looter:SetWidth(72)
+    row.looter:SetWidth(90)
     row.looter:SetJustifyH("LEFT")
 
     row.drop = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    row.drop:SetPoint("LEFT", row.looter, "RIGHT", 6, 0)
-    row.drop:SetWidth(140)
+    row.drop:SetPoint("LEFT", row.looter, "RIGHT", 8, 0)
+    row.drop:SetWidth(180)
     row.drop:SetJustifyH("LEFT")
 
     row.dropLink = CreateFrame("Button", nil, row)
-    row.dropLink:SetPoint("LEFT", row.looter, "RIGHT", 4, 0)
-    row.dropLink:SetSize(146, ROW_HEIGHT)
+    row.dropLink:SetPoint("LEFT", row.looter, "RIGHT", 6, 0)
+    row.dropLink:SetSize(188, ROW_HEIGHT)
     row.dropLink:RegisterForClicks("AnyUp")
     row.dropLink:SetScript("OnEnter", function(button)
         ShowItemTooltip(button, button.itemLink)
@@ -1339,13 +1339,13 @@ local function CreateRow(parent, index)
     row.dropLink:Hide()
 
     row.equipped = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    row.equipped:SetPoint("LEFT", row.drop, "RIGHT", 8, 0)
-    row.equipped:SetWidth(125)
+    row.equipped:SetPoint("LEFT", row.drop, "RIGHT", 10, 0)
+    row.equipped:SetWidth(150)
     row.equipped:SetJustifyH("LEFT")
 
     row.equippedLink = CreateFrame("Button", nil, row)
-    row.equippedLink:SetPoint("LEFT", row.drop, "RIGHT", 6, 0)
-    row.equippedLink:SetSize(131, ROW_HEIGHT)
+    row.equippedLink:SetPoint("LEFT", row.drop, "RIGHT", 8, 0)
+    row.equippedLink:SetSize(158, ROW_HEIGHT)
     row.equippedLink:RegisterForClicks("AnyUp")
     row.equippedLink:SetScript("OnEnter", function(button)
         ShowItemTooltip(button, button.itemLink)
@@ -1358,7 +1358,7 @@ local function CreateRow(parent, index)
 
     row.status = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     row.status:SetPoint("TOPLEFT", row.looter, "BOTTOMLEFT", 0, -2)
-    row.status:SetWidth(350)
+    row.status:SetWidth(430)
     row.status:SetJustifyH("LEFT")
 
     row.whisper = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
@@ -1402,13 +1402,13 @@ CreateUI = function()
 
     frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -14)
-    frame.title:SetWidth(128)
+    frame.title:SetWidth(210)
     frame.title:SetJustifyH("LEFT")
     frame.title:SetText("Do You Need It?")
 
     frame.tabAskable = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     frame.tabAskable:SetSize(70, 22)
-    frame.tabAskable:SetPoint("TOPLEFT", frame, "TOPLEFT", 150, -12)
+    frame.tabAskable:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -42)
     frame.tabAskable:SetText("Askable")
     frame.tabAskable:SetScript("OnClick", function()
         SelectTab("askable")
@@ -1425,7 +1425,7 @@ CreateUI = function()
     Addon.tabAllGear = frame.tabAllGear
 
     frame.historyButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    frame.historyButton:SetSize(102, 22)
+    frame.historyButton:SetSize(350, 22)
     frame.historyButton:SetPoint("LEFT", frame.tabAllGear, "RIGHT", 6, 0)
     frame.historyButton:SetText("Current")
     frame.historyButton:SetScript("OnClick", function(button)
@@ -1434,14 +1434,14 @@ CreateUI = function()
     Addon.historyButton = frame.historyButton
 
     frame.autoStatus = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    frame.autoStatus:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -46, -48)
-    frame.autoStatus:SetWidth(70)
+    frame.autoStatus:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -76)
+    frame.autoStatus:SetWidth(84)
     frame.autoStatus:SetJustifyH("RIGHT")
     Addon.autoStatus = frame.autoStatus
 
     frame.autoCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
     frame.autoCheck:SetSize(24, 24)
-    frame.autoCheck:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -42)
+    frame.autoCheck:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -70)
     frame.autoCheck:SetScript("OnClick", function(check)
         SetAutoWhisper(check:GetChecked() == true)
     end)
@@ -1457,7 +1457,7 @@ CreateUI = function()
 
     frame.delaySlider = CreateFrame("Slider", nil, frame, "OptionsSliderTemplate")
     frame.delaySlider:SetPoint("LEFT", frame.delayLabel, "RIGHT", 10, 0)
-    frame.delaySlider:SetSize(135, 18)
+    frame.delaySlider:SetSize(170, 18)
     frame.delaySlider:SetMinMaxValues(3, 30)
     frame.delaySlider:SetValueStep(1)
     if frame.delaySlider.SetObeyStepOnDrag then
@@ -1606,7 +1606,7 @@ local function HandleSlash(message)
             .. ", debug=" .. tostring(Addon.state.settings.debug)
             .. ", diagnostics=" .. tostring(#(Addon.diagnostics or {}))
             .. ", build=" .. tostring(Core.VERSION)
-            .. ", layout=460x310")
+            .. ", layout=540x330")
     else
         Print("commands: /dyni, /dyni test, /dyni scan, /dyni auto on|off, /dyni delay <seconds>, /dyni clear, /dyni history, /dyni debug on|off, /dyni diag, /dyni status")
     end
