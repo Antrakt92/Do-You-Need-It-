@@ -1,6 +1,6 @@
 local Core = {}
 
-Core.VERSION = "0.1.2"
+Core.VERSION = "0.1.3"
 
 local DEFAULTS = {
     autoWhisper = false,
@@ -134,6 +134,43 @@ local function appendCandidate(list, seen, value)
     seen[value] = true
 end
 
+local function escapePatternChar(char)
+    if char:find("[%(%).%%%+%-%*%?%[%]%^%$]", 1, false) then
+        return "%" .. char
+    end
+    return char
+end
+
+local function lootFormatToPattern(formatText, captureFirstString)
+    if type(formatText) ~= "string" or formatText == "" then
+        return nil
+    end
+
+    local out = { "^" }
+    local index = 1
+    local capturedFirstString = false
+    while index <= #formatText do
+        local char = formatText:sub(index, index)
+        local nextChar = formatText:sub(index + 1, index + 1)
+        if char == "%" and nextChar == "s" then
+            if captureFirstString and not capturedFirstString then
+                out[#out + 1] = "(.+)"
+                capturedFirstString = true
+            else
+                out[#out + 1] = ".+"
+            end
+            index = index + 2
+        elseif char == "%" and nextChar == "d" then
+            out[#out + 1] = "%d+"
+            index = index + 2
+        else
+            out[#out + 1] = escapePatternChar(char)
+            index = index + 1
+        end
+    end
+    return table.concat(out)
+end
+
 local function isItemLink(link)
     return type(link) == "string" and link:find("|Hitem:", 1, true) ~= nil
 end
@@ -220,6 +257,70 @@ function Core.RecordDiagnostic(log, entry, limit)
         table.remove(log)
     end
     return saved
+end
+
+function Core.CreateLootMessagePatterns(formats)
+    formats = type(formats) == "table" and formats or {}
+    local patterns = {
+        self = {},
+        other = {},
+    }
+
+    local selfPattern = lootFormatToPattern(formats.lootSelf, false)
+    if selfPattern then
+        patterns.self[#patterns.self + 1] = selfPattern
+    end
+    local selfMultiplePattern = lootFormatToPattern(formats.lootSelfMultiple, false)
+    if selfMultiplePattern then
+        patterns.self[#patterns.self + 1] = selfMultiplePattern
+    end
+    local otherPattern = lootFormatToPattern(formats.lootOther, true)
+    if otherPattern then
+        patterns.other[#patterns.other + 1] = otherPattern
+    end
+    local otherMultiplePattern = lootFormatToPattern(formats.lootOtherMultiple, true)
+    if otherMultiplePattern then
+        patterns.other[#patterns.other + 1] = otherMultiplePattern
+    end
+
+    return patterns
+end
+
+function Core.ResolveLootMessageLooter(message, patterns, playerName)
+    if type(message) ~= "string" or type(patterns) ~= "table" then
+        return nil
+    end
+
+    local selfPatterns = type(patterns.self) == "table" and patterns.self or {}
+    for index = 1, #selfPatterns do
+        if message:match(selfPatterns[index]) then
+            return {
+                name = playerName,
+                isSelf = true,
+            }
+        end
+    end
+
+    local otherPatterns = type(patterns.other) == "table" and patterns.other or {}
+    for index = 1, #otherPatterns do
+        local name = message:match(otherPatterns[index])
+        if type(name) == "string" and name ~= "" then
+            return {
+                name = name,
+                isSelf = false,
+            }
+        end
+    end
+
+    return nil
+end
+
+function Core.ExtractItemID(link)
+    if type(link) ~= "string" then
+        return nil
+    end
+    local itemID = link:match("item:(%d+)")
+    return tonumber(itemID)
 end
 
 function Core.ClassifyTradeCandidate(item, looter, playerName, settings)

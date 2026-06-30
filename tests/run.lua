@@ -123,6 +123,34 @@ assertEqual(
 local ownMessage = "Player receives loot: |cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r."
 assertEqual(Core.FindRosterNameInMessage(ownMessage, roster, "Player-Ravencrest"), nil, "loot parser ignores own drops")
 
+local lootPatterns = Core.CreateLootMessagePatterns({
+    lootSelf = "You receive loot: %s.",
+    lootSelfMultiple = "You receive loot: %sx%d.",
+    lootOther = "%s receives loot: %s.",
+    lootOtherMultiple = "%s receives loot: %sx%d.",
+})
+local resolvedOther = Core.ResolveLootMessageLooter(
+    "Otherplayer receives loot: |cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r.",
+    lootPatterns,
+    "Player-Ravencrest"
+)
+assertEqual(resolvedOther.name, "Otherplayer", "localized loot patterns resolve other looter")
+assertEqual(resolvedOther.isSelf, false, "localized other loot is not self loot")
+local resolvedOtherMultiple = Core.ResolveLootMessageLooter(
+    "Otherplayer receives loot: |cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|rx2.",
+    lootPatterns,
+    "Player-Ravencrest"
+)
+assertEqual(resolvedOtherMultiple.name, "Otherplayer", "localized multiple loot patterns resolve other looter")
+local resolvedSelf = Core.ResolveLootMessageLooter(
+    "You receive loot: |cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r.",
+    lootPatterns,
+    "Player-Ravencrest"
+)
+assertEqual(resolvedSelf.name, "Player-Ravencrest", "localized self loot returns player name")
+assertEqual(resolvedSelf.isSelf, true, "localized self loot marks self")
+assertEqual(Core.ExtractItemID("|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r"), 19019, "item id extracted from item link")
+
 local diagnostics = {}
 for index = 1, 12 do
     Core.RecordDiagnostic(diagnostics, { stage = "stage" .. index, itemLink = "item" .. index }, 10)
@@ -131,7 +159,7 @@ assertEqual(#diagnostics, 10, "diagnostics prune to limit")
 assertEqual(diagnostics[1].stage, "stage12", "newest diagnostic first")
 assertEqual(diagnostics[10].stage, "stage3", "oldest retained diagnostic kept at limit")
 
-assertEqual(Core.VERSION, "0.1.2", "core exposes current version")
+assertEqual(Core.VERSION, "0.1.3", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -142,7 +170,7 @@ end
 
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
-assertTruthy(toc:find("## Version: 0.1.2", 1, true), "toc version present")
+assertTruthy(toc:find("## Version: 0.1.3", 1, true), "toc version present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")
 assertTruthy(toc:find("DoYouNeedIt.lua", 1, true), "toc loads runtime")
@@ -164,6 +192,10 @@ assertTruthy(runtime:find("command == \"test\"", 1, true), "runtime wires /dyni 
 assertTruthy(runtime:find("command == \"debug\"", 1, true), "runtime wires /dyni debug")
 assertTruthy(runtime:find("RecordDiagnostic", 1, true), "runtime records loot diagnostics")
 assertTruthy(runtime:find("HandleLootMessage(...)", 1, true), "runtime passes full loot event payload")
+assertTruthy(runtime:find("CreateLootMessagePatterns", 1, true), "runtime uses localized loot message patterns")
+assertTruthy(runtime:find("ResolveLootMessageLooter", 1, true), "runtime resolves looters through localized loot patterns")
+assertTruthy(runtime:find("ContinueOnItemLoad", 1, true), "runtime waits for uncached item data")
+assertEqual(runtime:find("UnitExistsClean", 1, true), nil, "runtime does not gate roster building through UnitExists")
 assertTruthy(runtime:find("layout=460x310", 1, true), "runtime reports compact layout in status")
 
 print("tests ok")

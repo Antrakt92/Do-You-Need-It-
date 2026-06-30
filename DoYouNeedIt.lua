@@ -118,10 +118,6 @@ local function Now()
     return time()
 end
 
-local function UnitExistsClean(unit)
-    return CleanBoolean(SafeCall(UnitExists, unit)) == true
-end
-
 local function SafeUnitName(unit)
     local name, realm = SafeCall(UnitName, unit)
     name = CleanString(name)
@@ -191,9 +187,6 @@ local function BuildRoster()
     Addon.roster = {}
 
     local function addUnit(unit)
-        if not UnitExistsClean(unit) then
-            return
-        end
         local fullName, shortName = SafeUnitName(unit)
         if fullName then
             Addon.roster[fullName] = unit
@@ -226,6 +219,15 @@ local function FindLooterFromMessage(message, ...)
 
     local playerName = SafePlayerName()
     local cleanMessage = CleanString(message)
+    local resolved = Core.ResolveLootMessageLooter(cleanMessage, Addon.lootPatterns, playerName)
+    if resolved and resolved.name then
+        if resolved.isSelf then
+            return resolved.name
+        end
+        local canonical = Core.FindRosterNameInMessage(resolved.name, Addon.roster, playerName)
+        return canonical or resolved.name
+    end
+
     local looter = Core.FindRosterNameInMessage(cleanMessage, Addon.roster, playerName)
     if looter then
         return looter
@@ -241,6 +243,23 @@ local function FindLooterFromMessage(message, ...)
         end
     end
     return nil
+end
+
+local function RequestItemLoad(itemLink, callback)
+    local itemID = Core.ExtractItemID(itemLink)
+    if not itemID or not C_Item or type(C_Item.CreateFromItemID) ~= "function" then
+        return false
+    end
+
+    local item = SafeCall(C_Item.CreateFromItemID, itemID)
+    if type(item) ~= "table" or type(item.ContinueOnItemLoad) ~= "function" then
+        return false
+    end
+
+    local ok = pcall(function()
+        item:ContinueOnItemLoad(callback)
+    end)
+    return ok == true
 end
 
 local function GetItemInfoCompat(itemLink)
@@ -558,6 +577,20 @@ local function AddTestRow()
     Print("test row added; this should auto-show the compact window")
 end
 
+local function TryProcessItemMetadata(looter, itemLink)
+    if Addon.itemRetryCount[itemLink] == nil then
+        return true
+    end
+
+    local metadata = ReadItemMetadata(itemLink)
+    if metadata then
+        Addon.itemRetryCount[itemLink] = nil
+        AddTradeCandidate(looter, itemLink, metadata)
+        return true
+    end
+    return false
+end
+
 local function RetryItemLater(looter, itemLink)
     local count = (Addon.itemRetryCount[itemLink] or 0) + 1
     Addon.itemRetryCount[itemLink] = count
@@ -569,12 +602,31 @@ local function RetryItemLater(looter, itemLink)
         })
         return
     end
+
+    if count == 1 and RequestItemLoad(itemLink, function()
+        if not TryProcessItemMetadata(looter, itemLink) then
+            RetryItemLater(looter, itemLink)
+        end
+    end) then
+        RecordDiagnostic("metadata_requested", {
+            looter = looter,
+            itemLink = itemLink,
+            itemID = Core.ExtractItemID(itemLink),
+        })
+        C_Timer.After(ITEM_RETRY_DELAY * 3, function()
+            if not TryProcessItemMetadata(looter, itemLink) then
+                RetryItemLater(looter, itemLink)
+            end
+        end)
+        return
+    end
+
     C_Timer.After(ITEM_RETRY_DELAY, function()
-        local metadata = ReadItemMetadata(itemLink)
-        if metadata then
-            Addon.itemRetryCount[itemLink] = nil
-            AddTradeCandidate(looter, itemLink, metadata)
-        elseif count == MAX_ITEM_RETRIES then
+        if not TryProcessItemMetadata(looter, itemLink) then
+            if count < MAX_ITEM_RETRIES then
+                RetryItemLater(looter, itemLink)
+                return
+            end
             RecordDiagnostic("metadata_failed", {
                 reason = "unresolved_item",
                 looter = looter,
@@ -936,6 +988,12 @@ local function Initialize()
     Addon.state = Core.CreateState(settings)
     Addon.state.history = type(DoYouNeedItDB.history) == "table" and DoYouNeedItDB.history or {}
     Addon.diagnostics = type(DoYouNeedItDB.diagnostics) == "table" and DoYouNeedItDB.diagnostics or {}
+    Addon.lootPatterns = Core.CreateLootMessagePatterns({
+        lootSelf = LOOT_ITEM_SELF,
+        lootSelfMultiple = LOOT_ITEM_SELF_MULTIPLE,
+        lootOther = LOOT_ITEM,
+        lootOtherMultiple = LOOT_ITEM_MULTIPLE,
+    })
     while #Addon.state.history > Addon.state.settings.maxHistoryGroups do
         table.remove(Addon.state.history)
     end
