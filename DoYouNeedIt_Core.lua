@@ -1,6 +1,6 @@
 local Core = {}
 
-Core.VERSION = "0.1.10"
+Core.VERSION = "0.1.11"
 
 local DEFAULTS = {
     autoWhisper = false,
@@ -52,6 +52,7 @@ local PERSISTED_ROW_KEYS = {
     unsafe = true,
     manualWhispered = true,
     autoWhispered = true,
+    askable = true,
 }
 
 local PERSISTED_GROUP_KEYS = {
@@ -319,6 +320,7 @@ function Core.SnapshotHistoryForSave(history, limit)
             if type(group) == "table" then
                 local savedGroup = copyPrimitiveFields(group, PERSISTED_GROUP_KEYS)
                 savedGroup.rows = snapshotRowsForSave(group.rows)
+                savedGroup.allRows = snapshotRowsForSave(group.allRows)
                 saved[#saved + 1] = savedGroup
             end
         end
@@ -484,6 +486,7 @@ function Core.BuildItemMetadata(itemLink, instant, detailed)
         subclassID = detailed.subclassID or instant.subclassID,
         equipLoc = equipLoc,
         bindType = detailed.bindType,
+        tradeTimeRemaining = detailed.tradeTimeRemaining == true,
         isCraftingReagent = detailed.isCraftingReagent == true,
     }
 end
@@ -518,7 +521,7 @@ function Core.FirstRowEncounterName(rows)
     return nil
 end
 
-function Core.ClassifyTradeCandidate(item, looter, playerName, settings)
+function Core.ClassifyGearLoot(item, looter, settings)
     settings = Core.NormalizeSettings(settings or {})
 
     if type(item) ~= "table" then
@@ -529,12 +532,6 @@ function Core.ClassifyTradeCandidate(item, looter, playerName, settings)
     end
     if looter == nil or looter == "" then
         return { visible = false, reason = "missing_looter" }
-    end
-    if samePlayerName(looter, playerName) then
-        return { visible = false, reason = "self_loot" }
-    end
-    if item.canTrade == false then
-        return { visible = false, reason = "not_tradeable" }
     end
     if item.isCraftingReagent == true then
         return { visible = false, reason = "crafting_reagent" }
@@ -551,8 +548,32 @@ function Core.ClassifyTradeCandidate(item, looter, playerName, settings)
 
     return {
         visible = true,
+        reason = "gear_drop",
+    }
+end
+
+function Core.ClassifyTradeCandidate(item, looter, playerName, settings)
+    local gear = Core.ClassifyGearLoot(item, looter, settings)
+    if not gear.visible then
+        return gear
+    end
+    if samePlayerName(looter, playerName) then
+        return { visible = false, reason = "self_loot" }
+    end
+    if item.canTrade == false then
+        return { visible = false, reason = "not_tradeable" }
+    end
+    if item.bindType == 1 and item.tradeTimeRemaining ~= true then
+        return { visible = false, reason = "bind_on_pickup" }
+    end
+    if item.bindType == 4 then
+        return { visible = false, reason = "quest_bound" }
+    end
+
+    return {
+        visible = true,
         reason = "trade_candidate",
-        tradeGuaranteed = item.canTrade == true,
+        tradeGuaranteed = item.canTrade == true or item.tradeTimeRemaining == true,
     }
 end
 
@@ -561,14 +582,16 @@ function Core.CreateState(settings)
     return {
         settings = normalized,
         currentRows = {},
+        allRows = {},
         sessionRows = {},
+        sessionAllRows = {},
         history = {},
         selectedView = "current",
         nextRowID = 1,
     }
 end
 
-function Core.AddVisibleRow(state, row)
+function Core.AddVisibleRow(state, row, askable)
     if type(state) ~= "table" or type(row) ~= "table" then
         return nil
     end
@@ -581,10 +604,19 @@ function Core.AddVisibleRow(state, row)
         saved.id = "row" .. tostring(state.nextRowID or 1)
         state.nextRowID = (state.nextRowID or 1) + 1
     end
+    saved.askable = askable ~= false
 
-    state.currentRows[#state.currentRows + 1] = saved
-    state.sessionRows[#state.sessionRows + 1] = saved
+    state.allRows = state.allRows or {}
+    state.sessionAllRows = state.sessionAllRows or {}
+    state.allRows[#state.allRows + 1] = saved
+    state.sessionAllRows[#state.sessionAllRows + 1] = saved
     local limit = state.settings and state.settings.maxSessionRows or DEFAULTS.maxSessionRows
+    pruneListStart(state.sessionAllRows, limit)
+
+    if saved.askable then
+        state.currentRows[#state.currentRows + 1] = saved
+        state.sessionRows[#state.sessionRows + 1] = saved
+    end
     pruneListStart(state.sessionRows, limit)
     return saved
 end
@@ -610,18 +642,25 @@ local function groupTitle(meta, dropCount)
 end
 
 function Core.CompleteCurrentGroup(state, groupMeta)
-    if type(state) ~= "table" or type(state.currentRows) ~= "table" or #state.currentRows == 0 then
+    if type(state) ~= "table" then
+        return nil
+    end
+    state.currentRows = type(state.currentRows) == "table" and state.currentRows or {}
+    state.allRows = type(state.allRows) == "table" and state.allRows or {}
+    if #state.currentRows == 0 and #state.allRows == 0 then
         return nil
     end
 
     groupMeta = type(groupMeta) == "table" and groupMeta or {}
+    local dropCount = #state.allRows > 0 and #state.allRows or #state.currentRows
     local group = {
-        title = groupTitle(groupMeta, #state.currentRows),
+        title = groupTitle(groupMeta, dropCount),
         instanceName = groupMeta.instanceName,
         encounterName = groupMeta.encounterName,
         startedAt = groupMeta.startedAt,
         endedAt = groupMeta.endedAt,
         rows = copyList(state.currentRows),
+        allRows = copyList(state.allRows),
     }
 
     table.insert(state.history, 1, group)
@@ -630,6 +669,7 @@ function Core.CompleteCurrentGroup(state, groupMeta)
         table.remove(state.history)
     end
     state.currentRows = {}
+    state.allRows = {}
     return group
 end
 
@@ -640,6 +680,9 @@ function Core.GetAutoWhisperDecision(settings, row)
     end
     if type(row) ~= "table" then
         return { shouldSchedule = false, reason = "missing_row" }
+    end
+    if row.askable == false then
+        return { shouldSchedule = false, reason = "not_askable" }
     end
     if row.unsafe == true then
         return { shouldSchedule = false, reason = "unsafe" }

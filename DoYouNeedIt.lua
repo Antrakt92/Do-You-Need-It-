@@ -8,6 +8,7 @@ local Addon = {
     pendingInspect = {},
     selectedHistoryIndex = nil,
     selectedView = "current",
+    selectedTab = "askable",
     itemRetryCount = {},
 }
 
@@ -317,6 +318,41 @@ local function GetItemInfoInstantCompat(itemLink)
     return nil
 end
 
+local function TooltipHasTradeTimer(itemLink)
+    if type(itemLink) ~= "string" or itemLink == "" or not C_TooltipInfo or type(C_TooltipInfo.GetHyperlink) ~= "function" then
+        return false
+    end
+
+    local data = SafeCall(C_TooltipInfo.GetHyperlink, itemLink)
+    if type(data) ~= "table" then
+        return false
+    end
+    if TooltipUtil and type(TooltipUtil.SurfaceArgs) == "function" then
+        SafeCall(TooltipUtil.SurfaceArgs, data)
+    end
+
+    local tradePrefix
+    local tradeFormat = CleanString(_G.BIND_TRADE_TIME_REMAINING)
+    if tradeFormat then
+        tradePrefix = tradeFormat:match("^(.-)%%s") or tradeFormat
+    end
+
+    local lines = type(data.lines) == "table" and data.lines or {}
+    for index = 1, #lines do
+        local line = lines[index]
+        local text = CleanString(type(line) == "table" and line.leftText or nil)
+        if text then
+            if tradePrefix and tradePrefix ~= "" and text:find(tradePrefix, 1, true) then
+                return true
+            end
+            if text:find("You may trade this item", 1, true) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 local function ReadItemMetadata(itemLink)
     local itemID, itemType, itemSubType, itemEquipLoc, icon, classID, subclassID = GetItemInfoInstantCompat(itemLink)
     local itemName, resolvedLink, quality, itemLevel, requiredLevel, itemTypeText, itemSubTypeText, stackCount,
@@ -337,6 +373,7 @@ local function ReadItemMetadata(itemLink)
         subclassID = detailedSubclassID or subclassID,
         equipLoc = CleanString(equipLoc),
         bindType = bindType,
+        tradeTimeRemaining = TooltipHasTradeTimer(itemLink),
         isCraftingReagent = isCraftingReagent == true,
     })
 end
@@ -373,18 +410,27 @@ local function CanInspectClean(unit)
     return CleanBoolean(result) == true
 end
 
+local function RowsForSelectedView()
+    local useAllGear = Addon.selectedTab == "all"
+    if Addon.selectedView == "session" then
+        return useAllGear and (Addon.state.sessionAllRows or {}) or Addon.state.sessionRows
+    end
+    if Addon.selectedView == "history" and Addon.selectedHistoryIndex then
+        local group = Addon.state.history[Addon.selectedHistoryIndex]
+        if not group then
+            return {}
+        end
+        return useAllGear and (group.allRows or group.rows or {}) or (group.rows or {})
+    end
+    return useAllGear and (Addon.state.allRows or {}) or Addon.state.currentRows
+end
+
 local function RefreshRows()
     if not Addon.frame then
         return
     end
 
-    local rows = Addon.state.currentRows
-    if Addon.selectedView == "session" then
-        rows = Addon.state.sessionRows
-    elseif Addon.selectedView == "history" and Addon.selectedHistoryIndex then
-        local group = Addon.state.history[Addon.selectedHistoryIndex]
-        rows = group and group.rows or {}
-    end
+    local rows = RowsForSelectedView()
     local displayRows = Core.GetNewestRowsFirst(rows, MAX_VISIBLE_ROWS)
 
     local title = "Current"
@@ -395,6 +441,12 @@ local function RefreshRows()
         title = group and group.title or "History"
     end
     Addon.historyButton:SetText(title)
+    if Addon.tabAskable then
+        Addon.tabAskable:SetEnabled(Addon.selectedTab ~= "askable")
+    end
+    if Addon.tabAllGear then
+        Addon.tabAllGear:SetEnabled(Addon.selectedTab ~= "all")
+    end
 
     local autoText = Addon.state.settings.autoWhisper and ("Auto: " .. Addon.state.settings.autoDelay .. "s") or "Auto: off"
     Addon.autoStatus:SetText(autoText)
@@ -423,12 +475,13 @@ local function RefreshRows()
             rowFrame.dropLink:SetShown(rowFrame.dropLink.itemLink ~= nil)
             rowFrame.equippedLink:SetShown(rowFrame.equippedLink.itemLink ~= nil)
             rowFrame.status:SetText(row.statusText or row.reason or "candidate")
-            if Addon.selectedView == "history" then
-                rowFrame.whisper:Disable()
-                rowFrame.whisper:SetText("History")
-            else
+            if Addon.selectedTab == "askable" and Addon.selectedView ~= "history" and row.askable ~= false then
                 rowFrame.whisper:Enable()
                 rowFrame.whisper:SetText(row.manualWhispered and "Sent" or "Ask")
+                rowFrame.whisper:Show()
+            else
+                rowFrame.whisper:Disable()
+                rowFrame.whisper:Hide()
             end
             rowFrame:Show()
         else
@@ -442,7 +495,7 @@ local function RefreshRows()
     end
 
     if #rows == 0 then
-        Addon.emptyText:SetText("No tradeable gear drops in this view.")
+        Addon.emptyText:SetText(Addon.selectedTab == "all" and "No gear drops in this view." or "No askable gear drops in this view.")
         Addon.emptyText:Show()
     else
         Addon.emptyText:Hide()
@@ -455,6 +508,7 @@ local function SaveDB()
     DoYouNeedItDB.settings = settings
     DoYouNeedItDB.history = Addon.state and Core.SnapshotHistoryForSave(Addon.state.history, settings.maxHistoryGroups) or {}
     DoYouNeedItDB.sessionRows = Addon.state and Core.SnapshotRowsForSave(Addon.state.sessionRows, settings.maxSessionRows) or {}
+    DoYouNeedItDB.sessionAllRows = Addon.state and Core.SnapshotRowsForSave(Addon.state.sessionAllRows, settings.maxSessionRows) or {}
     DoYouNeedItDB.diagnostics = Addon.diagnostics or {}
 end
 
@@ -640,17 +694,32 @@ end
 
 local function AddTradeCandidate(looter, itemLink, metadata)
     local playerName = SafePlayerName()
-    local classification = DoYouNeedItCore.ClassifyTradeCandidate(metadata, looter, playerName, Addon.state.settings)
-    if not classification.visible then
+    local gearClassification = DoYouNeedItCore.ClassifyGearLoot(metadata, looter, Addon.state.settings)
+    if not gearClassification.visible then
         RecordDiagnostic("filtered", {
+            reason = gearClassification.reason,
+            looter = looter,
+            itemLink = itemLink,
+            equipLoc = metadata and metadata.equipLoc,
+            classID = metadata and metadata.classID,
+            quality = metadata and metadata.quality,
+            bindType = metadata and metadata.bindType,
+        })
+        return false, gearClassification.reason
+    end
+
+    local classification = DoYouNeedItCore.ClassifyTradeCandidate(metadata, looter, playerName, Addon.state.settings)
+    local askable = classification.visible == true
+    if not askable then
+        RecordDiagnostic("all_gear_only", {
             reason = classification.reason,
             looter = looter,
             itemLink = itemLink,
             equipLoc = metadata and metadata.equipLoc,
             classID = metadata and metadata.classID,
             quality = metadata and metadata.quality,
+            bindType = metadata and metadata.bindType,
         })
-        return false, classification.reason
     end
 
     local row = Core.AddVisibleRow(Addon.state, {
@@ -667,11 +736,11 @@ local function AddTradeCandidate(looter, itemLink, metadata)
             ENCOUNTER_LOOT_GRACE
         ),
         timestamp = Now(),
-        reason = "trade candidate",
-        statusText = "candidate",
+        reason = askable and "trade candidate" or classification.reason,
+        statusText = askable and "candidate" or (classification.reason or "not askable"),
         equippedText = UNKNOWN_EQUIPPED,
         unsafe = false,
-    })
+    }, askable)
     if not row then
         RecordDiagnostic("row_failed", {
             reason = "state_rejected",
@@ -686,18 +755,22 @@ local function AddTradeCandidate(looter, itemLink, metadata)
         itemLink = itemLink,
         equipLoc = metadata.equipLoc,
         itemID = metadata.itemID,
+        askable = askable,
     })
     RequestInspectForRow(row)
-    ScheduleAutoWhisper(row)
+    if askable then
+        ScheduleAutoWhisper(row)
+    end
+    Addon.selectedTab = "askable"
     Addon.selectedView = "current"
     Addon.selectedHistoryIndex = nil
     SaveDB()
     RefreshRows()
-    if DoYouNeedItCore.ShouldAutoShowWindow(row) then
+    if askable and DoYouNeedItCore.ShouldAutoShowWindow(row) then
         CreateUI()
         Addon.frame:Show()
     end
-    return true
+    return true, askable and "askable" or "all_gear_only"
 end
 
 local function AddTestRow()
@@ -713,7 +786,21 @@ local function AddTestRow()
         statusText = "test row",
         equippedText = "Equipped: |cff1eff00|Hitem:25:::::::::::::|h[Worn Shortsword]|h|r",
         unsafe = false,
-    })
+    }, true)
+    Core.AddVisibleRow(Addon.state, {
+        looter = "Example",
+        itemLink = "|cffa335ee|Hitem:19020:::::::::::::|h[Bound Test Chest]|h|r",
+        equipLoc = "INVTYPE_CHEST",
+        itemID = 19020,
+        instanceName = Addon.currentInstanceName or SafeInstanceName(),
+        encounterName = Addon.currentEncounterName,
+        timestamp = Now(),
+        reason = "bind_on_pickup",
+        statusText = "bind_on_pickup",
+        equippedText = UNKNOWN_EQUIPPED,
+        unsafe = false,
+    }, false)
+    Addon.selectedTab = "askable"
     Addon.selectedView = "current"
     Addon.selectedHistoryIndex = nil
     RefreshRows()
@@ -721,7 +808,7 @@ local function AddTestRow()
         CreateUI()
         Addon.frame:Show()
     end
-    Print("test row added; this should auto-show the compact window")
+    Print("test rows added; Askable shows one row, All Gear shows both")
 end
 
 local function TryProcessItemMetadata(looter, itemLink)
@@ -819,12 +906,12 @@ local function HandleLootMessage(message, ...)
 end
 
 local function CompleteCurrentGroup(encounterName)
-    if not Addon.state or #Addon.state.currentRows == 0 then
+    if not Addon.state or (#Addon.state.currentRows == 0 and #(Addon.state.allRows or {}) == 0) then
         return
     end
     Core.CompleteCurrentGroup(Addon.state, {
         instanceName = Addon.currentInstanceName or SafeInstanceName(),
-        encounterName = encounterName or Addon.currentEncounterName or Core.FirstRowEncounterName(Addon.state.currentRows),
+        encounterName = encounterName or Addon.currentEncounterName or Core.FirstRowEncounterName(Addon.state.currentRows) or Core.FirstRowEncounterName(Addon.state.allRows),
         startedAt = Addon.currentEncounterStartedAt,
         endedAt = Now(),
     })
@@ -837,6 +924,11 @@ end
 local function SelectView(view, historyIndex)
     Addon.selectedView = view
     Addon.selectedHistoryIndex = historyIndex
+    RefreshRows()
+end
+
+local function SelectTab(tab)
+    Addon.selectedTab = tab == "all" and "all" or "askable"
     RefreshRows()
 end
 
@@ -967,11 +1059,31 @@ CreateUI = function()
 
     frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -14)
+    frame.title:SetWidth(128)
+    frame.title:SetJustifyH("LEFT")
     frame.title:SetText("Do You Need It?")
 
+    frame.tabAskable = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.tabAskable:SetSize(70, 22)
+    frame.tabAskable:SetPoint("TOPLEFT", frame, "TOPLEFT", 150, -12)
+    frame.tabAskable:SetText("Askable")
+    frame.tabAskable:SetScript("OnClick", function()
+        SelectTab("askable")
+    end)
+    Addon.tabAskable = frame.tabAskable
+
+    frame.tabAllGear = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.tabAllGear:SetSize(72, 22)
+    frame.tabAllGear:SetPoint("LEFT", frame.tabAskable, "RIGHT", 4, 0)
+    frame.tabAllGear:SetText("All Gear")
+    frame.tabAllGear:SetScript("OnClick", function()
+        SelectTab("all")
+    end)
+    Addon.tabAllGear = frame.tabAllGear
+
     frame.historyButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    frame.historyButton:SetSize(136, 22)
-    frame.historyButton:SetPoint("LEFT", frame.title, "RIGHT", 12, 0)
+    frame.historyButton:SetSize(102, 22)
+    frame.historyButton:SetPoint("LEFT", frame.tabAllGear, "RIGHT", 6, 0)
     frame.historyButton:SetText("Current")
     frame.historyButton:SetScript("OnClick", function(button)
         OpenHistoryMenu(button)
@@ -979,9 +1091,9 @@ CreateUI = function()
     Addon.historyButton = frame.historyButton
 
     frame.autoStatus = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    frame.autoStatus:SetPoint("LEFT", frame.historyButton, "RIGHT", 10, 0)
-    frame.autoStatus:SetWidth(62)
-    frame.autoStatus:SetJustifyH("LEFT")
+    frame.autoStatus:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -46, -48)
+    frame.autoStatus:SetWidth(70)
+    frame.autoStatus:SetJustifyH("RIGHT")
     Addon.autoStatus = frame.autoStatus
 
     frame.autoCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
@@ -1101,7 +1213,10 @@ local function HandleSlash(message)
     elseif command == "clear" then
         CancelAllPendingAuto()
         Addon.state.currentRows = {}
+        Addon.state.allRows = {}
         Addon.state.sessionRows = {}
+        Addon.state.sessionAllRows = {}
+        Addon.selectedTab = "askable"
         Addon.selectedView = "current"
         Addon.selectedHistoryIndex = nil
         SaveDB()
@@ -1149,6 +1264,7 @@ local function HandleSlash(message)
             .. ", delay=" .. tostring(Addon.state.settings.autoDelay)
             .. "s, saved groups=" .. tostring(#Addon.state.history)
             .. ", session drops=" .. tostring(#Addon.state.sessionRows)
+            .. ", all gear=" .. tostring(#(Addon.state.sessionAllRows or {}))
             .. ", debug=" .. tostring(Addon.state.settings.debug)
             .. ", diagnostics=" .. tostring(#(Addon.diagnostics or {}))
             .. ", build=" .. tostring(Core.VERSION)
@@ -1164,6 +1280,7 @@ local function Initialize()
     Addon.state = Core.CreateState(settings)
     Addon.state.history = Core.SnapshotHistoryForSave(DoYouNeedItDB.history, Addon.state.settings.maxHistoryGroups)
     Addon.state.sessionRows = Core.NormalizeSavedRows(DoYouNeedItDB.sessionRows, Addon.state.settings.maxSessionRows)
+    Addon.state.sessionAllRows = Core.NormalizeSavedRows(DoYouNeedItDB.sessionAllRows, Addon.state.settings.maxSessionRows)
     Addon.diagnostics = type(DoYouNeedItDB.diagnostics) == "table" and DoYouNeedItDB.diagnostics or {}
     Addon.lootPatterns = Core.CreateLootMessagePatterns({
         lootSelf = LOOT_ITEM_SELF,
@@ -1199,13 +1316,13 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             Initialize()
         end
     elseif event == "PLAYER_LOGOUT" then
-        if Addon.state and #Addon.state.currentRows > 0 then
+        if Addon.state and (#Addon.state.currentRows > 0 or #(Addon.state.allRows or {}) > 0) then
             CompleteCurrentGroup(Addon.currentEncounterName)
         end
         SaveDB()
     elseif event == "PLAYER_ENTERING_WORLD" then
         local instanceName = SafeInstanceName()
-        if Addon.currentInstanceName and Addon.currentInstanceName ~= instanceName and Addon.state and #Addon.state.currentRows > 0 then
+        if Addon.currentInstanceName and Addon.currentInstanceName ~= instanceName and Addon.state and (#Addon.state.currentRows > 0 or #(Addon.state.allRows or {}) > 0) then
             CompleteCurrentGroup(Addon.currentEncounterName)
             Addon.recentEncounterName = nil
             Addon.recentEncounterEndedAt = nil
@@ -1216,7 +1333,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         BuildRoster()
     elseif event == "ENCOUNTER_START" then
         local encounterID, encounterName = ...
-        if Addon.state and #Addon.state.currentRows > 0 then
+        if Addon.state and (#Addon.state.currentRows > 0 or #(Addon.state.allRows or {}) > 0) then
             CompleteCurrentGroup(Addon.currentEncounterName)
         end
         Addon.recentEncounterName = nil

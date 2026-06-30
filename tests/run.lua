@@ -36,8 +36,32 @@ local accepted = Core.ClassifyTradeCandidate({
     classID = 2,
     equipLoc = "INVTYPE_WEAPON",
     canTrade = nil,
+    bindType = 2,
 }, "Otherplayer", "Player")
 assertEqual(accepted.visible, true, "weapon from another player is visible")
+
+local bindOnPickupGear = {
+    link = "|cffa335ee|Hitem:19020:::::::::::::|h[Bound Chest]|h|r",
+    quality = 4,
+    classID = 4,
+    equipLoc = "INVTYPE_CHEST",
+    bindType = 1,
+}
+local allGear = Core.ClassifyGearLoot(bindOnPickupGear, "Otherplayer", Core.NormalizeSettings({}))
+assertEqual(allGear.visible, true, "bind-on-pickup gear is visible in all gear")
+local bindOnPickupNotAskable = Core.ClassifyTradeCandidate(bindOnPickupGear, "Otherplayer", "Player")
+assertEqual(bindOnPickupNotAskable.visible, false, "bind-on-pickup gear without trade warning is not askable")
+assertEqual(bindOnPickupNotAskable.reason, "bind_on_pickup", "bind-on-pickup rejection is explicit")
+local tradeWarningGear = {
+    link = "|cffa335ee|Hitem:19021:::::::::::::|h[Tradeable Chest]|h|r",
+    quality = 4,
+    classID = 4,
+    equipLoc = "INVTYPE_CHEST",
+    bindType = 1,
+    tradeTimeRemaining = true,
+}
+local tradeWarningAskable = Core.ClassifyTradeCandidate(tradeWarningGear, "Otherplayer", "Player")
+assertEqual(tradeWarningAskable.visible, true, "bind-on-pickup gear with trade warning is askable")
 
 local currency = Core.ClassifyTradeCandidate({
     link = "|Hcurrency:3008:1|h[Currency]|h",
@@ -104,6 +128,29 @@ local emptyState = Core.CreateState({ maxHistoryGroups = 10 })
 Core.CompleteCurrentGroup(emptyState, { title = "No Drops", endedAt = 1 })
 assertEqual(#emptyState.history, 0, "empty groups are not saved")
 
+local mixedState = Core.CreateState({ maxHistoryGroups = 10, maxSessionRows = 10 })
+Core.AddVisibleRow(mixedState, {
+    id = "askable-row",
+    looter = "Otherplayer",
+    itemLink = "|cff0070dd|Hitem:100:::::::::::::|h[Askable]|h|r",
+    askable = true,
+}, true)
+Core.AddVisibleRow(mixedState, {
+    id = "all-only-row",
+    looter = "Otherplayer",
+    itemLink = "|cff0070dd|Hitem:101:::::::::::::|h[All Only]|h|r",
+    askable = false,
+}, false)
+assertEqual(#mixedState.currentRows, 1, "askable rows stay in current askable list")
+assertEqual(#mixedState.allRows, 2, "all gear keeps askable and non-askable rows")
+assertEqual(#mixedState.sessionRows, 1, "askable session keeps only askable rows")
+assertEqual(#mixedState.sessionAllRows, 2, "all gear session keeps every gear row")
+local mixedGroup = Core.CompleteCurrentGroup(mixedState, { instanceName = "Dungeon", encounterName = "Boss", endedAt = 1 })
+assertEqual(#mixedGroup.rows, 1, "history askable rows stay filtered")
+assertEqual(#mixedGroup.allRows, 2, "history all gear keeps every gear row")
+assertEqual(#mixedState.currentRows, 0, "completion clears current askable rows")
+assertEqual(#mixedState.allRows, 0, "completion clears current all gear rows")
+
 local sessionState = Core.CreateState({ maxSessionRows = 3 })
 for index = 1, 5 do
     Core.AddVisibleRow(sessionState, {
@@ -167,12 +214,22 @@ local persistedHistory = Core.SnapshotHistoryForSave({
                 autoToken = {},
             },
         },
+        allRows = {
+            {
+                id = "history-all-only",
+                looter = "Otherplayer",
+                itemLink = "|cff0070dd|Hitem:19022:::::::::::::|h[Test Boots]|h|r",
+                askable = false,
+            },
+        },
         transient = {},
     },
 }, 10)
 assertEqual(#persistedHistory, 1, "history save snapshot keeps group")
 assertEqual(persistedHistory[1].rows[1].statusText, "candidate", "history snapshot clears stale pending auto status")
 assertEqual(persistedHistory[1].rows[1].autoToken, nil, "history snapshot drops runtime auto token")
+assertEqual(#persistedHistory[1].allRows, 1, "history snapshot keeps all gear rows")
+assertEqual(persistedHistory[1].allRows[1].askable, false, "history snapshot keeps non-askable marker")
 assertEqual(persistedHistory[1].transient, nil, "history snapshot drops runtime group fields")
 
 local auto = Core.GetAutoWhisperDecision(
@@ -313,7 +370,7 @@ assertEqual(#diagnostics, 10, "diagnostics prune to limit")
 assertEqual(diagnostics[1].stage, "stage12", "newest diagnostic first")
 assertEqual(diagnostics[10].stage, "stage3", "oldest retained diagnostic kept at limit")
 
-assertEqual(Core.VERSION, "0.1.10", "core exposes current version")
+assertEqual(Core.VERSION, "0.1.11", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -324,7 +381,7 @@ end
 
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
-assertTruthy(toc:find("## Version: 0.1.10", 1, true), "toc version present")
+assertTruthy(toc:find("## Version: 0.1.11", 1, true), "toc version present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")
 assertTruthy(toc:find("DoYouNeedIt.lua", 1, true), "toc loads runtime")
@@ -363,9 +420,15 @@ assertTruthy(runtime:find("ResolveLootMessageLooter", 1, true), "runtime resolve
 assertTruthy(runtime:find("ContinueOnItemLoad", 1, true), "runtime waits for uncached item data")
 assertTruthy(runtime:find("BuildItemMetadata", 1, true), "runtime maps item info through core metadata helper")
 assertTruthy(runtime:find("DoYouNeedItDB.sessionRows", 1, true), "runtime persists session rows")
+assertTruthy(runtime:find("DoYouNeedItDB.sessionAllRows", 1, true), "runtime persists all gear session rows")
+assertTruthy(runtime:find("selectedTab", 1, true), "runtime has askable/all gear tabs")
+assertTruthy(runtime:find("tabAllGear", 1, true), "runtime creates all gear tab")
+assertTruthy(runtime:find("TooltipHasTradeTimer", 1, true), "runtime detects trade timer tooltip lines")
+assertTruthy(runtime:find("ClassifyGearLoot", 1, true), "runtime classifies all gear before askable filtering")
 assertTruthy(runtime:find("SnapshotRowsForSave", 1, true), "runtime sanitizes saved session rows")
 assertTruthy(runtime:find("SnapshotHistoryForSave", 1, true), "runtime sanitizes saved history")
 assertTruthy(runtime:find("session drops=", 1, true), "runtime reports saved session drop count in status")
+assertTruthy(runtime:find("all gear=", 1, true), "runtime reports saved all gear drop count in status")
 assertTruthy(runtime:find("Core.GetNewestRowsFirst", 1, true), "runtime displays newest rows first")
 assertEqual(runtime:find("UnitExistsClean", 1, true), nil, "runtime does not gate roster building through UnitExists")
 assertTruthy(runtime:find("layout=460x310", 1, true), "runtime reports compact layout in status")
