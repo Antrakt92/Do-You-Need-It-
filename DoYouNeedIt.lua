@@ -871,12 +871,12 @@ local function AddTradeCandidate(looter, itemLink, metadata)
     if askable then
         ScheduleAutoWhisper(row)
     end
-    Addon.selectedTab = "askable"
+    Addon.selectedTab = DoYouNeedItCore.GetAutoShowTabForRow(Addon.state, row)
     Addon.selectedView = "current"
     Addon.selectedHistoryIndex = nil
     SaveDB()
     RefreshRows()
-    if askable and DoYouNeedItCore.ShouldAutoShowWindow(row) then
+    if DoYouNeedItCore.ShouldAutoShowWindow(row) then
         CreateUI()
         Addon.frame:Show()
     end

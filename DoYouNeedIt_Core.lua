@@ -1,6 +1,6 @@
 local Core = {}
 
-Core.VERSION = "0.1.12"
+Core.VERSION = "0.1.13"
 
 local DEFAULTS = {
     autoWhisper = false,
@@ -710,6 +710,19 @@ end
 
 function Core.ShouldAutoShowWindow(row)
     return type(row) == "table" and row.itemLink ~= nil and row.itemLink ~= ""
+end
+
+function Core.GetAutoShowTabForRow(state, row)
+    if type(row) ~= "table" then
+        return "askable"
+    end
+    if row.askable ~= false then
+        return "askable"
+    end
+    if type(state) == "table" and type(state.currentRows) == "table" and #state.currentRows > 0 then
+        return "askable"
+    end
+    return "all"
 end
 
 _G.DoYouNeedItCore = Core

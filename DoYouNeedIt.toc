@@ -2,7 +2,7 @@
 ## Title: Do You Need It?
 ## Notes: Shows likely-tradeable gear drops and helps ask group members if they need them.
 ## Author: Antrakt92
-## Version: 0.1.12
+## Version: 0.1.13
 ## SavedVariables: DoYouNeedItDB
 
 DoYouNeedIt_Core.lua

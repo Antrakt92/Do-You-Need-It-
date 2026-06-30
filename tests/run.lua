@@ -167,6 +167,22 @@ assertEqual(#mixedGroup.allRows, 2, "history all gear keeps every gear row")
 assertEqual(#mixedState.currentRows, 0, "completion clears current askable rows")
 assertEqual(#mixedState.allRows, 0, "completion clears current all gear rows")
 
+assertEqual(
+    Core.GetAutoShowTabForRow({ currentRows = {} }, { askable = false, itemLink = "|cff0070dd|Hitem:101:::::::::::::|h[All Only]|h|r" }),
+    "all",
+    "all-only loot opens all gear when no askable rows exist"
+)
+assertEqual(
+    Core.GetAutoShowTabForRow({ currentRows = { { id = "askable-row" } } }, { askable = false, itemLink = "|cff0070dd|Hitem:101:::::::::::::|h[All Only]|h|r" }),
+    "askable",
+    "all-only loot keeps askable selected when askable rows exist"
+)
+assertEqual(
+    Core.GetAutoShowTabForRow({ currentRows = {} }, { askable = true, itemLink = "|cff0070dd|Hitem:100:::::::::::::|h[Askable]|h|r" }),
+    "askable",
+    "askable loot opens askable"
+)
+
 local sessionState = Core.CreateState({ maxSessionRows = 3 })
 for index = 1, 5 do
     Core.AddVisibleRow(sessionState, {
@@ -388,7 +404,7 @@ assertEqual(#diagnostics, 10, "diagnostics prune to limit")
 assertEqual(diagnostics[1].stage, "stage12", "newest diagnostic first")
 assertEqual(diagnostics[10].stage, "stage3", "oldest retained diagnostic kept at limit")
 
-assertEqual(Core.VERSION, "0.1.12", "core exposes current version")
+assertEqual(Core.VERSION, "0.1.13", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -399,7 +415,7 @@ end
 
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
-assertTruthy(toc:find("## Version: 0.1.12", 1, true), "toc version present")
+assertTruthy(toc:find("## Version: 0.1.13", 1, true), "toc version present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")
 assertTruthy(toc:find("DoYouNeedIt.lua", 1, true), "toc loads runtime")
@@ -416,6 +432,8 @@ assertTruthy(runtime:find("local WINDOW_WIDTH = 460", 1, true), "runtime uses ti
 assertTruthy(runtime:find("local WINDOW_HEIGHT = 310", 1, true), "runtime uses tighter compact window height")
 assertTruthy(runtime:find("local MAX_VISIBLE_ROWS = 5", 1, true), "runtime limits visible rows for compact height")
 assertTruthy(runtime:find("DoYouNeedItCore.ShouldAutoShowWindow", 1, true), "runtime auto-shows on new loot rows")
+assertTruthy(runtime:find("GetAutoShowTabForRow", 1, true), "runtime selects all gear when only non-askable loot drops")
+assertEqual(runtime:find("if askable and DoYouNeedItCore.ShouldAutoShowWindow", 1, true), nil, "runtime does not limit auto-show to askable rows")
 assertTruthy(runtime:find("AddTestRow", 1, true), "runtime has a local test row command")
 assertTruthy(runtime:find("command == \"test\"", 1, true), "runtime wires /dyni test")
 assertTruthy(runtime:find("/dyni test", 1, true), "runtime documents /dyni test in command help")
