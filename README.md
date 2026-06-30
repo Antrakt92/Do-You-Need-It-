@@ -23,13 +23,15 @@ The addon focuses on quiet signal:
 | `/dyni clear` | Clear current live/session rows while keeping saved history. |
 | `/dyni history` | Cycle the history view. |
 | `/dyni test` | Add a local test row and auto-show the compact window. |
+| `/dyni debug on` | Print loot-processing diagnostics and save the last 20 diagnostic entries. |
+| `/dyni diag` | Print the newest saved diagnostic entries. |
 | `/dyni status` | Print current settings, build, and layout. |
 
 Auto-whisper is off by default. When enabled, it waits 10 seconds by default before sending, and pending sends are cancelled if you manually ask first, clear current rows, or turn auto-whisper off.
 
 The loot window also has an auto-whisper checkbox and a 3-30 second delay slider next to it, so you do not need slash commands for normal adjustments.
 
-If you are checking whether the latest addon code loaded, run `/dyni status` and confirm it reports `layout=460x310`, then run `/dyni test` to force a compact auto-show test row.
+If you are checking whether the latest addon code loaded, run `/dyni status` and confirm it reports `build=0.1.2` and `layout=460x310`, then run `/dyni test` to force a compact auto-show test row. For live loot debugging, run `/dyni debug on` before a boss or dungeon chest and `/dyni diag` afterward.
 
 ## Install
 

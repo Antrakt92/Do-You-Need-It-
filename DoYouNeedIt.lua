@@ -28,6 +28,7 @@ local ROW_STRIDE = 34
 local MAX_VISIBLE_ROWS = 5
 local MAX_ITEM_RETRIES = 5
 local ITEM_RETRY_DELAY = 0.7
+local MAX_DIAGNOSTICS = 20
 local UNKNOWN_EQUIPPED = "Equipped: unknown"
 local WHISPER_TEMPLATE = "Hey, do you need %s?"
 
@@ -57,6 +58,12 @@ local EQUIP_LOC_SLOTS = {
 
 local function Print(message)
     DEFAULT_CHAT_FRAME:AddMessage("|cff7ccfffDo You Need It?|r " .. tostring(message))
+end
+
+local function Debug(message)
+    if Addon.state and Addon.state.settings and Addon.state.settings.debug == true then
+        Print("debug: " .. tostring(message))
+    end
 end
 
 local function IsSecret(value)
@@ -152,6 +159,34 @@ local function ExtractItemLink(message)
         or message:match("(|Hitem:[^|]+|h%[[^%]]+%]|h)")
 end
 
+local function RecordDiagnostic(stage, fields)
+    Addon.diagnostics = type(Addon.diagnostics) == "table" and Addon.diagnostics or {}
+    fields = type(fields) == "table" and fields or {}
+
+    local entry = {
+        stage = stage,
+        at = Now(),
+        instanceName = Addon.currentInstanceName or SafeInstanceName(),
+        encounterName = Addon.currentEncounterName,
+    }
+    for key, value in pairs(fields) do
+        if not IsSecret(value) then
+            local valueType = type(value)
+            if valueType == "string" or valueType == "number" or valueType == "boolean" then
+                entry[key] = value
+            end
+        end
+    end
+
+    local saved = Core.RecordDiagnostic(Addon.diagnostics, entry, MAX_DIAGNOSTICS)
+    DoYouNeedItDB = DoYouNeedItDB or {}
+    DoYouNeedItDB.diagnostics = Addon.diagnostics
+
+    local detail = saved and (saved.reason or saved.looter or saved.itemLink) or nil
+    Debug(stage .. (detail and (": " .. tostring(detail)) or ""))
+    return saved
+end
+
 local function BuildRoster()
     Addon.roster = {}
 
@@ -184,17 +219,25 @@ local function ResolveUnitForName(name)
     return name and Addon.roster[name] or nil
 end
 
-local function FindLooterFromMessage(message)
-    message = CleanString(message)
-    if message == nil then
-        return nil
-    end
+local function FindLooterFromMessage(message, ...)
     if not Addon.roster then
         BuildRoster()
     end
-    for name in pairs(Addon.roster) do
-        if name ~= SafePlayerName() and message:find(name, 1, true) then
-            return name
+
+    local playerName = SafePlayerName()
+    local cleanMessage = CleanString(message)
+    local looter = Core.FindRosterNameInMessage(cleanMessage, Addon.roster, playerName)
+    if looter then
+        return looter
+    end
+
+    for index = 1, select("#", ...) do
+        local value = CleanString(select(index, ...))
+        if value then
+            looter = Core.FindRosterNameInMessage(value, Addon.roster, playerName)
+            if looter then
+                return looter
+            end
         end
     end
     return nil
@@ -349,6 +392,7 @@ local function SaveDB()
     DoYouNeedItDB = DoYouNeedItDB or {}
     DoYouNeedItDB.settings = Addon.state and Addon.state.settings or Core.NormalizeSettings({})
     DoYouNeedItDB.history = Addon.state and Addon.state.history or {}
+    DoYouNeedItDB.diagnostics = Addon.diagnostics or {}
 end
 
 local function SendWhisper(row, isAuto)
@@ -439,7 +483,15 @@ local function AddTradeCandidate(looter, itemLink, metadata)
     local playerName = SafePlayerName()
     local classification = DoYouNeedItCore.ClassifyTradeCandidate(metadata, looter, playerName, Addon.state.settings)
     if not classification.visible then
-        return false
+        RecordDiagnostic("filtered", {
+            reason = classification.reason,
+            looter = looter,
+            itemLink = itemLink,
+            equipLoc = metadata and metadata.equipLoc,
+            classID = metadata and metadata.classID,
+            quality = metadata and metadata.quality,
+        })
+        return false, classification.reason
     end
 
     local row = Core.AddVisibleRow(Addon.state, {
@@ -456,9 +508,20 @@ local function AddTradeCandidate(looter, itemLink, metadata)
         unsafe = false,
     })
     if not row then
+        RecordDiagnostic("row_failed", {
+            reason = "state_rejected",
+            looter = looter,
+            itemLink = itemLink,
+        })
         return false
     end
 
+    RecordDiagnostic("row_added", {
+        looter = looter,
+        itemLink = itemLink,
+        equipLoc = metadata.equipLoc,
+        itemID = metadata.itemID,
+    })
     RequestInspectForRow(row)
     ScheduleAutoWhisper(row)
     Addon.selectedView = "current"
@@ -499,6 +562,11 @@ local function RetryItemLater(looter, itemLink)
     local count = (Addon.itemRetryCount[itemLink] or 0) + 1
     Addon.itemRetryCount[itemLink] = count
     if count > MAX_ITEM_RETRIES then
+        RecordDiagnostic("metadata_failed", {
+            reason = "retry_limit",
+            looter = looter,
+            itemLink = itemLink,
+        })
         return
     end
     C_Timer.After(ITEM_RETRY_DELAY, function()
@@ -506,23 +574,44 @@ local function RetryItemLater(looter, itemLink)
         if metadata then
             Addon.itemRetryCount[itemLink] = nil
             AddTradeCandidate(looter, itemLink, metadata)
+        elseif count == MAX_ITEM_RETRIES then
+            RecordDiagnostic("metadata_failed", {
+                reason = "unresolved_item",
+                looter = looter,
+                itemLink = itemLink,
+            })
         end
     end)
 end
 
-local function HandleLootMessage(message)
+local function HandleLootMessage(message, ...)
+    RecordDiagnostic("loot_event", {
+        message = CleanString(message),
+    })
+
     local itemLink = ExtractItemLink(message)
     if not itemLink then
+        RecordDiagnostic("no_item_link", {
+            message = CleanString(message),
+        })
         return
     end
 
-    local looter = FindLooterFromMessage(message)
+    local looter = FindLooterFromMessage(message, ...)
     if not looter then
+        RecordDiagnostic("no_looter", {
+            itemLink = itemLink,
+            message = CleanString(message),
+        })
         return
     end
 
     local metadata = ReadItemMetadata(itemLink)
     if not metadata then
+        RecordDiagnostic("metadata_pending", {
+            looter = looter,
+            itemLink = itemLink,
+        })
         RetryItemLater(looter, itemLink)
         return
     end
@@ -800,14 +889,44 @@ local function HandleSlash(message)
     elseif command == "test" then
         CreateUI()
         AddTestRow()
+    elseif command == "debug" then
+        rest = string.lower(rest or "")
+        if rest == "on" then
+            Addon.state.settings.debug = true
+            SaveDB()
+            Print("debug enabled")
+        elseif rest == "off" then
+            Addon.state.settings.debug = false
+            SaveDB()
+            Print("debug disabled")
+        else
+            Print("debug=" .. tostring(Addon.state.settings.debug)
+                .. ", diagnostics=" .. tostring(#(Addon.diagnostics or {}))
+                .. "; usage: /dyni debug on|off")
+        end
+    elseif command == "diag" then
+        local diagnostics = Addon.diagnostics or {}
+        if #diagnostics == 0 then
+            Print("no diagnostics recorded yet")
+        end
+        for index = 1, math.min(5, #diagnostics) do
+            local entry = diagnostics[index]
+            Print("diag " .. tostring(index) .. ": "
+                .. tostring(entry.stage or "?")
+                .. (entry.reason and (" reason=" .. tostring(entry.reason)) or "")
+                .. (entry.looter and (" looter=" .. tostring(entry.looter)) or "")
+                .. (entry.itemLink and (" item=" .. tostring(entry.itemLink)) or ""))
+        end
     elseif command == "status" then
         Print("auto=" .. tostring(Addon.state.settings.autoWhisper)
             .. ", delay=" .. tostring(Addon.state.settings.autoDelay)
             .. "s, saved groups=" .. tostring(#Addon.state.history)
+            .. ", debug=" .. tostring(Addon.state.settings.debug)
+            .. ", diagnostics=" .. tostring(#(Addon.diagnostics or {}))
             .. ", build=" .. tostring(Core.VERSION)
             .. ", layout=460x310")
     else
-        Print("commands: /dyni, /dyni auto on|off, /dyni delay <seconds>, /dyni clear, /dyni history, /dyni test, /dyni status")
+        Print("commands: /dyni, /dyni auto on|off, /dyni delay <seconds>, /dyni clear, /dyni history, /dyni test, /dyni debug on|off, /dyni diag, /dyni status")
     end
 end
 
@@ -816,6 +935,7 @@ local function Initialize()
     local settings = Core.NormalizeSettings(DoYouNeedItDB.settings or {})
     Addon.state = Core.CreateState(settings)
     Addon.state.history = type(DoYouNeedItDB.history) == "table" and DoYouNeedItDB.history or {}
+    Addon.diagnostics = type(DoYouNeedItDB.diagnostics) == "table" and DoYouNeedItDB.diagnostics or {}
     while #Addon.state.history > Addon.state.settings.maxHistoryGroups do
         table.remove(Addon.state.history)
     end
@@ -874,8 +994,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         Addon.currentEncounterName = nil
         Addon.currentEncounterStartedAt = nil
     elseif event == "CHAT_MSG_LOOT" then
-        local message = ...
-        HandleLootMessage(message)
+        HandleLootMessage(...)
     elseif event == "INSPECT_READY" then
         local guid = ...
         guid = CleanString(guid)

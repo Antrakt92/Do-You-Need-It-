@@ -1,9 +1,10 @@
 local Core = {}
 
-Core.VERSION = "0.1.1"
+Core.VERSION = "0.1.2"
 
 local DEFAULTS = {
     autoWhisper = false,
+    debug = false,
     autoDelay = 10,
     minDelay = 3,
     maxDelay = 30,
@@ -77,6 +78,62 @@ local function samePlayerName(left, right)
     return leftBase ~= nil and rightBase ~= nil and leftBase == rightBase
 end
 
+local function stripChatMarkup(text)
+    if type(text) ~= "string" or text == "" then
+        return nil
+    end
+    text = text:gsub("|c%x%x%x%x%x%x%x%x", "")
+    text = text:gsub("|r", "")
+    text = text:gsub("|Hplayer:([^:|]+)[^|]*|h%[([^%]]+)%]|h", "%1 %2")
+    text = text:gsub("|H.-|h%[(.-)%]|h", "%1")
+    text = text:gsub("|A.-|a", "")
+    return text
+end
+
+local function sortedRosterNames(roster)
+    local names = {}
+    if type(roster) ~= "table" then
+        return names
+    end
+    for name in pairs(roster) do
+        if type(name) == "string" and name ~= "" then
+            names[#names + 1] = name
+        end
+    end
+    table.sort(names, function(left, right)
+        if #left == #right then
+            return left < right
+        end
+        return #left > #right
+    end)
+    return names
+end
+
+local function canonicalRosterName(candidate, roster)
+    if type(candidate) ~= "string" or candidate == "" or type(roster) ~= "table" then
+        return nil
+    end
+    if roster[candidate] ~= nil then
+        return candidate
+    end
+    local names = sortedRosterNames(roster)
+    for index = 1, #names do
+        local name = names[index]
+        if samePlayerName(name, candidate) then
+            return name
+        end
+    end
+    return nil
+end
+
+local function appendCandidate(list, seen, value)
+    if type(value) ~= "string" or value == "" or seen[value] then
+        return
+    end
+    list[#list + 1] = value
+    seen[value] = true
+end
+
 local function isItemLink(link)
     return type(link) == "string" and link:find("|Hitem:", 1, true) ~= nil
 end
@@ -96,6 +153,7 @@ function Core.NormalizeSettings(saved)
 
     local settings = {}
     settings.autoWhisper = saved.autoWhisper == true
+    settings.debug = saved.debug == true
     settings.minDelay = asNumber(saved.minDelay, DEFAULTS.minDelay)
     settings.maxDelay = asNumber(saved.maxDelay, DEFAULTS.maxDelay)
     if settings.minDelay < 0 then
@@ -108,6 +166,60 @@ function Core.NormalizeSettings(saved)
     settings.maxHistoryGroups = math.max(1, math.floor(asNumber(saved.maxHistoryGroups, DEFAULTS.maxHistoryGroups)))
     settings.minQuality = math.max(0, math.floor(asNumber(saved.minQuality, DEFAULTS.minQuality)))
     return settings
+end
+
+function Core.FindRosterNameInMessage(message, roster, playerName)
+    if type(message) ~= "string" or type(roster) ~= "table" then
+        return nil
+    end
+
+    local candidates = {}
+    local seen = {}
+    for target, label in message:gmatch("|Hplayer:([^:|]+)[^|]*|h%[([^%]]+)%]|h") do
+        appendCandidate(candidates, seen, target)
+        appendCandidate(candidates, seen, label)
+    end
+
+    local plainMessage = stripChatMarkup(message)
+    if plainMessage then
+        local names = sortedRosterNames(roster)
+        for index = 1, #names do
+            local name = names[index]
+            if plainMessage:find(name, 1, true) then
+                appendCandidate(candidates, seen, name)
+            end
+        end
+    end
+
+    for index = 1, #candidates do
+        local name = canonicalRosterName(candidates[index], roster)
+        if name and not samePlayerName(name, playerName) then
+            return name
+        end
+    end
+    return nil
+end
+
+function Core.RecordDiagnostic(log, entry, limit)
+    if type(log) ~= "table" then
+        return nil
+    end
+    limit = math.max(1, math.floor(asNumber(limit, 20)))
+    entry = type(entry) == "table" and entry or {}
+
+    local saved = {}
+    for key, value in pairs(entry) do
+        local valueType = type(value)
+        if valueType == "string" or valueType == "number" or valueType == "boolean" then
+            saved[key] = value
+        end
+    end
+
+    table.insert(log, 1, saved)
+    while #log > limit do
+        table.remove(log)
+    end
+    return saved
 end
 
 function Core.ClassifyTradeCandidate(item, looter, playerName, settings)
