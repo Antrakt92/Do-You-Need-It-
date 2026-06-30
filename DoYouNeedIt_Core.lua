@@ -1,6 +1,6 @@
 local Core = {}
 
-Core.VERSION = "0.1.3"
+Core.VERSION = "0.1.4"
 
 local DEFAULTS = {
     autoWhisper = false,
@@ -152,7 +152,18 @@ local function lootFormatToPattern(formatText, captureFirstString)
     while index <= #formatText do
         local char = formatText:sub(index, index)
         local nextChar = formatText:sub(index + 1, index + 1)
-        if char == "%" and nextChar == "s" then
+        local position, positionalSpec = formatText:match("^%%(%d+)%$(%a)", index)
+        if position and positionalSpec == "s" then
+            if captureFirstString and tonumber(position) == 1 then
+                out[#out + 1] = "(.+)"
+            else
+                out[#out + 1] = ".+"
+            end
+            index = index + #position + 3
+        elseif position and positionalSpec == "d" then
+            out[#out + 1] = "%d+"
+            index = index + #position + 3
+        elseif char == "%" and nextChar == "s" then
             if captureFirstString and not capturedFirstString then
                 out[#out + 1] = "(.+)"
                 capturedFirstString = true
@@ -191,14 +202,14 @@ function Core.NormalizeSettings(saved)
     local settings = {}
     settings.autoWhisper = saved.autoWhisper == true
     settings.debug = saved.debug == true
-    settings.minDelay = asNumber(saved.minDelay, DEFAULTS.minDelay)
-    settings.maxDelay = asNumber(saved.maxDelay, DEFAULTS.maxDelay)
-    if settings.minDelay < 0 then
-        settings.minDelay = DEFAULTS.minDelay
+    local minDelay = asNumber(saved.minDelay, DEFAULTS.minDelay)
+    local maxDelay = asNumber(saved.maxDelay, DEFAULTS.maxDelay)
+    if minDelay < 0 or minDelay > DEFAULTS.maxDelay or maxDelay < minDelay then
+        minDelay = DEFAULTS.minDelay
+        maxDelay = DEFAULTS.maxDelay
     end
-    if settings.maxDelay < settings.minDelay then
-        settings.maxDelay = DEFAULTS.maxDelay
-    end
+    settings.minDelay = minDelay
+    settings.maxDelay = maxDelay
     settings.autoDelay = clamp(asNumber(saved.autoDelay, DEFAULTS.autoDelay), settings.minDelay, settings.maxDelay)
     settings.maxHistoryGroups = math.max(1, math.floor(asNumber(saved.maxHistoryGroups, DEFAULTS.maxHistoryGroups)))
     settings.minQuality = math.max(0, math.floor(asNumber(saved.minQuality, DEFAULTS.minQuality)))
@@ -321,6 +332,61 @@ function Core.ExtractItemID(link)
     end
     local itemID = link:match("item:(%d+)")
     return tonumber(itemID)
+end
+
+function Core.BuildItemMetadata(itemLink, instant, detailed)
+    instant = type(instant) == "table" and instant or {}
+    detailed = type(detailed) == "table" and detailed or {}
+
+    local itemID = instant.itemID or detailed.itemID
+    local quality = detailed.quality
+    local equipLoc = detailed.equipLoc or instant.equipLoc
+    if itemID == nil or quality == nil or equipLoc == nil then
+        return nil
+    end
+
+    return {
+        itemID = itemID,
+        name = detailed.name,
+        link = detailed.link or itemLink,
+        quality = quality,
+        itemLevel = detailed.itemLevel,
+        classID = detailed.classID or instant.classID,
+        subclassID = detailed.subclassID or instant.subclassID,
+        equipLoc = equipLoc,
+        bindType = detailed.bindType,
+        isCraftingReagent = detailed.isCraftingReagent == true,
+    }
+end
+
+function Core.ResolveDropEncounterName(currentEncounterName, recentEncounterName, recentEncounterEndedAt, now, graceSeconds)
+    if type(currentEncounterName) == "string" and currentEncounterName ~= "" then
+        return currentEncounterName
+    end
+    if type(recentEncounterName) ~= "string" or recentEncounterName == "" then
+        return nil
+    end
+    if type(recentEncounterEndedAt) ~= "number" or type(now) ~= "number" or type(graceSeconds) ~= "number" then
+        return nil
+    end
+    local age = now - recentEncounterEndedAt
+    if age >= 0 and age <= graceSeconds then
+        return recentEncounterName
+    end
+    return nil
+end
+
+function Core.FirstRowEncounterName(rows)
+    if type(rows) ~= "table" then
+        return nil
+    end
+    for index = 1, #rows do
+        local row = rows[index]
+        if type(row) == "table" and type(row.encounterName) == "string" and row.encounterName ~= "" then
+            return row.encounterName
+        end
+    end
+    return nil
 end
 
 function Core.ClassifyTradeCandidate(item, looter, playerName, settings)

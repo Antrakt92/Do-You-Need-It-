@@ -29,6 +29,7 @@ local MAX_VISIBLE_ROWS = 5
 local MAX_ITEM_RETRIES = 5
 local ITEM_RETRY_DELAY = 0.7
 local MAX_DIAGNOSTICS = 20
+local ENCOUNTER_LOOT_GRACE = 120
 local UNKNOWN_EQUIPPED = "Equipped: unknown"
 local WHISPER_TEMPLATE = "Hey, do you need %s?"
 
@@ -104,11 +105,11 @@ local function SafeCall(fn, ...)
     if type(fn) ~= "function" then
         return nil
     end
-    local ok, a, b, c, d, e, f, g, h, i, j, k, l, m, n = pcall(fn, ...)
+    local ok, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t = pcall(fn, ...)
     if not ok then
         return nil
     end
-    return a, b, c, d, e, f, g, h, i, j, k, l, m, n
+    return a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t
 end
 
 local function Now()
@@ -281,31 +282,26 @@ end
 
 local function ReadItemMetadata(itemLink)
     local itemID, itemType, itemSubType, itemEquipLoc, icon, classID, subclassID = GetItemInfoInstantCompat(itemLink)
-    local itemName, resolvedLink, quality, itemLevel, requiredLevel, itemTypeText, itemSubTypeText, stackCount, equipLoc
-    local itemIcon, sellPrice, detailedClassID, detailedSubclassID, bindType, expansionID, setID, isCraftingReagent =
+    local itemName, resolvedLink, quality, itemLevel, requiredLevel, itemTypeText, itemSubTypeText, stackCount,
+        equipLoc, itemIcon, sellPrice, detailedClassID, detailedSubclassID, bindType, expansionID, setID, isCraftingReagent =
         GetItemInfoCompat(itemLink)
 
-    itemName = CleanString(itemName)
-    resolvedLink = CleanString(resolvedLink) or itemLink
-    itemEquipLoc = CleanString(itemEquipLoc)
-    equipLoc = CleanString(equipLoc) or itemEquipLoc
-
-    if itemID == nil or quality == nil or equipLoc == nil then
-        return nil
-    end
-
-    return {
+    return Core.BuildItemMetadata(itemLink, {
         itemID = itemID,
-        name = itemName,
-        link = resolvedLink,
+        equipLoc = CleanString(itemEquipLoc),
+        classID = classID,
+        subclassID = subclassID,
+    }, {
+        name = CleanString(itemName),
+        link = CleanString(resolvedLink),
         quality = quality,
         itemLevel = itemLevel,
         classID = detailedClassID or classID,
         subclassID = detailedSubclassID or subclassID,
-        equipLoc = equipLoc,
+        equipLoc = CleanString(equipLoc),
         bindType = bindType,
         isCraftingReagent = isCraftingReagent == true,
-    }
+    })
 end
 
 local function FormatEquippedText(unit, equipLoc)
@@ -519,7 +515,13 @@ local function AddTradeCandidate(looter, itemLink, metadata)
         equipLoc = metadata.equipLoc,
         itemID = metadata.itemID,
         instanceName = Addon.currentInstanceName or SafeInstanceName(),
-        encounterName = Addon.currentEncounterName,
+        encounterName = Core.ResolveDropEncounterName(
+            Addon.currentEncounterName,
+            Addon.recentEncounterName,
+            Addon.recentEncounterEndedAt,
+            Now(),
+            ENCOUNTER_LOOT_GRACE
+        ),
         timestamp = Now(),
         reason = "trade candidate",
         statusText = "candidate",
@@ -677,7 +679,7 @@ local function CompleteCurrentGroup(encounterName)
     end
     Core.CompleteCurrentGroup(Addon.state, {
         instanceName = Addon.currentInstanceName or SafeInstanceName(),
-        encounterName = encounterName or Addon.currentEncounterName,
+        encounterName = encounterName or Addon.currentEncounterName or Core.FirstRowEncounterName(Addon.state.currentRows),
         startedAt = Addon.currentEncounterStartedAt,
         endedAt = Now(),
     })
@@ -1030,6 +1032,8 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         local instanceName = SafeInstanceName()
         if Addon.currentInstanceName and Addon.currentInstanceName ~= instanceName and Addon.state and #Addon.state.currentRows > 0 then
             CompleteCurrentGroup(Addon.currentEncounterName)
+            Addon.recentEncounterName = nil
+            Addon.recentEncounterEndedAt = nil
         end
         Addon.currentInstanceName = instanceName
         BuildRoster()
@@ -1040,6 +1044,8 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         if Addon.state and #Addon.state.currentRows > 0 then
             CompleteCurrentGroup(Addon.currentEncounterName)
         end
+        Addon.recentEncounterName = nil
+        Addon.recentEncounterEndedAt = nil
         Addon.currentEncounterID = encounterID
         Addon.currentEncounterName = CleanString(encounterName)
         Addon.currentEncounterStartedAt = Now()
@@ -1048,6 +1054,8 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         Addon.currentEncounterID = encounterID or Addon.currentEncounterID
         Addon.currentEncounterName = CleanString(encounterName) or Addon.currentEncounterName
         CompleteCurrentGroup(Addon.currentEncounterName)
+        Addon.recentEncounterName = Addon.currentEncounterName
+        Addon.recentEncounterEndedAt = Now()
         Addon.currentEncounterID = nil
         Addon.currentEncounterName = nil
         Addon.currentEncounterStartedAt = nil

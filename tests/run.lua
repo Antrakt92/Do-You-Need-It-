@@ -20,6 +20,10 @@ assertEqual(settings.debug, false, "debug defaults off")
 assertEqual(Core.NormalizeSettings({ autoDelay = 1 }).autoDelay, 3, "delay clamps low")
 assertEqual(Core.NormalizeSettings({ autoDelay = 45 }).autoDelay, 30, "delay clamps high")
 assertEqual(Core.NormalizeSettings({ debug = true }).debug, true, "debug can be enabled")
+local repairedDelay = Core.NormalizeSettings({ minDelay = 50, maxDelay = 3, autoDelay = 10 })
+assertEqual(repairedDelay.minDelay, 3, "invalid min delay resets to default")
+assertEqual(repairedDelay.maxDelay, 30, "invalid max delay resets to default")
+assertEqual(repairedDelay.autoDelay, 10, "auto delay survives repaired bounds")
 
 local accepted = Core.ClassifyTradeCandidate({
     link = "|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r",
@@ -149,7 +153,73 @@ local resolvedSelf = Core.ResolveLootMessageLooter(
 )
 assertEqual(resolvedSelf.name, "Player-Ravencrest", "localized self loot returns player name")
 assertEqual(resolvedSelf.isSelf, true, "localized self loot marks self")
+local positionalPatterns = Core.CreateLootMessagePatterns({
+    lootOther = "%1$s receives loot: %2$s.",
+})
+local resolvedPositional = Core.ResolveLootMessageLooter(
+    "Otherplayer receives loot: |cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r.",
+    positionalPatterns,
+    "Player-Ravencrest"
+)
+assertEqual(resolvedPositional.name, "Otherplayer", "positional localized loot pattern resolves looter")
 assertEqual(Core.ExtractItemID("|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r"), 19019, "item id extracted from item link")
+
+local metadata = Core.BuildItemMetadata("|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r", {
+    itemID = 19019,
+    equipLoc = "INVTYPE_WEAPON",
+    classID = 2,
+    subclassID = 7,
+}, {
+    name = "Test Sword",
+    link = "|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r",
+    quality = 3,
+    itemLevel = 42,
+    equipLoc = "INVTYPE_WEAPON",
+    classID = 2,
+    subclassID = 7,
+    bindType = 1,
+    isCraftingReagent = false,
+})
+assertEqual(metadata.itemID, 19019, "metadata keeps item id from instant info")
+assertEqual(metadata.quality, 3, "metadata maps quality from detailed info")
+assertEqual(metadata.itemLevel, 42, "metadata maps item level from detailed info")
+assertEqual(metadata.equipLoc, "INVTYPE_WEAPON", "metadata maps equip location")
+assertEqual(metadata.classID, 2, "metadata maps class id")
+
+local missingMetadata = Core.BuildItemMetadata("|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r", {
+    itemID = 19019,
+    equipLoc = "INVTYPE_WEAPON",
+    classID = 2,
+}, {
+    link = "|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r",
+    equipLoc = "INVTYPE_WEAPON",
+    classID = 2,
+})
+assertEqual(missingMetadata, nil, "metadata waits when detailed quality is missing")
+
+assertEqual(
+    Core.ResolveDropEncounterName("Current Boss", "Previous Boss", 100, 105, 120),
+    "Current Boss",
+    "current encounter wins for live boss drops"
+)
+assertEqual(
+    Core.ResolveDropEncounterName(nil, "Previous Boss", 100, 105, 120),
+    "Previous Boss",
+    "recent encounter labels loot that arrives after encounter end"
+)
+assertEqual(
+    Core.ResolveDropEncounterName(nil, "Previous Boss", 100, 300, 120),
+    nil,
+    "stale encounter is not reused for later trash drops"
+)
+assertEqual(
+    Core.FirstRowEncounterName({
+        { encounterName = "" },
+        { encounterName = "Stored Boss" },
+    }),
+    "Stored Boss",
+    "completed group can recover encounter from rows"
+)
 
 local diagnostics = {}
 for index = 1, 12 do
@@ -159,7 +229,7 @@ assertEqual(#diagnostics, 10, "diagnostics prune to limit")
 assertEqual(diagnostics[1].stage, "stage12", "newest diagnostic first")
 assertEqual(diagnostics[10].stage, "stage3", "oldest retained diagnostic kept at limit")
 
-assertEqual(Core.VERSION, "0.1.3", "core exposes current version")
+assertEqual(Core.VERSION, "0.1.4", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -170,7 +240,7 @@ end
 
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
-assertTruthy(toc:find("## Version: 0.1.3", 1, true), "toc version present")
+assertTruthy(toc:find("## Version: 0.1.4", 1, true), "toc version present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")
 assertTruthy(toc:find("DoYouNeedIt.lua", 1, true), "toc loads runtime")
@@ -195,6 +265,7 @@ assertTruthy(runtime:find("HandleLootMessage(...)", 1, true), "runtime passes fu
 assertTruthy(runtime:find("CreateLootMessagePatterns", 1, true), "runtime uses localized loot message patterns")
 assertTruthy(runtime:find("ResolveLootMessageLooter", 1, true), "runtime resolves looters through localized loot patterns")
 assertTruthy(runtime:find("ContinueOnItemLoad", 1, true), "runtime waits for uncached item data")
+assertTruthy(runtime:find("BuildItemMetadata", 1, true), "runtime maps item info through core metadata helper")
 assertEqual(runtime:find("UnitExistsClean", 1, true), nil, "runtime does not gate roster building through UnitExists")
 assertTruthy(runtime:find("layout=460x310", 1, true), "runtime reports compact layout in status")
 
