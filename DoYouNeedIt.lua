@@ -48,6 +48,19 @@ local ROW_WIDTH = 510
 local ROW_HEIGHT = 30
 local ROW_START_Y = -82
 local ROW_STRIDE = 34
+local HEADER_TAB_ASKABLE_WIDTH = 104
+local HEADER_TAB_ALL_WIDTH = 82
+local HEADER_HISTORY_WIDTH = 262
+local ROW_LOOTER_WIDTH = 90
+local ROW_DROP_WIDTH = 180
+local ROW_DROP_HOVER_WIDTH = 188
+local ROW_EQUIPPED_WIDTH = 150
+local ROW_EQUIPPED_HOVER_WIDTH = 158
+local ROW_STATUS_WIDTH = 420
+local SETTINGS_LABEL_WIDTH = 92
+local SETTINGS_CONTROL_X = 126
+local SETTINGS_DROPDOWN_WIDTH = 150
+local SETTINGS_SLIDER_WIDTH = 170
 local MAX_VISIBLE_ROWS = 6
 local MAX_ITEM_RETRIES = 5
 local ITEM_RETRY_DELAY = 0.7
@@ -280,9 +293,20 @@ local function RegisterFontString(fontString, size, flags, stable)
     end
 end
 
+local function KeepOneLine(fontString)
+    if not fontString then
+        return
+    end
+    SafeCall(fontString.SetMaxLines, fontString, 1)
+    SafeCall(fontString.SetWordWrap, fontString, false)
+    SafeCall(fontString.SetNonSpaceWrap, fontString, false)
+end
+
 local function RegisterButtonFont(button, size, flags, stable)
     if button and type(button.GetFontString) == "function" then
-        RegisterFontString(button:GetFontString(), size, flags, stable)
+        local fontString = button:GetFontString()
+        RegisterFontString(fontString, size, flags, stable)
+        KeepOneLine(fontString)
     end
 end
 
@@ -1944,19 +1968,21 @@ local function CreateRow(parent, index)
 
     row.looter = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     row.looter:SetPoint("LEFT", row, "LEFT", 8, 8)
-    row.looter:SetWidth(90)
+    row.looter:SetWidth(ROW_LOOTER_WIDTH)
     row.looter:SetJustifyH("LEFT")
+    KeepOneLine(row.looter)
     RegisterFontString(row.looter, 11)
 
     row.drop = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     row.drop:SetPoint("LEFT", row.looter, "RIGHT", 8, 0)
-    row.drop:SetWidth(180)
+    row.drop:SetWidth(ROW_DROP_WIDTH)
     row.drop:SetJustifyH("LEFT")
+    KeepOneLine(row.drop)
     RegisterFontString(row.drop, 11)
 
     row.dropLink = CreateFrame("Button", nil, row)
     row.dropLink:SetPoint("LEFT", row.looter, "RIGHT", 6, 0)
-    row.dropLink:SetSize(188, ROW_HEIGHT)
+    row.dropLink:SetSize(ROW_DROP_HOVER_WIDTH, ROW_HEIGHT)
     row.dropLink:RegisterForClicks("AnyUp")
     row.dropLink:SetScript("OnEnter", function(button)
         ShowItemTooltip(button, button.itemLink)
@@ -1969,13 +1995,14 @@ local function CreateRow(parent, index)
 
     row.equipped = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     row.equipped:SetPoint("LEFT", row.drop, "RIGHT", 10, 0)
-    row.equipped:SetWidth(150)
+    row.equipped:SetWidth(ROW_EQUIPPED_WIDTH)
     row.equipped:SetJustifyH("LEFT")
+    KeepOneLine(row.equipped)
     RegisterFontString(row.equipped, 11)
 
     row.equippedLink = CreateFrame("Button", nil, row)
     row.equippedLink:SetPoint("LEFT", row.drop, "RIGHT", 8, 0)
-    row.equippedLink:SetSize(158, ROW_HEIGHT)
+    row.equippedLink:SetSize(ROW_EQUIPPED_HOVER_WIDTH, ROW_HEIGHT)
     row.equippedLink:RegisterForClicks("AnyUp")
     row.equippedLink:SetScript("OnEnter", function(button)
         ShowItemTooltip(button, button.itemLink)
@@ -1988,8 +2015,9 @@ local function CreateRow(parent, index)
 
     row.status = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     row.status:SetPoint("TOPLEFT", row.looter, "BOTTOMLEFT", 0, -2)
-    row.status:SetWidth(430)
+    row.status:SetWidth(ROW_STATUS_WIDTH)
     row.status:SetJustifyH("LEFT")
+    KeepOneLine(row.status)
     RegisterFontString(row.status, 10)
 
     row.whisper = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
@@ -2036,11 +2064,12 @@ CreateUI = function()
     frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -14)
     frame.title:SetWidth(210)
     frame.title:SetJustifyH("LEFT")
+    KeepOneLine(frame.title)
     frame.title:SetText(L("Do You Need It?"))
     RegisterFontString(frame.title, 16, "OUTLINE")
 
     frame.tabAskable = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    frame.tabAskable:SetSize(70, 22)
+    frame.tabAskable:SetSize(HEADER_TAB_ASKABLE_WIDTH, 22)
     frame.tabAskable:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -42)
     frame.tabAskable:SetText(L("Askable"))
     frame.tabAskable:SetScript("OnClick", function()
@@ -2050,7 +2079,7 @@ CreateUI = function()
     Addon.tabAskable = frame.tabAskable
 
     frame.tabAllGear = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    frame.tabAllGear:SetSize(72, 22)
+    frame.tabAllGear:SetSize(HEADER_TAB_ALL_WIDTH, 22)
     frame.tabAllGear:SetPoint("LEFT", frame.tabAskable, "RIGHT", 4, 0)
     frame.tabAllGear:SetText(L("All Gear"))
     frame.tabAllGear:SetScript("OnClick", function()
@@ -2060,7 +2089,7 @@ CreateUI = function()
     Addon.tabAllGear = frame.tabAllGear
 
     frame.historyButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    frame.historyButton:SetSize(350, 22)
+    frame.historyButton:SetSize(HEADER_HISTORY_WIDTH, 22)
     frame.historyButton:SetPoint("LEFT", frame.tabAllGear, "RIGHT", 6, 0)
     frame.historyButton:SetText(L("Current"))
     frame.historyButton:SetScript("OnClick", function(button)
@@ -2676,6 +2705,7 @@ CreateSettingsUI = function()
 
     frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -16)
+    KeepOneLine(frame.title)
     frame.title:SetText(L("Settings"))
     RegisterFontString(frame.title, 16, "OUTLINE", true)
     Addon.settingsTitle = frame.title
@@ -2694,18 +2724,22 @@ CreateSettingsUI = function()
 
     frame.autoCheckLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     frame.autoCheckLabel:SetPoint("LEFT", frame.autoCheck, "RIGHT", 4, 0)
+    frame.autoCheckLabel:SetWidth(260)
+    KeepOneLine(frame.autoCheckLabel)
     RegisterFontString(frame.autoCheckLabel, 12, nil, true)
     Addon.autoCheckLabel = frame.autoCheckLabel
 
     y = y - 36
     frame.delayLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     frame.delayLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, y)
+    frame.delayLabel:SetWidth(SETTINGS_LABEL_WIDTH)
+    KeepOneLine(frame.delayLabel)
     RegisterFontString(frame.delayLabel, 12, nil, true)
     Addon.delayLabel = frame.delayLabel
 
     frame.delaySlider = CreateFrame("Slider", "DoYouNeedItDelaySlider", frame, "OptionsSliderTemplate")
-    frame.delaySlider:SetPoint("LEFT", frame.delayLabel, "RIGHT", 24, -2)
-    frame.delaySlider:SetSize(170, 18)
+    frame.delaySlider:SetPoint("TOPLEFT", frame, "TOPLEFT", SETTINGS_CONTROL_X, y - 4)
+    frame.delaySlider:SetSize(SETTINGS_SLIDER_WIDTH, 18)
     frame.delaySlider:SetMinMaxValues(3, 30)
     frame.delaySlider:SetValueStep(1)
     if frame.delaySlider.SetObeyStepOnDrag then
@@ -2729,12 +2763,14 @@ CreateSettingsUI = function()
     y = y - 42
     frame.languageLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     frame.languageLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, y)
+    frame.languageLabel:SetWidth(SETTINGS_LABEL_WIDTH)
+    KeepOneLine(frame.languageLabel)
     RegisterFontString(frame.languageLabel, 12, nil, true)
     Addon.languageLabel = frame.languageLabel
 
     frame.languageDropdown = CreateFrame("Frame", "DoYouNeedItLanguageDropdown", frame, "UIDropDownMenuTemplate")
-    frame.languageDropdown:SetPoint("LEFT", frame.languageLabel, "RIGHT", 20, -4)
-    UIDropDownMenu_SetWidth(frame.languageDropdown, 150)
+    frame.languageDropdown:SetPoint("TOPLEFT", frame, "TOPLEFT", SETTINGS_CONTROL_X - 16, y - 8)
+    UIDropDownMenu_SetWidth(frame.languageDropdown, SETTINGS_DROPDOWN_WIDTH)
     UIDropDownMenu_JustifyText(frame.languageDropdown, "CENTER")
     UIDropDownMenu_Initialize(frame.languageDropdown, function()
         local current = Addon.state.settings.forceLocale
@@ -2764,12 +2800,14 @@ CreateSettingsUI = function()
     y = y - 42
     frame.fontLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     frame.fontLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, y)
+    frame.fontLabel:SetWidth(SETTINGS_LABEL_WIDTH)
+    KeepOneLine(frame.fontLabel)
     RegisterFontString(frame.fontLabel, 12, nil, true)
     Addon.fontLabel = frame.fontLabel
 
     frame.fontDropdown = CreateFrame("Frame", "DoYouNeedItFontDropdown", frame, "UIDropDownMenuTemplate")
-    frame.fontDropdown:SetPoint("LEFT", frame.fontLabel, "RIGHT", 44, -4)
-    UIDropDownMenu_SetWidth(frame.fontDropdown, 150)
+    frame.fontDropdown:SetPoint("TOPLEFT", frame, "TOPLEFT", SETTINGS_CONTROL_X - 16, y - 8)
+    UIDropDownMenu_SetWidth(frame.fontDropdown, SETTINGS_DROPDOWN_WIDTH)
     UIDropDownMenu_JustifyText(frame.fontDropdown, "CENTER")
     Addon.fontDropdown = frame.fontDropdown
     local fontButton = _G["DoYouNeedItFontDropdownButton"] or frame.fontDropdown.Button
@@ -2780,12 +2818,14 @@ CreateSettingsUI = function()
     y = y - 42
     frame.fontSizeLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     frame.fontSizeLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, y)
+    frame.fontSizeLabel:SetWidth(SETTINGS_LABEL_WIDTH)
+    KeepOneLine(frame.fontSizeLabel)
     RegisterFontString(frame.fontSizeLabel, 12, nil, true)
     Addon.fontSizeLabel = frame.fontSizeLabel
 
     frame.fontSizeSlider = CreateFrame("Slider", "DoYouNeedItFontSizeSlider", frame, "OptionsSliderTemplate")
-    frame.fontSizeSlider:SetPoint("LEFT", frame.fontSizeLabel, "RIGHT", 26, -2)
-    frame.fontSizeSlider:SetSize(170, 18)
+    frame.fontSizeSlider:SetPoint("TOPLEFT", frame, "TOPLEFT", SETTINGS_CONTROL_X, y - 4)
+    frame.fontSizeSlider:SetSize(SETTINGS_SLIDER_WIDTH, 18)
     frame.fontSizeSlider:SetMinMaxValues(8, 24)
     frame.fontSizeSlider:SetValueStep(1)
     if frame.fontSizeSlider.SetObeyStepOnDrag then
@@ -2810,6 +2850,7 @@ CreateSettingsUI = function()
     frame.fontWarning:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, -248)
     frame.fontWarning:SetWidth(316)
     frame.fontWarning:SetJustifyH("LEFT")
+    KeepOneLine(frame.fontWarning)
     frame.fontWarning:SetTextColor(1, 0.6, 0.2)
     RegisterFontString(frame.fontWarning, 11, nil, true)
     Addon.fontWarning = frame.fontWarning

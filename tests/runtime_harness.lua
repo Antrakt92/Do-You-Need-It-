@@ -325,6 +325,10 @@ function FrameMethods:SetMaxLines(lines)
     self.maxLines = lines
 end
 
+function FrameMethods:SetNonSpaceWrap(enabled)
+    self.nonSpaceWrap = enabled == true
+end
+
 function FrameMethods:SetOwner(owner, anchor)
     self.owner = owner
     self.anchor = anchor

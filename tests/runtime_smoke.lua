@@ -54,6 +54,37 @@ local function testSlashTestRowsAndManualWhisper()
     assertEqual(rows[1].row.manualWhispered, true, "manual Ask marks row sent")
 end
 
+local function testMainWindowLayoutBoundsLongText()
+    local h = Harness.new()
+    h:loadAddon()
+    h:slash("test")
+
+    local frame = h.env.DoYouNeedItFrame
+    assertTruthy(frame and frame.historyButton, "main window history button exists")
+    assertTruthy(frame.historyButton:GetWidth() <= 270, "history selector leaves room for settings and close buttons")
+    assertTruthy(frame.tabAskable:GetWidth() >= 104, "askable tab has enough width for localized labels")
+    assertTruthy(frame.tabAllGear:GetWidth() >= 82, "all gear tab has enough width for localized labels")
+
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "layout test has one visible row")
+    local row = rows[1]
+    local fontStrings = {
+        row.looter,
+        row.drop,
+        row.equipped,
+        row.status,
+    }
+    for index = 1, #fontStrings do
+        assertEqual(fontStrings[index].maxLines, 1, "row font string " .. index .. " is capped to one line")
+        assertEqual(fontStrings[index].wordWrap, false, "row font string " .. index .. " disables word wrap")
+        assertEqual(fontStrings[index].nonSpaceWrap, false, "row font string " .. index .. " disables non-space wrap")
+    end
+
+    assertTruthy(row.drop:GetWidth() <= row.dropLink:GetWidth(), "drop hover target covers clipped drop text")
+    assertTruthy(row.equipped:GetWidth() <= row.equippedLink:GetWidth(), "equipped hover target covers clipped equipped text")
+    assertTruthy(row.status:GetWidth() <= 420, "status text leaves room for the Ask button column")
+end
+
 local function testInstanceChangeCompletesCurrentGroup()
     local h = Harness.new()
     h:loadAddon()
@@ -293,8 +324,39 @@ local function testSettingsSliderTemplateTextDoesNotLeak()
     assertEqual(frame.fontSizeSlider.Text:GetText(), "", "font size slider hides unused template value text")
 end
 
+local function testSettingsControlsUseFixedColumnLayout()
+    local h = Harness.new()
+    h:loadAddon()
+    h:slash("settings")
+
+    local frame = h.env.DoYouNeedItSettingsFrame
+    assertTruthy(frame, "settings frame exists")
+    assertTruthy((frame.delayLabel:GetWidth() or 999) <= 96, "delay label is width-bounded")
+    assertTruthy((frame.languageLabel:GetWidth() or 999) <= 96, "language label is width-bounded")
+    assertTruthy((frame.fontLabel:GetWidth() or 999) <= 96, "font label is width-bounded")
+    assertTruthy((frame.fontSizeLabel:GetWidth() or 999) <= 96, "font size label is width-bounded")
+
+    assertEqual(frame.delaySlider.points[1][2], frame, "delay slider is anchored to the settings frame column")
+    assertEqual(frame.languageDropdown.points[1][2], frame, "language dropdown is anchored to the settings frame column")
+    assertEqual(frame.fontDropdown.points[1][2], frame, "font dropdown is anchored to the settings frame column")
+    assertEqual(frame.fontSizeSlider.points[1][2], frame, "font size slider is anchored to the settings frame column")
+
+    local labels = {
+        frame.delayLabel,
+        frame.languageLabel,
+        frame.fontLabel,
+        frame.fontSizeLabel,
+    }
+    for index = 1, #labels do
+        assertEqual(labels[index].maxLines, 1, "settings label " .. index .. " is capped to one line")
+        assertEqual(labels[index].wordWrap, false, "settings label " .. index .. " disables word wrap")
+        assertEqual(labels[index].nonSpaceWrap, false, "settings label " .. index .. " disables non-space wrap")
+    end
+end
+
 testLoadAndSettings()
 testSlashTestRowsAndManualWhisper()
+testMainWindowLayoutBoundsLongText()
 testInstanceChangeCompletesCurrentGroup()
 testDebugPersistenceIsOptIn()
 testDebugPersistenceLoadState()
@@ -303,5 +365,6 @@ testLegacyPlainItemTextDoesNotCreateDropHoverTarget()
 testCustomFontPickerGridPreviewAndCommit()
 testLanguageDropdownCloseRepairsCaptionsAfterSharedListCleanup()
 testSettingsSliderTemplateTextDoesNotLeak()
+testSettingsControlsUseFixedColumnLayout()
 
 print("runtime smoke ok")
