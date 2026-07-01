@@ -9,6 +9,11 @@ local GLYPH_HANS = "HANS"
 local GLYPH_HANT = "HANT"
 
 local DEFAULT_FONT = "Fonts\\FRIZQT__.TTF"
+local DEFAULT_WHISPER_TEMPLATE = "Hey, do you need {item}?"
+local MAX_WHISPER_TEMPLATE_LENGTH = 160
+
+Core.DEFAULT_WHISPER_TEMPLATE = DEFAULT_WHISPER_TEMPLATE
+Core.MAX_WHISPER_TEMPLATE_LENGTH = MAX_WHISPER_TEMPLATE_LENGTH
 
 local LANGUAGE_OPTIONS = {
     { value = "auto", label = nil },
@@ -100,6 +105,8 @@ local LABELS_BY_LOCALE = {
         ["Language:"] = "Language:",
         ["Font:"] = "Font:",
         ["Font Size:"] = "Font Size:",
+        ["Whisper text:"] = "Whisper text:",
+        ["Reset"] = "Reset",
         ["Auto (current: %s)"] = "Auto (current: %s)",
         ["No askable gear drops in this view."] = "No askable gear drops in this view.",
         ["No gear drops in this view."] = "No gear drops in this view.",
@@ -156,6 +163,8 @@ local LABELS_BY_LOCALE = {
         ["Language:"] = "Язык:",
         ["Font:"] = "Шрифт:",
         ["Font Size:"] = "Размер шрифта:",
+        ["Whisper text:"] = "Текст виспера:",
+        ["Reset"] = "Сброс",
         ["Auto (current: %s)"] = "Авто (сейчас: %s)",
         ["No askable gear drops in this view."] = "Нет шмота, о котором стоит спрашивать.",
         ["No gear drops in this view."] = "Нет шмота в этом виде.",
@@ -220,6 +229,7 @@ local DEFAULTS = {
     autoWhisper = false,
     debug = false,
     autoDelay = 10,
+    whisperTemplate = DEFAULT_WHISPER_TEMPLATE,
     minDelay = 3,
     maxDelay = 30,
     maxHistoryGroups = 10,
@@ -299,6 +309,71 @@ local function clamp(number, minimum, maximum)
         return maximum
     end
     return number
+end
+
+local function utf8CharByteLength(firstByte)
+    if not firstByte then
+        return 1
+    end
+    if firstByte < 128 then
+        return 1
+    end
+    if firstByte >= 194 and firstByte < 224 then
+        return 2
+    end
+    if firstByte >= 224 and firstByte < 240 then
+        return 3
+    end
+    if firstByte >= 240 and firstByte < 245 then
+        return 4
+    end
+    return 1
+end
+
+local function truncateUtf8Bytes(text, maxBytes)
+    if #text <= maxBytes then
+        return text
+    end
+
+    local index = 1
+    local lastCompleteByte = 0
+    while index <= maxBytes do
+        local charLength = utf8CharByteLength(text:byte(index))
+        local charEnd = index + charLength - 1
+        if charEnd > maxBytes then
+            break
+        end
+        lastCompleteByte = charEnd
+        index = charEnd + 1
+    end
+    return text:sub(1, lastCompleteByte)
+end
+
+function Core.NormalizeWhisperTemplate(template)
+    if type(template) ~= "string" or not template:match("%S") then
+        return DEFAULT_WHISPER_TEMPLATE
+    end
+    if #template > MAX_WHISPER_TEMPLATE_LENGTH then
+        return truncateUtf8Bytes(template, MAX_WHISPER_TEMPLATE_LENGTH)
+    end
+    return template
+end
+
+function Core.FormatWhisperMessage(template, itemLink)
+    local message = Core.NormalizeWhisperTemplate(template)
+    local itemText = type(itemLink) == "string" and itemLink or ""
+    if message:find("{item}", 1, true) then
+        return (message:gsub("{item}", function()
+            return itemText
+        end))
+    end
+    if itemText == "" then
+        return message
+    end
+    if message:match("%s$") then
+        return message .. itemText
+    end
+    return message .. " " .. itemText
 end
 
 local function copyList(list)
@@ -859,6 +934,7 @@ function Core.NormalizeSettings(saved)
     local settings = {}
     settings.autoWhisper = saved.autoWhisper == true
     settings.debug = saved.debug == true
+    settings.whisperTemplate = Core.NormalizeWhisperTemplate(saved.whisperTemplate)
     local minDelay = asNumber(saved.minDelay, DEFAULTS.minDelay)
     local maxDelay = asNumber(saved.maxDelay, DEFAULTS.maxDelay)
     if minDelay < 0 or minDelay > DEFAULTS.maxDelay or maxDelay < minDelay or maxDelay > DEFAULTS.maxDelay then

@@ -13,7 +13,7 @@ The addon focuses on quiet signal:
 - shows real item tooltips when you hover dropped or equipped item links in the loot window;
 - keeps a lightweight history for the current view, the last 50 saved session drops, and the last 10 completed boss/run groups;
 - sends whispers only from row actions unless auto-whisper is explicitly enabled.
-- includes a settings gear with auto-whisper, delay, language, font, and font-size controls.
+- includes a settings gear with auto-whisper, delay, whisper text, language, font, and font-size controls.
 - previews language and font choices on hover, then rolls back if you close the picker without selecting.
 - uses a compact loot window with separated title, tabs, history, and settings controls.
 
@@ -36,7 +36,7 @@ The addon focuses on quiet signal:
 
 Auto-whisper is off by default. When enabled, it waits 10 seconds by default before sending, and pending sends are cancelled if you manually ask first, clear current rows, or turn auto-whisper off.
 
-The loot window opens on the `Askable` tab by default. `Askable` only shows drops that the addon currently considers worth asking about and usable by your current character; `All Gear` shows every visible gear drop for review and hides the Ask button. If a drop has visible gear but no askable rows, the window opens directly on `All Gear` so the drop is not silent. Use the gear button or `/dyni settings` for auto-whisper, delay, language, font, and font-size controls.
+The loot window opens on the `Askable` tab by default. `Askable` only shows drops that the addon currently considers worth asking about and usable by your current character; `All Gear` shows every visible gear drop for review and hides the Ask button. If a drop has visible gear but no askable rows, the window opens directly on `All Gear` so the drop is not silent. Use the gear button or `/dyni settings` for auto-whisper, delay, whisper text, language, font, and font-size controls.
 
 Language defaults to `Auto`, which follows your WoW client locale. You can force any current WoW addon locale from the settings window. Font choices use bundled LibSharedMedia support; hovering a language or font previews it live, and closing the picker without selecting restores the saved setting.
 

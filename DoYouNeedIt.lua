@@ -22,6 +22,7 @@ local Addon = {
 
 local SetAutoWhisper
 local SetDelay
+local SetWhisperTemplate
 local CreateUI
 local CreateSettingsUI
 local OpenSettings
@@ -60,6 +61,7 @@ local ROW_STATUS_WIDTH = 420
 local SETTINGS_LABEL_WIDTH = 92
 local SETTINGS_CONTROL_X = 126
 local SETTINGS_DROPDOWN_WIDTH = 150
+local SETTINGS_EDITBOX_WIDTH = 174
 local SETTINGS_SLIDER_WIDTH = 170
 local MAX_VISIBLE_ROWS = 6
 local MAX_ITEM_RETRIES = 5
@@ -76,7 +78,6 @@ local UNKNOWN_EQUIPPED = "Equipped: unknown"
 local EQUIPPED_PENDING = "Equipped: checking..."
 local EQUIPPED_UNAVAILABLE = "Equipped: unavailable"
 local CACHED_EQUIPPED_PREFIX = "Cached: "
-local WHISPER_TEMPLATE = "Hey, do you need %s?"
 
 local EQUIP_LOC_SLOTS = {
     INVTYPE_HEAD = { "HeadSlot" },
@@ -1195,7 +1196,7 @@ local function SendWhisper(row, isAuto)
 
     row.pendingAutoWhisper = false
     row.autoToken = nil
-    local message = string.format(WHISPER_TEMPLATE, row.itemLink)
+    local message = Core.FormatWhisperMessage(Addon.state.settings.whisperTemplate, row.itemLink)
     local target = row.looter
     local token = {}
     row.whisperInFlight = true
@@ -2340,6 +2341,15 @@ RefreshSettingsControls = function()
     if Addon.delayValue then
         Addon.delayValue:SetText(settings.autoDelay .. "s")
     end
+    if Addon.whisperLabel then
+        Addon.whisperLabel:SetText(L("Whisper text:"))
+    end
+    if Addon.whisperEditBox and Addon.whisperEditBox:GetText() ~= settings.whisperTemplate then
+        Addon.whisperEditBox:SetText(settings.whisperTemplate)
+    end
+    if Addon.whisperResetButton then
+        Addon.whisperResetButton:SetText(L("Reset"))
+    end
     if Addon.languageLabel then
         Addon.languageLabel:SetText(L("Language:"))
     end
@@ -2746,7 +2756,7 @@ CreateSettingsUI = function()
     end
 
     local frame = CreateFrame("Frame", "DoYouNeedItSettingsFrame", UIParent, "BackdropTemplate")
-    frame:SetSize(360, 300)
+    frame:SetSize(390, 342)
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("DIALOG")
     frame:EnableMouse(true)
@@ -2823,6 +2833,57 @@ CreateSettingsUI = function()
     frame.delayValue:SetJustifyH("LEFT")
     RegisterFontString(frame.delayValue, 12, nil, true)
     Addon.delayValue = frame.delayValue
+
+    y = y - 42
+    frame.whisperLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    frame.whisperLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, y)
+    frame.whisperLabel:SetWidth(SETTINGS_LABEL_WIDTH)
+    KeepOneLine(frame.whisperLabel)
+    RegisterFontString(frame.whisperLabel, 12, nil, true)
+    Addon.whisperLabel = frame.whisperLabel
+
+    frame.whisperEditBox = CreateFrame("EditBox", "DoYouNeedItWhisperEditBox", frame, "InputBoxTemplate")
+    frame.whisperEditBox:SetPoint("TOPLEFT", frame, "TOPLEFT", SETTINGS_CONTROL_X, y - 3)
+    frame.whisperEditBox:SetSize(SETTINGS_EDITBOX_WIDTH, 22)
+    if frame.whisperEditBox.SetAutoFocus then
+        frame.whisperEditBox:SetAutoFocus(false)
+    end
+    if frame.whisperEditBox.SetMaxLetters then
+        frame.whisperEditBox:SetMaxLetters(Core.MAX_WHISPER_TEMPLATE_LENGTH)
+    end
+    frame.whisperEditBox:SetScript("OnEnterPressed", function(editBox)
+        if Addon.committingWhisperTemplate then
+            return
+        end
+        Addon.committingWhisperTemplate = true
+        SetWhisperTemplate(editBox:GetText())
+        SafeCall(editBox.ClearFocus, editBox)
+        Addon.committingWhisperTemplate = false
+    end)
+    frame.whisperEditBox:SetScript("OnEditFocusLost", function(editBox)
+        if Addon.committingWhisperTemplate then
+            return
+        end
+        Addon.committingWhisperTemplate = true
+        SetWhisperTemplate(editBox:GetText())
+        Addon.committingWhisperTemplate = false
+    end)
+    frame.whisperEditBox:SetScript("OnEscapePressed", function(editBox)
+        editBox:SetText(Addon.state.settings.whisperTemplate)
+        SafeCall(editBox.ClearFocus, editBox)
+    end)
+    RegisterFontString(frame.whisperEditBox, 12, nil, true)
+    Addon.whisperEditBox = frame.whisperEditBox
+
+    frame.whisperResetButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.whisperResetButton:SetPoint("LEFT", frame.whisperEditBox, "RIGHT", 8, 0)
+    frame.whisperResetButton:SetSize(58, 22)
+    frame.whisperResetButton:SetScript("OnClick", function()
+        SetWhisperTemplate(nil)
+        SafeCall(frame.whisperEditBox.ClearFocus, frame.whisperEditBox)
+    end)
+    RegisterButtonFont(frame.whisperResetButton, 11, nil, true)
+    Addon.whisperResetButton = frame.whisperResetButton
 
     y = y - 42
     frame.languageLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -2911,8 +2972,8 @@ CreateSettingsUI = function()
     Addon.fontSizeValue = frame.fontSizeValue
 
     frame.fontWarning = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    frame.fontWarning:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, -248)
-    frame.fontWarning:SetWidth(316)
+    frame.fontWarning:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, -290)
+    frame.fontWarning:SetWidth(346)
     frame.fontWarning:SetJustifyH("LEFT")
     KeepOneLine(frame.fontWarning)
     frame.fontWarning:SetTextColor(1, 0.6, 0.2)
@@ -2961,6 +3022,13 @@ SetDelay = function(value, quiet)
     if not quiet and Addon.state.settings.autoDelay ~= tonumber(value) then
         Print("delay must be between " .. Addon.state.settings.minDelay .. " and " .. Addon.state.settings.maxDelay .. " seconds")
     end
+end
+
+SetWhisperTemplate = function(value)
+    Addon.state.settings.whisperTemplate = Core.NormalizeWhisperTemplate(value)
+    Addon.state.settings = Core.NormalizeSettings(Addon.state.settings)
+    SaveDB()
+    RefreshSettingsControls()
 end
 
 local function HandleSlash(message)

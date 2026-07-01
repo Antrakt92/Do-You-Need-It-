@@ -51,7 +51,28 @@ local function testSlashTestRowsAndManualWhisper()
     h:runTimers(0)
     assertEqual(#h.sentMessages, 1, "manual Ask sends one whisper")
     assertEqual(h.sentMessages[1].target, "Example", "manual Ask whispers the row looter")
+    assertEqual(h.sentMessages[1].message, "Hey, do you need " .. rows[1].row.itemLink .. "?", "manual Ask uses the default whisper template")
     assertEqual(rows[1].row.manualWhispered, true, "manual Ask marks row sent")
+end
+
+local function testCustomWhisperTemplateIsUsedForManualAsk()
+    local h = Harness.new({
+        db = {
+            settings = {
+                whisperTemplate = "Could you trade {item} please?",
+            },
+        },
+    })
+    h:loadAddon()
+    h:slash("test")
+
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "custom template test has one askable row")
+    rows[1].whisper:FireScript("OnClick")
+    h:runTimers(0)
+
+    assertEqual(#h.sentMessages, 1, "custom template manual Ask sends one whisper")
+    assertEqual(h.sentMessages[1].message, "Could you trade " .. rows[1].row.itemLink .. " please?", "manual Ask uses saved custom whisper template")
 end
 
 local function testMainWindowLayoutBoundsLongText()
@@ -454,17 +475,20 @@ local function testSettingsControlsUseFixedColumnLayout()
     local frame = h.env.DoYouNeedItSettingsFrame
     assertTruthy(frame, "settings frame exists")
     assertTruthy((frame.delayLabel:GetWidth() or 999) <= 96, "delay label is width-bounded")
+    assertTruthy((frame.whisperLabel:GetWidth() or 999) <= 96, "whisper label is width-bounded")
     assertTruthy((frame.languageLabel:GetWidth() or 999) <= 96, "language label is width-bounded")
     assertTruthy((frame.fontLabel:GetWidth() or 999) <= 96, "font label is width-bounded")
     assertTruthy((frame.fontSizeLabel:GetWidth() or 999) <= 96, "font size label is width-bounded")
 
     assertEqual(frame.delaySlider.points[1][2], frame, "delay slider is anchored to the settings frame column")
+    assertEqual(frame.whisperEditBox.points[1][2], frame, "whisper edit box is anchored to the settings frame column")
     assertEqual(frame.languageDropdown.points[1][2], frame, "language dropdown is anchored to the settings frame column")
     assertEqual(frame.fontDropdown.points[1][2], frame, "font dropdown is anchored to the settings frame column")
     assertEqual(frame.fontSizeSlider.points[1][2], frame, "font size slider is anchored to the settings frame column")
 
     local labels = {
         frame.delayLabel,
+        frame.whisperLabel,
         frame.languageLabel,
         frame.fontLabel,
         frame.fontSizeLabel,
@@ -476,8 +500,32 @@ local function testSettingsControlsUseFixedColumnLayout()
     end
 end
 
+local function testSettingsWhisperTemplateEditBoxSaves()
+    local h = Harness.new()
+    h:loadAddon()
+    h:slash("settings")
+
+    local frame = h.env.DoYouNeedItSettingsFrame
+    assertTruthy(frame.whisperEditBox, "whisper template edit box exists")
+    assertTruthy(frame.whisperResetButton, "whisper template reset button exists")
+
+    frame.whisperEditBox:SetText("Need {item} for transmog?")
+    frame.whisperEditBox:FireScript("OnEnterPressed")
+    assertEqual(h.env.DoYouNeedItDB.settings.whisperTemplate, "Need {item} for transmog?", "whisper template edit box saves custom text")
+
+    frame.whisperEditBox:SetText("")
+    frame.whisperEditBox:FireScript("OnEnterPressed")
+    assertEqual(h.env.DoYouNeedItDB.settings.whisperTemplate, "Hey, do you need {item}?", "empty whisper edit box saves default fallback")
+
+    frame.whisperEditBox:SetText("temporary")
+    frame.whisperResetButton:FireScript("OnClick")
+    assertEqual(h.env.DoYouNeedItDB.settings.whisperTemplate, "Hey, do you need {item}?", "whisper template reset button restores default")
+    assertEqual(frame.whisperEditBox:GetText(), "Hey, do you need {item}?", "whisper template reset refreshes edit box text")
+end
+
 testLoadAndSettings()
 testSlashTestRowsAndManualWhisper()
+testCustomWhisperTemplateIsUsedForManualAsk()
 testMainWindowLayoutBoundsLongText()
 testInstanceChangeCompletesCurrentGroup()
 testInstanceChangeHistoryTitleUsesActiveLocale()
@@ -493,5 +541,6 @@ testCustomFontPickerGridPreviewAndCommit()
 testLanguageDropdownCloseRepairsCaptionsAfterSharedListCleanup()
 testSettingsSliderTemplateTextDoesNotLeak()
 testSettingsControlsUseFixedColumnLayout()
+testSettingsWhisperTemplateEditBoxSaves()
 
 print("runtime smoke ok")
