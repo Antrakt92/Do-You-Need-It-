@@ -2765,6 +2765,12 @@ CreateSettingsUI = function()
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
     frame:SetScript("OnHide", function()
+        if Addon.whisperEditBox and Addon.whisperTemplateFocused and not Addon.committingWhisperTemplate then
+            Addon.committingWhisperTemplate = true
+            Addon.whisperTemplateFocused = false
+            SetWhisperTemplate(Addon.whisperEditBox:GetText())
+            Addon.committingWhisperTemplate = false
+        end
         HideFontPicker()
         CancelSettingsPreview()
     end)

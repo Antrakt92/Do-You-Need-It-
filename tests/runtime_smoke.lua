@@ -557,6 +557,21 @@ local function testSettingsRefreshKeepsFocusedWhisperDraft()
     assertEqual(h.env.DoYouNeedItDB.settings.whisperTemplate, draft, "focused whisper draft saves on focus loss")
 end
 
+local function testSettingsCloseSavesFocusedWhisperDraft()
+    local h = Harness.new()
+    h:loadAddon()
+    h:slash("settings")
+
+    local frame = h.env.DoYouNeedItSettingsFrame
+    local draft = "Mind trading {item}?"
+    frame.whisperEditBox:FireScript("OnEditFocusGained")
+    frame.whisperEditBox:SetText(draft)
+
+    frame:Hide()
+    assertEqual((h.env.DoYouNeedItDB.settings or {}).whisperTemplate, draft, "closing settings saves focused whisper template draft")
+    assertEqual(frame.whisperEditBox:GetText(), draft, "closing settings does not overwrite the saved whisper template draft")
+end
+
 testLoadAndSettings()
 testSlashTestRowsAndManualWhisper()
 testCustomWhisperTemplateIsUsedForManualAsk()
@@ -578,5 +593,6 @@ testSettingsSliderTemplateTextDoesNotLeak()
 testSettingsControlsUseFixedColumnLayout()
 testSettingsWhisperTemplateEditBoxSaves()
 testSettingsRefreshKeepsFocusedWhisperDraft()
+testSettingsCloseSavesFocusedWhisperDraft()
 
 print("runtime smoke ok")
