@@ -56,6 +56,7 @@ local INSPECT_RETRY_DELAY = 0.8
 local MAX_EQUIPMENT_SCAN_ATTEMPTS = 2
 local EQUIPMENT_SCAN_DELAY = 1.1
 local EQUIPMENT_SCAN_TIMEOUT = 2.5
+local EQUIPMENT_CACHE_MAX_AGE = 1800
 local MAX_DIAGNOSTICS = 20
 local ENCOUNTER_LOOT_GRACE = 120
 local UNKNOWN_EQUIPPED = "Equipped: unknown"
@@ -1635,7 +1636,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
         })
     end
 
-    local cachedEquippedText = Core.GetCachedEquippedText(Addon.equipmentCache, looter, metadata.equipLoc)
+    local cachedEquippedText = Core.GetCachedEquippedText(Addon.equipmentCache, looter, metadata.equipLoc, Now(), EQUIPMENT_CACHE_MAX_AGE)
     local row = Core.AddVisibleRow(Addon.state, {
         looter = looter,
         itemLink = metadata.link or itemLink,

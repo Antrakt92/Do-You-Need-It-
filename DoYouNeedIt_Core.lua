@@ -883,7 +883,7 @@ function Core.StoreEquipmentCache(cache, names, equippedByLoc, timestamp)
     return wrote
 end
 
-function Core.GetCachedEquippedText(cache, name, equipLoc)
+function Core.GetCachedEquippedText(cache, name, equipLoc, now, maxAge)
     if type(cache) ~= "table" or type(name) ~= "string" or name == "" or type(equipLoc) ~= "string" or equipLoc == "" then
         return nil
     end
@@ -891,6 +891,17 @@ function Core.GetCachedEquippedText(cache, name, equipLoc)
     local entry = cache[name]
     if type(entry) ~= "table" or type(entry.slots) ~= "table" then
         return nil
+    end
+    if now ~= nil or maxAge ~= nil then
+        now = tonumber(now)
+        maxAge = tonumber(maxAge)
+        if not now or not maxAge or maxAge < 0 or type(entry.timestamp) ~= "number" then
+            return nil
+        end
+        local age = now - entry.timestamp
+        if age < 0 or age > maxAge then
+            return nil
+        end
     end
 
     local text = entry.slots[equipLoc]

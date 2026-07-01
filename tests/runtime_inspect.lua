@@ -100,6 +100,28 @@ local function testCachedFallbackSurvivesLiveInspectFailure()
     assertTruthy(rows[1].row.equippedText:find("Cached Worn Sword", 1, true), "cached equipped fallback survives timeout")
 end
 
+local function testExpiredCachedFallbackIsIgnored()
+    local h = Harness.new()
+    local cachedLink = "|cff1eff00|Hitem:34:::::::::::::|h[Expired Cached Sword]|h|r"
+    h:setInventoryLink("party1", "MainHandSlot", cachedLink)
+    h:loadAddon()
+    assertEqual(h:runNextTimer(0), true, "expired-cache test starts with player capture")
+    assertEqual(h:runNextTimer(1.1), true, "expired-cache test starts party inspect")
+    h:fire("INSPECT_READY", "PartyGUID1")
+    h.now = h.now + 3600
+    h.timers = {}
+    h:resetSideEffects()
+    h:setInventoryLink("party1", "MainHandSlot", nil)
+    h.canInspect.party1 = false
+
+    local item = addWeapon(h, 21018, "Expired Cache Drop Sword")
+    h:fireLoot("Otherplayer", item)
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "expired-cache loot row is visible")
+    assertEqual(rows[1].row.equippedText:find("Cached: ", 1, true), nil, "expired cache does not mark the row as cached")
+    assertEqual(rows[1].row.equippedText:find("Expired Cached Sword", 1, true), nil, "expired cache item text is not reused")
+end
+
 local function testRosterUpdateDoesNotReadReplacementUnitForActiveLootInspect()
     local h = newLoadedHarness()
     local item = addWeapon(h, 21007, "Roster Swap Sword")
@@ -285,6 +307,7 @@ testDifferentGuidLootInspectsAreSerialized()
 testSameGuidLootInspectsCoalesce()
 testInspectTimeoutClearsOwnedInspectState()
 testCachedFallbackSurvivesLiveInspectFailure()
+testExpiredCachedFallbackIsIgnored()
 testRosterUpdateDoesNotReadReplacementUnitForActiveLootInspect()
 testClearCancelsInspectWorkAndUnblocksNewLoot()
 testStaleInspectRetryAfterClearDoesNotRequeueOldRow()

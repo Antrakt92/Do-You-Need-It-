@@ -317,6 +317,21 @@ assertEqual(
 )
 assertEqual(equipmentCache.Otherplayer.timestamp, 1234, "equipment cache keeps scan timestamp")
 assertEqual(
+    Core.GetCachedEquippedText(equipmentCache, "Otherplayer", "INVTYPE_WEAPON", 1240, 10),
+    cachedWeapon,
+    "equipment cache returns fresh cached text when age is within the freshness limit"
+)
+assertEqual(
+    Core.GetCachedEquippedText(equipmentCache, "Otherplayer", "INVTYPE_WEAPON", 1300, 10),
+    nil,
+    "equipment cache returns nil when the cache entry is older than the freshness limit"
+)
+assertEqual(
+    Core.GetCachedEquippedText({ MissingTimestamp = { slots = { INVTYPE_WEAPON = cachedWeapon } } }, "MissingTimestamp", "INVTYPE_WEAPON", 1300, 10),
+    nil,
+    "equipment cache returns nil for untimestamped entries when freshness is required"
+)
+assertEqual(
     Core.GetCachedEquippedText(equipmentCache, "Otherplayer", "INVTYPE_CHEST"),
     nil,
     "equipment cache returns nil for missing slots"
