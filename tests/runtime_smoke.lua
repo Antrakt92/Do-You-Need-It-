@@ -322,6 +322,30 @@ local function testMissingSavedFontPathRepairsToAvailableFont()
     assertEqual(h.env.DoYouNeedItFontDropdown.Text:GetText(), "Friz Quadrata TT", "font caption names the repaired font")
 end
 
+local function testForcedCjkLocalesUseLocaleSpecificBlizzardFontsOnWesternClients()
+    local cases = {
+        { locale = "koKR", font = "Fonts\\2002.ttf" },
+        { locale = "zhCN", font = "Fonts\\ARKai_T.ttf" },
+        { locale = "zhTW", font = "Fonts\\bHEI00M.ttf" },
+    }
+    for index = 1, #cases do
+        local case = cases[index]
+        local h = Harness.new({
+            db = {
+                settings = {
+                    forceLocale = case.locale,
+                    font = "Fonts\\FRIZQT__.TTF",
+                },
+            },
+            lsmFonts = {},
+        })
+        h:loadAddon()
+
+        assertEqual(h.env.DoYouNeedItDB.settings.font, case.font, case.locale .. " load switches to a locale-capable Blizzard font")
+        assertEqual(h.env.DoYouNeedItFrame.title.font, case.font, case.locale .. " main title uses the locale-capable Blizzard font")
+    end
+end
+
 local function testCustomFontPickerGridPreviewAndCommit()
     local brokenFontPath = "Interface\\AddOns\\Broken\\Unreadable.ttf"
     local h = Harness.new({
@@ -464,6 +488,7 @@ testLegacyPlainItemTextDoesNotCreateDropHoverTarget()
 testLocalizedEquippedDisplayKeepsSavedTextStable()
 testHistoryMenuUsesLocalizedStaticLabels()
 testMissingSavedFontPathRepairsToAvailableFont()
+testForcedCjkLocalesUseLocaleSpecificBlizzardFontsOnWesternClients()
 testCustomFontPickerGridPreviewAndCommit()
 testLanguageDropdownCloseRepairsCaptionsAfterSharedListCleanup()
 testSettingsSliderTemplateTextDoesNotLeak()

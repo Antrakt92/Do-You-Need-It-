@@ -310,7 +310,7 @@ local function RegisterButtonFont(button, size, flags, stable)
     end
 end
 
-local function BuildFontsList()
+local function BuildFontsList(locale)
     local fonts = {}
     local seen = {}
 
@@ -328,9 +328,17 @@ local function BuildFontsList()
         end
     end
 
-    local blizzardFonts = Core.GetBlizzardFonts(ClientLocale())
+    local clientLocale = ClientLocale()
+    local blizzardFonts = Core.GetBlizzardFonts(clientLocale)
     for index = 1, #blizzardFonts do
         addFont(blizzardFonts[index].name, blizzardFonts[index].path)
+    end
+    locale = Core.ResolveActiveLocale(locale or ActiveLocale(), clientLocale)
+    if locale ~= clientLocale then
+        blizzardFonts = Core.GetBlizzardFonts(locale)
+        for index = 1, #blizzardFonts do
+            addFont(blizzardFonts[index].name, blizzardFonts[index].path)
+        end
     end
 
     if LSM and type(LSM.List) == "function" and type(LSM.Fetch) == "function" then
@@ -349,15 +357,16 @@ local function BuildFontsList()
 end
 
 local function StableSettingsFont()
-    local requiredGlyph = Core.GetLocaleGlyphRequirement(ActiveLocale())
-    return Core.FindCompatibleFont(Core.GetDefaultFont(), requiredGlyph, BuildFontsList(), ClientLocale()) or Core.GetDefaultFont()
+    local active = ActiveLocale()
+    local requiredGlyph = Core.GetLocaleGlyphRequirement(active)
+    return Core.FindCompatibleFont(Core.GetDefaultFont(), requiredGlyph, BuildFontsList(active), ClientLocale()) or Core.GetDefaultFont()
 end
 
 local function FindAvailableFontPath(path, fonts)
     if type(path) ~= "string" or path == "" then
         return nil
     end
-    fonts = type(fonts) == "table" and fonts or BuildFontsList()
+    fonts = type(fonts) == "table" and fonts or BuildFontsList(ActiveLocale())
     for index = 1, #fonts do
         if Core.SameFontPath(fonts[index].path, path) then
             return fonts[index].path
@@ -367,7 +376,7 @@ local function FindAvailableFontPath(path, fonts)
 end
 
 local function FindCompatibleAvailableFont(path, glyph, fonts, clientLocale)
-    fonts = type(fonts) == "table" and fonts or BuildFontsList()
+    fonts = type(fonts) == "table" and fonts or BuildFontsList(ActiveLocale())
     local availablePath = FindAvailableFontPath(path, fonts)
     if availablePath and Core.FontSupports(availablePath, glyph, clientLocale) then
         return availablePath
@@ -381,7 +390,7 @@ local function FindCompatibleAvailableFont(path, glyph, fonts, clientLocale)
 end
 
 local function FindFontName(path)
-    local fonts = BuildFontsList()
+    local fonts = BuildFontsList(ActiveLocale())
     for index = 1, #fonts do
         if Core.SameFontPath(fonts[index].path, path) then
             return fonts[index].name
@@ -417,7 +426,7 @@ MaybeAutoSwitchFont = function()
     local active = Core.ResolveActiveLocale(settings.forceLocale, ClientLocale())
     local requiredGlyph = Core.GetLocaleGlyphRequirement(active)
     local clientLocale = ClientLocale()
-    local fonts = BuildFontsList()
+    local fonts = BuildFontsList(active)
     local changed = false
     local previousFont = FindAvailableFontPath(settings.fontBeforeAutoSwitch, fonts)
     if previousFont and Core.FontSupports(previousFont, requiredGlyph, clientLocale) then
@@ -2418,7 +2427,7 @@ local function PreviewLanguage(value)
     end
     Addon.previewLocale = locale
     local requiredGlyph = Core.GetLocaleGlyphRequirement(locale)
-    local fallback = Core.FindCompatibleFont(Addon.state.settings.font, requiredGlyph, BuildFontsList(), ClientLocale())
+    local fallback = Core.FindCompatibleFont(Addon.state.settings.font, requiredGlyph, BuildFontsList(locale), ClientLocale())
     if fallback and not Core.SameFontPath(fallback, Addon.state.settings.font) then
         Addon.previewFont = fallback
     else
@@ -2541,7 +2550,7 @@ local function PopulateFontPicker()
     local buttonWidth = 160
     local buttonHeight = 22
     local visibleRows = 14
-    local fonts = BuildFontsList()
+    local fonts = BuildFontsList(ActiveLocale())
     local currentPath = Addon.state and Addon.state.settings and Addon.state.settings.font
     local rows = math.ceil(#fonts / cols)
     local currentRow
