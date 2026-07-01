@@ -15,24 +15,33 @@ local Addon = {
     selectedView = "current",
     selectedTab = "askable",
     itemRetryCount = {},
+    fontStrings = {},
 }
 
 local SetAutoWhisper
 local SetDelay
 local CreateUI
+local CreateSettingsUI
+local OpenSettings
 local RequestInspectForRow
+local RefreshSettingsControls
+local RefreshLocalization
+local ApplyCurrentFont
+local MaybeAutoSwitchFont
+
+local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
 
 local issecretvalue = _G.issecretvalue or function()
     return false
 end
 
 local WINDOW_WIDTH = 540
-local WINDOW_HEIGHT = 330
+local WINDOW_HEIGHT = 300
 local ROW_WIDTH = 510
 local ROW_HEIGHT = 30
-local ROW_START_Y = -116
+local ROW_START_Y = -82
 local ROW_STRIDE = 34
-local MAX_VISIBLE_ROWS = 5
+local MAX_VISIBLE_ROWS = 6
 local MAX_ITEM_RETRIES = 5
 local ITEM_RETRY_DELAY = 0.7
 local MAX_INSPECT_RETRIES = 8
@@ -228,6 +237,131 @@ end
 local function SafeInstanceName()
     local name = SafeCall(GetInstanceInfo)
     return CleanString(name) or "Unknown Instance"
+end
+
+local function ClientLocale()
+    return CleanString(SafeCall(GetLocale)) or "enUS"
+end
+
+local function ActiveLocale()
+    if Addon.previewLocale then
+        return Addon.previewLocale
+    end
+    local settings = Addon.state and Addon.state.settings or Core.NormalizeSettings({})
+    return Core.ResolveActiveLocale(settings.forceLocale, ClientLocale())
+end
+
+local function L(key)
+    return Core.GetLocaleLabel(key, ActiveLocale())
+end
+
+local function RegisterFontString(fontString, size, flags)
+    if not fontString then
+        return
+    end
+    Addon.fontStrings[#Addon.fontStrings + 1] = {
+        fontString = fontString,
+        size = size,
+        flags = flags,
+    }
+    if ApplyCurrentFont then
+        ApplyCurrentFont()
+    end
+end
+
+local function RegisterButtonFont(button, size, flags)
+    if button and type(button.GetFontString) == "function" then
+        RegisterFontString(button:GetFontString(), size, flags)
+    end
+end
+
+local function BuildFontsList()
+    local fonts = {}
+    local seen = {}
+
+    local function addFont(name, path)
+        if type(name) ~= "string" or name == "" or type(path) ~= "string" or path == "" then
+            return
+        end
+        local key = Core.FontPathKey(path)
+        if key and not seen[key] then
+            seen[key] = true
+            fonts[#fonts + 1] = {
+                name = name,
+                path = path,
+            }
+        end
+    end
+
+    local blizzardFonts = Core.GetBlizzardFonts(ClientLocale())
+    for index = 1, #blizzardFonts do
+        addFont(blizzardFonts[index].name, blizzardFonts[index].path)
+    end
+
+    if LSM and type(LSM.List) == "function" and type(LSM.Fetch) == "function" then
+        local names = LSM:List("font")
+        if type(names) == "table" then
+            for index = 1, #names do
+                local name = names[index]
+                local path = SafeCall(function()
+                    return LSM:Fetch("font", name, true)
+                end)
+                addFont(name, path)
+            end
+        end
+    end
+    return fonts
+end
+
+local function FindFontName(path)
+    local fonts = BuildFontsList()
+    for index = 1, #fonts do
+        if Core.SameFontPath(fonts[index].path, path) then
+            return fonts[index].name
+        end
+    end
+    return "Friz Quadrata TT"
+end
+
+ApplyCurrentFont = function()
+    local settings = Addon.state and Addon.state.settings or Core.NormalizeSettings({})
+    local font = Addon.previewFont or settings.font or Core.GetDefaultFont()
+    local size = tonumber(settings.fontSize) or 12
+    for index = 1, #Addon.fontStrings do
+        local entry = Addon.fontStrings[index]
+        if entry and entry.fontString and type(entry.fontString.SetFont) == "function" then
+            SafeCall(entry.fontString.SetFont, entry.fontString, font, entry.size or size, entry.flags)
+        end
+    end
+end
+
+MaybeAutoSwitchFont = function()
+    if not Addon.state or not Addon.state.settings then
+        return false
+    end
+
+    local settings = Addon.state.settings
+    local active = Core.ResolveActiveLocale(settings.forceLocale, ClientLocale())
+    local requiredGlyph = Core.GetLocaleGlyphRequirement(active)
+    local clientLocale = ClientLocale()
+    if settings.fontBeforeAutoSwitch and Core.FontSupports(settings.fontBeforeAutoSwitch, requiredGlyph, clientLocale) then
+        settings.font = settings.fontBeforeAutoSwitch
+        settings.fontBeforeAutoSwitch = nil
+        return true
+    end
+    if Core.FontSupports(settings.font, requiredGlyph, clientLocale) then
+        return false
+    end
+
+    local fallback = Core.FindCompatibleFont(settings.font, requiredGlyph, BuildFontsList(), clientLocale)
+    if fallback and not Core.SameFontPath(fallback, settings.font) then
+        if not settings.fontBeforeAutoSwitch then
+            settings.fontBeforeAutoSwitch = settings.font
+        end
+        settings.font = fallback
+        return true
+    end
+    return false
 end
 
 local function ExtractItemLink(message)
@@ -765,33 +899,21 @@ local function RefreshRows()
     local rows = RowsForSelectedView()
     local displayRows = Core.GetNewestRowsFirst(rows, MAX_VISIBLE_ROWS)
 
-    local title = "Current"
+    local title = L("Current")
     if Addon.selectedView == "session" then
-        title = "This Session"
+        title = L("This Session")
     elseif Addon.selectedView == "history" and Addon.selectedHistoryIndex then
         local group = Addon.state.history[Addon.selectedHistoryIndex]
-        title = group and group.title or "History"
+        title = group and group.title or L("History")
     end
     Addon.historyButton:SetText(title)
     if Addon.tabAskable then
+        Addon.tabAskable:SetText(L("Askable"))
         Addon.tabAskable:SetEnabled(Addon.selectedTab ~= "askable")
     end
     if Addon.tabAllGear then
+        Addon.tabAllGear:SetText(L("All Gear"))
         Addon.tabAllGear:SetEnabled(Addon.selectedTab ~= "all")
-    end
-
-    local autoText = Addon.state.settings.autoWhisper and ("Auto: " .. Addon.state.settings.autoDelay .. "s") or "Auto: off"
-    Addon.autoStatus:SetText(autoText)
-    if Addon.autoCheck then
-        Addon.autoCheck:SetChecked(Addon.state.settings.autoWhisper == true)
-    end
-    if Addon.delaySlider then
-        Addon.updatingControls = true
-        Addon.delaySlider:SetValue(Addon.state.settings.autoDelay)
-        Addon.updatingControls = false
-    end
-    if Addon.delayValue then
-        Addon.delayValue:SetText(Addon.state.settings.autoDelay .. "s")
     end
 
     for index = 1, MAX_VISIBLE_ROWS do
@@ -806,10 +928,10 @@ local function RefreshRows()
             rowFrame.equippedLink.itemLink = FirstItemLink(row.equippedText)
             rowFrame.dropLink:SetShown(rowFrame.dropLink.itemLink ~= nil)
             rowFrame.equippedLink:SetShown(rowFrame.equippedLink.itemLink ~= nil)
-            rowFrame.status:SetText(row.statusText or row.reason or "candidate")
+            rowFrame.status:SetText(L(row.statusText or row.reason or "candidate"))
             if Addon.selectedTab == "askable" and Addon.selectedView ~= "history" and row.askable ~= false then
                 rowFrame.whisper:Enable()
-                rowFrame.whisper:SetText(row.manualWhispered and "Sent" or "Ask")
+                rowFrame.whisper:SetText(row.manualWhispered and L("Sent") or L("Ask"))
                 rowFrame.whisper:Show()
             else
                 rowFrame.whisper:Disable()
@@ -827,10 +949,13 @@ local function RefreshRows()
     end
 
     if #rows == 0 then
-        Addon.emptyText:SetText(Addon.selectedTab == "all" and "No gear drops in this view." or "No askable gear drops in this view.")
+        Addon.emptyText:SetText(Addon.selectedTab == "all" and L("No gear drops in this view.") or L("No askable gear drops in this view."))
         Addon.emptyText:Show()
     else
         Addon.emptyText:Hide()
+    end
+    if RefreshSettingsControls then
+        RefreshSettingsControls()
     end
 end
 
@@ -1321,11 +1446,13 @@ local function CreateRow(parent, index)
     row.looter:SetPoint("LEFT", row, "LEFT", 8, 8)
     row.looter:SetWidth(90)
     row.looter:SetJustifyH("LEFT")
+    RegisterFontString(row.looter, 11)
 
     row.drop = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     row.drop:SetPoint("LEFT", row.looter, "RIGHT", 8, 0)
     row.drop:SetWidth(180)
     row.drop:SetJustifyH("LEFT")
+    RegisterFontString(row.drop, 11)
 
     row.dropLink = CreateFrame("Button", nil, row)
     row.dropLink:SetPoint("LEFT", row.looter, "RIGHT", 6, 0)
@@ -1344,6 +1471,7 @@ local function CreateRow(parent, index)
     row.equipped:SetPoint("LEFT", row.drop, "RIGHT", 10, 0)
     row.equipped:SetWidth(150)
     row.equipped:SetJustifyH("LEFT")
+    RegisterFontString(row.equipped, 11)
 
     row.equippedLink = CreateFrame("Button", nil, row)
     row.equippedLink:SetPoint("LEFT", row.drop, "RIGHT", 8, 0)
@@ -1362,6 +1490,7 @@ local function CreateRow(parent, index)
     row.status:SetPoint("TOPLEFT", row.looter, "BOTTOMLEFT", 0, -2)
     row.status:SetWidth(430)
     row.status:SetJustifyH("LEFT")
+    RegisterFontString(row.status, 10)
 
     row.whisper = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
     row.whisper:SetSize(48, 20)
@@ -1374,6 +1503,7 @@ local function CreateRow(parent, index)
             SendWhisper(data, false)
         end
     end)
+    RegisterButtonFont(row.whisper, 11)
 
     row:Hide()
     return row
@@ -1406,59 +1536,351 @@ CreateUI = function()
     frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -14)
     frame.title:SetWidth(210)
     frame.title:SetJustifyH("LEFT")
-    frame.title:SetText("Do You Need It?")
+    frame.title:SetText(L("Do You Need It?"))
+    RegisterFontString(frame.title, 16, "OUTLINE")
 
     frame.tabAskable = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     frame.tabAskable:SetSize(70, 22)
     frame.tabAskable:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -42)
-    frame.tabAskable:SetText("Askable")
+    frame.tabAskable:SetText(L("Askable"))
     frame.tabAskable:SetScript("OnClick", function()
         SelectTab("askable")
     end)
+    RegisterButtonFont(frame.tabAskable, 11)
     Addon.tabAskable = frame.tabAskable
 
     frame.tabAllGear = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     frame.tabAllGear:SetSize(72, 22)
     frame.tabAllGear:SetPoint("LEFT", frame.tabAskable, "RIGHT", 4, 0)
-    frame.tabAllGear:SetText("All Gear")
+    frame.tabAllGear:SetText(L("All Gear"))
     frame.tabAllGear:SetScript("OnClick", function()
         SelectTab("all")
     end)
+    RegisterButtonFont(frame.tabAllGear, 11)
     Addon.tabAllGear = frame.tabAllGear
 
     frame.historyButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     frame.historyButton:SetSize(350, 22)
     frame.historyButton:SetPoint("LEFT", frame.tabAllGear, "RIGHT", 6, 0)
-    frame.historyButton:SetText("Current")
+    frame.historyButton:SetText(L("Current"))
     frame.historyButton:SetScript("OnClick", function(button)
         OpenHistoryMenu(button)
     end)
+    RegisterButtonFont(frame.historyButton, 11)
     Addon.historyButton = frame.historyButton
 
-    frame.autoStatus = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    frame.autoStatus:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -76)
-    frame.autoStatus:SetWidth(84)
-    frame.autoStatus:SetJustifyH("RIGHT")
-    Addon.autoStatus = frame.autoStatus
+    frame.settingsButton = CreateFrame("Button", nil, frame)
+    frame.settingsButton:SetSize(22, 22)
+    frame.settingsButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -34, -8)
+    frame.settingsButton:SetNormalTexture("Interface\\Buttons\\UI-OptionsButton")
+    frame.settingsButton:SetPushedTexture("Interface\\Buttons\\UI-OptionsButton")
+    frame.settingsButton:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+    frame.settingsButton:SetScript("OnEnter", function(button)
+        if GameTooltip then
+            GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
+            GameTooltip:SetText(L("Settings"))
+            GameTooltip:Show()
+        end
+    end)
+    frame.settingsButton:SetScript("OnLeave", HideItemTooltip)
+    frame.settingsButton:SetScript("OnClick", OpenSettings)
+    Addon.settingsButton = frame.settingsButton
 
+    frame.close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+    frame.close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
+
+    frame.emptyText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisable")
+    frame.emptyText:SetPoint("CENTER", frame, "CENTER", 0, 0)
+    frame.emptyText:SetText(L("No askable gear drops in this view."))
+    RegisterFontString(frame.emptyText, 12)
+    Addon.emptyText = frame.emptyText
+
+    for index = 1, MAX_VISIBLE_ROWS do
+        Addon.rowFrames[index] = CreateRow(frame, index)
+    end
+
+    Addon.frame = frame
+    frame:Hide()
+    RefreshRows()
+end
+
+local function StripParenSuffix(text)
+    if type(text) ~= "string" then
+        return ""
+    end
+    return text:match("^(.-)%s*%(") or text
+end
+
+local function LanguageDisplayLabel(option)
+    if option.value ~= "auto" then
+        return option.label
+    end
+    local current = ClientLocale()
+    local currentOption = Core.GetLanguageOption(current)
+    return string.format(L("Auto (current: %s)"), StripParenSuffix((currentOption and currentOption.label) or current))
+end
+
+local function LanguageCompactLabel(option)
+    if option.value == "auto" then
+        local current = ClientLocale()
+        local currentOption = Core.GetLanguageOption(current)
+        return (currentOption and (currentOption.compactLabel or StripParenSuffix(currentOption.label))) or current
+    end
+    return option.compactLabel or StripParenSuffix(option.label)
+end
+
+local function CurrentLanguageLabel()
+    local option = Core.GetLanguageOption(Addon.state.settings.forceLocale) or Core.GetLanguageOption("auto")
+    return LanguageCompactLabel(option)
+end
+
+local function RefreshFontWarning()
+    if not Addon.fontWarning or not Addon.state then
+        return
+    end
+    local active = ActiveLocale()
+    local requiredGlyph = Core.GetLocaleGlyphRequirement(active)
+    local font = Addon.previewFont or Addon.state.settings.font
+    if Core.FontSupports(font, requiredGlyph, ClientLocale()) then
+        Addon.fontWarning:SetText("")
+    else
+        Addon.fontWarning:SetText(string.format(L("Font may not render %s glyphs."), requiredGlyph))
+    end
+end
+
+RefreshSettingsControls = function()
+    if not Addon.settingsFrame or not Addon.state then
+        return
+    end
+    local settings = Addon.state.settings
+    if Addon.settingsTitle then
+        Addon.settingsTitle:SetText(L("Settings"))
+    end
+    if Addon.autoCheck then
+        Addon.autoCheck:SetChecked(settings.autoWhisper == true)
+    end
+    if Addon.autoCheckLabel then
+        Addon.autoCheckLabel:SetText(L("Auto whisper"))
+    end
+    if Addon.delayLabel then
+        Addon.delayLabel:SetText(L("Delay"))
+    end
+    if Addon.delaySlider then
+        Addon.updatingControls = true
+        Addon.delaySlider:SetValue(settings.autoDelay)
+        Addon.updatingControls = false
+    end
+    if Addon.delayValue then
+        Addon.delayValue:SetText(settings.autoDelay .. "s")
+    end
+    if Addon.languageLabel then
+        Addon.languageLabel:SetText(L("Language:"))
+    end
+    if Addon.fontLabel then
+        Addon.fontLabel:SetText(L("Font:"))
+    end
+    if Addon.fontSizeLabel then
+        Addon.fontSizeLabel:SetText(L("Font Size:"))
+    end
+    if Addon.fontSizeSlider then
+        Addon.updatingControls = true
+        Addon.fontSizeSlider:SetValue(settings.fontSize)
+        Addon.updatingControls = false
+    end
+    if Addon.fontSizeValue then
+        Addon.fontSizeValue:SetText(settings.fontSize)
+    end
+    if Addon.languageDropdown then
+        UIDropDownMenu_SetText(Addon.languageDropdown, CurrentLanguageLabel())
+    end
+    if Addon.fontDropdown then
+        UIDropDownMenu_SetText(Addon.fontDropdown, FindFontName(settings.font))
+    end
+    RefreshFontWarning()
+end
+
+RefreshLocalization = function()
+    if Addon.frame and Addon.frame.title then
+        Addon.frame.title:SetText(L("Do You Need It?"))
+    end
+    RefreshRows()
+    RefreshSettingsControls()
+end
+
+local function SetFontSize(value)
+    Addon.state.settings.fontSize = tonumber(value) or Addon.state.settings.fontSize
+    Addon.state.settings = Core.NormalizeSettings(Addon.state.settings)
+    SaveDB()
+    ApplyCurrentFont()
+    RefreshSettingsControls()
+end
+
+local function SetFontPath(path)
+    if type(path) ~= "string" or path == "" then
+        return
+    end
+    Addon.previewFont = nil
+    Addon.state.settings.font = path
+    Addon.state.settings.fontBeforeAutoSwitch = nil
+    Addon.state.settings = Core.NormalizeSettings(Addon.state.settings)
+    SaveDB()
+    ApplyCurrentFont()
+    RefreshSettingsControls()
+end
+
+local function SetForceLocale(value)
+    Addon.previewLocale = nil
+    Addon.previewFont = nil
+    Addon.state.settings.forceLocale = Core.NormalizeForceLocale(value)
+    MaybeAutoSwitchFont()
+    Addon.state.settings = Core.NormalizeSettings(Addon.state.settings)
+    SaveDB()
+    ApplyCurrentFont()
+    RefreshLocalization()
+end
+
+local function PreviewLanguage(value)
+    local locale = Core.ResolveActiveLocale(value, ClientLocale())
+    if Addon.previewLocale == locale then
+        return
+    end
+    Addon.previewLocale = locale
+    local requiredGlyph = Core.GetLocaleGlyphRequirement(locale)
+    local fallback = Core.FindCompatibleFont(Addon.state.settings.font, requiredGlyph, BuildFontsList(), ClientLocale())
+    if fallback and not Core.SameFontPath(fallback, Addon.state.settings.font) then
+        Addon.previewFont = fallback
+    else
+        Addon.previewFont = nil
+    end
+    ApplyCurrentFont()
+    RefreshLocalization()
+end
+
+local function CancelLanguagePreview()
+    if not Addon.previewLocale then
+        return
+    end
+    Addon.previewLocale = nil
+    Addon.previewFont = nil
+    ApplyCurrentFont()
+    RefreshLocalization()
+end
+
+local function PreviewFont(path)
+    if type(path) ~= "string" or path == "" then
+        return
+    end
+    Addon.previewFont = path
+    ApplyCurrentFont()
+    RefreshFontWarning()
+end
+
+local function CancelFontPreview()
+    if not Addon.previewFont then
+        return
+    end
+    Addon.previewFont = nil
+    ApplyCurrentFont()
+    RefreshFontWarning()
+end
+
+local function HookSettingsDropdownButtons()
+    if not DropDownList1 then
+        return
+    end
+    for index = 1, 64 do
+        local button = _G["DropDownList1Button" .. index]
+        if not button then
+            break
+        end
+        if not button._dyniPreviewHooked then
+            button:HookScript("OnEnter", function(btn)
+                if UIDROPDOWNMENU_OPEN_MENU == Addon.languageDropdown and btn.value ~= nil then
+                    PreviewLanguage(btn.value)
+                elseif UIDROPDOWNMENU_OPEN_MENU == Addon.fontDropdown and btn.value ~= nil then
+                    PreviewFont(btn.value)
+                end
+            end)
+            button._dyniPreviewHooked = true
+        end
+    end
+end
+
+local function EnsureDropdownPreviewHooks()
+    if DropDownList1 and not DropDownList1._dyniPreviewHooks then
+        DropDownList1:HookScript("OnShow", HookSettingsDropdownButtons)
+        DropDownList1:HookScript("OnHide", function()
+            CancelLanguagePreview()
+            CancelFontPreview()
+        end)
+        DropDownList1._dyniPreviewHooks = true
+    end
+end
+
+local function ArmDropdownPreviewHooks()
+    EnsureDropdownPreviewHooks()
+    if C_Timer and type(C_Timer.After) == "function" then
+        C_Timer.After(0, function()
+            EnsureDropdownPreviewHooks()
+            HookSettingsDropdownButtons()
+        end)
+    end
+end
+
+CreateSettingsUI = function()
+    if Addon.settingsFrame then
+        return
+    end
+
+    local frame = CreateFrame("Frame", "DoYouNeedItSettingsFrame", UIParent, "BackdropTemplate")
+    frame:SetSize(360, 300)
+    frame:SetPoint("CENTER")
+    frame:SetFrameStrata("DIALOG")
+    frame:EnableMouse(true)
+    frame:SetMovable(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", frame.StartMoving)
+    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    frame:SetBackdrop({
+        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true,
+        tileSize = 16,
+        edgeSize = 16,
+        insets = { left = 4, right = 4, top = 4, bottom = 4 },
+    })
+
+    frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -16)
+    frame.title:SetText(L("Settings"))
+    RegisterFontString(frame.title, 16, "OUTLINE")
+    Addon.settingsTitle = frame.title
+
+    frame.close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+    frame.close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
+
+    local y = -54
     frame.autoCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
     frame.autoCheck:SetSize(24, 24)
-    frame.autoCheck:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -70)
+    frame.autoCheck:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, y)
     frame.autoCheck:SetScript("OnClick", function(check)
         SetAutoWhisper(check:GetChecked() == true)
     end)
     Addon.autoCheck = frame.autoCheck
 
     frame.autoCheckLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    frame.autoCheckLabel:SetPoint("LEFT", frame.autoCheck, "RIGHT", 2, 0)
-    frame.autoCheckLabel:SetText("Auto")
+    frame.autoCheckLabel:SetPoint("LEFT", frame.autoCheck, "RIGHT", 4, 0)
+    RegisterFontString(frame.autoCheckLabel, 12)
+    Addon.autoCheckLabel = frame.autoCheckLabel
 
+    y = y - 36
     frame.delayLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    frame.delayLabel:SetPoint("LEFT", frame.autoCheckLabel, "RIGHT", 14, 0)
-    frame.delayLabel:SetText("Delay")
+    frame.delayLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, y)
+    RegisterFontString(frame.delayLabel, 12)
+    Addon.delayLabel = frame.delayLabel
 
     frame.delaySlider = CreateFrame("Slider", nil, frame, "OptionsSliderTemplate")
-    frame.delaySlider:SetPoint("LEFT", frame.delayLabel, "RIGHT", 10, 0)
+    frame.delaySlider:SetPoint("LEFT", frame.delayLabel, "RIGHT", 24, -2)
     frame.delaySlider:SetSize(170, 18)
     frame.delaySlider:SetMinMaxValues(3, 30)
     frame.delaySlider:SetValueStep(1)
@@ -1474,26 +1896,124 @@ CreateUI = function()
     Addon.delaySlider = frame.delaySlider
 
     frame.delayValue = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    frame.delayValue:SetPoint("LEFT", frame.delaySlider, "RIGHT", 10, 0)
-    frame.delayValue:SetWidth(36)
+    frame.delayValue:SetPoint("LEFT", frame.delaySlider, "RIGHT", 12, 0)
+    frame.delayValue:SetWidth(40)
     frame.delayValue:SetJustifyH("LEFT")
+    RegisterFontString(frame.delayValue, 12)
     Addon.delayValue = frame.delayValue
 
-    frame.close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    frame.close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
+    y = y - 42
+    frame.languageLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    frame.languageLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, y)
+    RegisterFontString(frame.languageLabel, 12)
+    Addon.languageLabel = frame.languageLabel
 
-    frame.emptyText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisable")
-    frame.emptyText:SetPoint("CENTER", frame, "CENTER", 0, 0)
-    frame.emptyText:SetText("No tradeable gear drops in this view.")
-    Addon.emptyText = frame.emptyText
-
-    for index = 1, MAX_VISIBLE_ROWS do
-        Addon.rowFrames[index] = CreateRow(frame, index)
+    frame.languageDropdown = CreateFrame("Frame", "DoYouNeedItLanguageDropdown", frame, "UIDropDownMenuTemplate")
+    frame.languageDropdown:SetPoint("LEFT", frame.languageLabel, "RIGHT", 20, -4)
+    UIDropDownMenu_SetWidth(frame.languageDropdown, 150)
+    UIDropDownMenu_JustifyText(frame.languageDropdown, "CENTER")
+    UIDropDownMenu_Initialize(frame.languageDropdown, function()
+        local current = Addon.state.settings.forceLocale
+        local options = Core.GetLanguageOptions()
+        for index = 1, #options do
+            local option = options[index]
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = LanguageDisplayLabel(option)
+            info.value = option.value
+            info.checked = current == option.value
+            info.func = function()
+                SetForceLocale(option.value)
+                CloseDropDownMenus()
+            end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+    Addon.languageDropdown = frame.languageDropdown
+    local languageButton = _G["DoYouNeedItLanguageDropdownButton"] or frame.languageDropdown.Button
+    if languageButton then
+        languageButton:HookScript("OnClick", ArmDropdownPreviewHooks)
     end
 
-    Addon.frame = frame
+    y = y - 42
+    frame.fontLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    frame.fontLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, y)
+    RegisterFontString(frame.fontLabel, 12)
+    Addon.fontLabel = frame.fontLabel
+
+    frame.fontDropdown = CreateFrame("Frame", "DoYouNeedItFontDropdown", frame, "UIDropDownMenuTemplate")
+    frame.fontDropdown:SetPoint("LEFT", frame.fontLabel, "RIGHT", 44, -4)
+    UIDropDownMenu_SetWidth(frame.fontDropdown, 150)
+    UIDropDownMenu_JustifyText(frame.fontDropdown, "CENTER")
+    UIDropDownMenu_Initialize(frame.fontDropdown, function()
+        local fonts = BuildFontsList()
+        local current = Addon.state.settings.font
+        for index = 1, #fonts do
+            local font = fonts[index]
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = font.name
+            info.value = font.path
+            info.checked = Core.SameFontPath(font.path, current)
+            info.func = function()
+                SetFontPath(font.path)
+                CloseDropDownMenus()
+            end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+    Addon.fontDropdown = frame.fontDropdown
+    local fontButton = _G["DoYouNeedItFontDropdownButton"] or frame.fontDropdown.Button
+    if fontButton then
+        fontButton:HookScript("OnClick", ArmDropdownPreviewHooks)
+    end
+
+    y = y - 42
+    frame.fontSizeLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    frame.fontSizeLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, y)
+    RegisterFontString(frame.fontSizeLabel, 12)
+    Addon.fontSizeLabel = frame.fontSizeLabel
+
+    frame.fontSizeSlider = CreateFrame("Slider", nil, frame, "OptionsSliderTemplate")
+    frame.fontSizeSlider:SetPoint("LEFT", frame.fontSizeLabel, "RIGHT", 26, -2)
+    frame.fontSizeSlider:SetSize(170, 18)
+    frame.fontSizeSlider:SetMinMaxValues(8, 24)
+    frame.fontSizeSlider:SetValueStep(1)
+    if frame.fontSizeSlider.SetObeyStepOnDrag then
+        frame.fontSizeSlider:SetObeyStepOnDrag(true)
+    end
+    frame.fontSizeSlider:SetScript("OnValueChanged", function(_, value)
+        if Addon.updatingControls then
+            return
+        end
+        SetFontSize(math.floor((tonumber(value) or 12) + 0.5))
+    end)
+    Addon.fontSizeSlider = frame.fontSizeSlider
+
+    frame.fontSizeValue = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    frame.fontSizeValue:SetPoint("LEFT", frame.fontSizeSlider, "RIGHT", 12, 0)
+    frame.fontSizeValue:SetWidth(40)
+    frame.fontSizeValue:SetJustifyH("LEFT")
+    RegisterFontString(frame.fontSizeValue, 12)
+    Addon.fontSizeValue = frame.fontSizeValue
+
+    frame.fontWarning = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    frame.fontWarning:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, -248)
+    frame.fontWarning:SetWidth(316)
+    frame.fontWarning:SetJustifyH("LEFT")
+    frame.fontWarning:SetTextColor(1, 0.6, 0.2)
+    RegisterFontString(frame.fontWarning, 11)
+    Addon.fontWarning = frame.fontWarning
+
+    Addon.settingsFrame = frame
     frame:Hide()
-    RefreshRows()
+    EnsureDropdownPreviewHooks()
+    RefreshSettingsControls()
+    ApplyCurrentFont()
+end
+
+OpenSettings = function()
+    CreateSettingsUI()
+    Addon.settingsFrame:Show()
+    RefreshSettingsControls()
 end
 
 local function CancelAllPendingAuto()
@@ -1512,6 +2032,7 @@ SetAutoWhisper = function(enabled)
     end
     SaveDB()
     RefreshRows()
+    RefreshSettingsControls()
 end
 
 SetDelay = function(value, quiet)
@@ -1520,6 +2041,7 @@ SetDelay = function(value, quiet)
     Addon.state.settings = Core.NormalizeSettings(Addon.state.settings)
     SaveDB()
     RefreshRows()
+    RefreshSettingsControls()
     if not quiet and Addon.state.settings.autoDelay ~= tonumber(value) then
         Print("delay must be between " .. Addon.state.settings.minDelay .. " and " .. Addon.state.settings.maxDelay .. " seconds")
     end
@@ -1564,6 +2086,8 @@ local function HandleSlash(message)
         CycleHistoryView()
         CreateUI()
         Addon.frame:Show()
+    elseif command == "settings" then
+        OpenSettings()
     elseif command == "test" then
         CreateUI()
         AddTestRow()
@@ -1608,16 +2132,22 @@ local function HandleSlash(message)
             .. ", debug=" .. tostring(Addon.state.settings.debug)
             .. ", diagnostics=" .. tostring(#(Addon.diagnostics or {}))
             .. ", build=" .. tostring(Core.VERSION)
-            .. ", layout=540x330")
+            .. ", locale=" .. tostring(Core.ResolveActiveLocale(Addon.state.settings.forceLocale, ClientLocale()))
+            .. ", font=" .. tostring(FindFontName(Addon.state.settings.font))
+            .. ", layout=540x300")
     else
-        Print("commands: /dyni, /dyni test, /dyni scan, /dyni auto on|off, /dyni delay <seconds>, /dyni clear, /dyni history, /dyni debug on|off, /dyni diag, /dyni status")
+        Print("commands: /dyni, /dyni settings, /dyni test, /dyni scan, /dyni auto on|off, /dyni delay <seconds>, /dyni clear, /dyni history, /dyni debug on|off, /dyni diag, /dyni status")
     end
 end
 
 local function Initialize()
     DoYouNeedItDB = DoYouNeedItDB or {}
     local settings = Core.NormalizeSettings(DoYouNeedItDB.settings or {})
+    if type(DoYouNeedItDB.settings) ~= "table" or type(DoYouNeedItDB.settings.font) ~= "string" or DoYouNeedItDB.settings.font == "" then
+        settings.font = Core.LocaleAwareDefaultFont(STANDARD_TEXT_FONT)
+    end
     Addon.state = Core.CreateState(settings)
+    local fontChanged = MaybeAutoSwitchFont()
     Addon.state.history = Core.SnapshotHistoryForSave(DoYouNeedItDB.history, Addon.state.settings.maxHistoryGroups)
     Addon.state.sessionRows = Core.NormalizeSavedRows(DoYouNeedItDB.sessionRows, Addon.state.settings.maxSessionRows)
     Addon.state.sessionAllRows = Core.NormalizeSavedRows(DoYouNeedItDB.sessionAllRows, Addon.state.settings.maxSessionRows)
@@ -1636,9 +2166,13 @@ local function Initialize()
     while #Addon.state.history > Addon.state.settings.maxHistoryGroups do
         table.remove(Addon.state.history)
     end
+    if fontChanged then
+        SaveDB()
+    end
     Addon.currentInstanceName = SafeInstanceName()
     BuildRoster()
     CreateUI()
+    ApplyCurrentFont()
 
     SLASH_DOYOUNEEDIT1 = "/dyni"
     SlashCmdList.DOYOUNEEDIT = HandleSlash

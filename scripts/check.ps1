@@ -6,7 +6,12 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "lua5.1 tests\run.lua failed with exit code $LASTEXITCODE"
     }
-    & luac5.1 -p DoYouNeedIt_Core.lua DoYouNeedIt.lua
+    & luac5.1 -p `
+        libs\LibStub\LibStub.lua `
+        libs\CallbackHandler-1.0\CallbackHandler-1.0.lua `
+        libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua `
+        DoYouNeedIt_Core.lua `
+        DoYouNeedIt.lua
     if ($LASTEXITCODE -ne 0) {
         throw "luac5.1 syntax check failed with exit code $LASTEXITCODE"
     }

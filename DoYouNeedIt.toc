@@ -2,8 +2,11 @@
 ## Title: Do You Need It?
 ## Notes: Shows likely-tradeable gear drops and helps ask group members if they need them.
 ## Author: Antrakt92
-## Version: 0.1.17
+## Version: 0.1.18
 ## SavedVariables: DoYouNeedItDB
 
+libs\LibStub\LibStub.lua
+libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
 DoYouNeedIt_Core.lua
 DoYouNeedIt.lua

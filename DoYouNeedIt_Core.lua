@@ -1,6 +1,164 @@
 local Core = {}
 
-Core.VERSION = "0.1.17"
+Core.VERSION = "0.1.18"
+
+local GLYPH_LATIN = "LATIN"
+local GLYPH_CYR = "CYR"
+local GLYPH_HANGUL = "HANGUL"
+local GLYPH_HANS = "HANS"
+local GLYPH_HANT = "HANT"
+
+local DEFAULT_FONT = "Fonts\\FRIZQT__.TTF"
+
+local LANGUAGE_OPTIONS = {
+    { value = "auto", label = nil },
+    { value = "enUS", label = "English" },
+    { value = "deDE", label = "Deutsch" },
+    { value = "esES", label = "Español (España)", compactLabel = "Español ES" },
+    { value = "esMX", label = "Español (México)", compactLabel = "Español MX" },
+    { value = "frFR", label = "Français" },
+    { value = "itIT", label = "Italiano" },
+    { value = "ptBR", label = "Português (Brasil)" },
+    { value = "koKR", label = "한국어 (Korean)", compactLabel = "한국어 / Korean" },
+    { value = "ruRU", label = "Русский (Russian)" },
+    { value = "zhCN", label = "中文 简体 (Simplified)", compactLabel = "中文 / Simpl." },
+    { value = "zhTW", label = "中文 繁體 (Traditional)", compactLabel = "中文 / Trad." },
+}
+
+local LOCALE_GLYPH_REQ = {
+    enUS = GLYPH_LATIN, deDE = GLYPH_LATIN, esES = GLYPH_LATIN, esMX = GLYPH_LATIN,
+    frFR = GLYPH_LATIN, itIT = GLYPH_LATIN, ptBR = GLYPH_LATIN,
+    ruRU = GLYPH_CYR, koKR = GLYPH_HANGUL, zhCN = GLYPH_HANS, zhTW = GLYPH_HANT,
+}
+
+local FONT_GLYPH_SUPPORT = {}
+local function addFontGlyphSupport(path, glyphs)
+    FONT_GLYPH_SUPPORT[(path:gsub("/", "\\"):lower())] = glyphs
+end
+
+addFontGlyphSupport("Fonts\\2002.ttf", { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANGUL })
+addFontGlyphSupport("Fonts\\2002B.ttf", { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANGUL })
+addFontGlyphSupport("Fonts\\ARHei.TTF", { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT })
+addFontGlyphSupport("Fonts\\ARIALN.TTF", { GLYPH_LATIN, GLYPH_CYR })
+addFontGlyphSupport("Fonts\\ARKai_C.ttf", { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT })
+addFontGlyphSupport("Fonts\\ARKai_T.ttf", { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT })
+addFontGlyphSupport("Fonts\\bHEI00M.ttf", { GLYPH_HANT })
+addFontGlyphSupport("Fonts\\bHEI01B.ttf", { GLYPH_HANT })
+addFontGlyphSupport("Fonts\\bKAI00M.ttf", { GLYPH_HANT })
+addFontGlyphSupport("Fonts\\bLEI00D.ttf", { GLYPH_HANT })
+addFontGlyphSupport("Fonts\\FRIZQT___CYR.TTF", { GLYPH_CYR })
+addFontGlyphSupport("Fonts\\K_Damage.TTF", { GLYPH_CYR, GLYPH_HANGUL })
+addFontGlyphSupport("Fonts\\K_Pagetext.TTF", { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANGUL })
+addFontGlyphSupport("Fonts\\MORPHEUS.TTF", { GLYPH_LATIN })
+addFontGlyphSupport("Fonts\\MORPHEUS_CYR.TTF", { GLYPH_LATIN, GLYPH_CYR })
+addFontGlyphSupport("Fonts\\NIM_____.ttf", { GLYPH_LATIN, GLYPH_CYR })
+addFontGlyphSupport("Fonts\\SKURRI.TTF", { GLYPH_LATIN })
+addFontGlyphSupport("Fonts\\SKURRI_CYR.TTF", { GLYPH_LATIN, GLYPH_CYR })
+
+local FONT_GLYPH_PATTERNS = {
+    { pattern = "noto.*cjk", glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT, GLYPH_HANGUL } },
+    { pattern = "sourcehan", glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT, GLYPH_HANGUL } },
+    { pattern = "wenquanyi", glyphs = { GLYPH_LATIN, GLYPH_HANS, GLYPH_HANT } },
+    { pattern = "wqy", glyphs = { GLYPH_LATIN, GLYPH_HANS, GLYPH_HANT } },
+    { pattern = "pingfang", glyphs = { GLYPH_LATIN, GLYPH_HANS, GLYPH_HANT } },
+    { pattern = "yahei", glyphs = { GLYPH_LATIN, GLYPH_HANS } },
+    { pattern = "msyh", glyphs = { GLYPH_LATIN, GLYPH_HANS } },
+    { pattern = "msjh", glyphs = { GLYPH_LATIN, GLYPH_HANT } },
+    { pattern = "simsun", glyphs = { GLYPH_LATIN, GLYPH_HANS } },
+    { pattern = "simhei", glyphs = { GLYPH_LATIN, GLYPH_HANS } },
+    { pattern = "mingliu", glyphs = { GLYPH_LATIN, GLYPH_HANT } },
+    { pattern = "applesdgothicneo", glyphs = { GLYPH_LATIN, GLYPH_HANGUL } },
+    { pattern = "malgun.*gothic", glyphs = { GLYPH_LATIN, GLYPH_HANGUL } },
+    { pattern = "nanum", glyphs = { GLYPH_LATIN, GLYPH_HANGUL } },
+}
+
+local BLIZZARD_SHIPPED_FONTS = {
+    { path = "Fonts\\FRIZQT__.TTF", name = "Friz Quadrata TT" },
+    { path = "Fonts\\ARIALN.TTF", name = "Arial Narrow" },
+    { path = "Fonts\\SKURRI.TTF", name = "Skurri" },
+    { path = "Fonts\\MORPHEUS.TTF", name = "Morpheus" },
+    { path = "Fonts\\ARKai_T.ttf", name = "Chinese (Simplified)", locale = "zhCN" },
+    { path = "Fonts\\bHEI00M.ttf", name = "Chinese (Traditional)", locale = "zhTW" },
+    { path = "Fonts\\2002.ttf", name = "Korean", locale = "koKR" },
+}
+
+local LABELS_BY_LOCALE = {
+    enUS = {
+        ["Do You Need It?"] = "Do You Need It?",
+        ["Settings"] = "Settings",
+        ["Askable"] = "Askable",
+        ["All Gear"] = "All Gear",
+        ["Current"] = "Current",
+        ["This Session"] = "This Session",
+        ["History"] = "History",
+        ["Auto whisper"] = "Auto whisper",
+        ["Delay"] = "Delay",
+        ["Language:"] = "Language:",
+        ["Font:"] = "Font:",
+        ["Font Size:"] = "Font Size:",
+        ["Auto (current: %s)"] = "Auto (current: %s)",
+        ["No askable gear drops in this view."] = "No askable gear drops in this view.",
+        ["No gear drops in this view."] = "No gear drops in this view.",
+        ["Ask"] = "Ask",
+        ["Sent"] = "Sent",
+        ["Auto: off"] = "Auto: off",
+        ["Auto: %ds"] = "Auto: %ds",
+        ["candidate"] = "candidate",
+        ["test row"] = "test row",
+        ["bind_on_pickup"] = "bind on pickup",
+        ["player_cannot_equip"] = "cannot equip",
+        ["self_loot"] = "own loot",
+        ["not_tradeable"] = "not tradeable",
+        ["Font may not render %s glyphs."] = "Font may not render %s glyphs.",
+    },
+    ruRU = {
+        ["Do You Need It?"] = "Do You Need It?",
+        ["Settings"] = "Настройки",
+        ["Askable"] = "Можно спросить",
+        ["All Gear"] = "Весь шмот",
+        ["Current"] = "Текущий",
+        ["This Session"] = "Эта сессия",
+        ["History"] = "История",
+        ["Auto whisper"] = "Авто-виспер",
+        ["Delay"] = "Задержка",
+        ["Language:"] = "Язык:",
+        ["Font:"] = "Шрифт:",
+        ["Font Size:"] = "Размер шрифта:",
+        ["Auto (current: %s)"] = "Авто (сейчас: %s)",
+        ["No askable gear drops in this view."] = "Нет шмота, о котором стоит спрашивать.",
+        ["No gear drops in this view."] = "Нет шмота в этом виде.",
+        ["Ask"] = "Ask",
+        ["Sent"] = "Отпр.",
+        ["Auto: off"] = "Авто: выкл",
+        ["Auto: %ds"] = "Авто: %dс",
+        ["candidate"] = "кандидат",
+        ["test row"] = "тест",
+        ["bind_on_pickup"] = "персональный",
+        ["player_cannot_equip"] = "не надеть",
+        ["self_loot"] = "свой лут",
+        ["not_tradeable"] = "не передать",
+        ["Font may not render %s glyphs."] = "Шрифт может не отображать символы %s.",
+    },
+}
+
+local simpleLocaleLabels = {
+    deDE = { ["Settings"] = "Einstellungen", ["Language:"] = "Sprache:", ["Font:"] = "Schrift:", ["Font Size:"] = "Schriftgröße:", ["Delay"] = "Verzögerung", ["Auto whisper"] = "Auto-Flüstern" },
+    esES = { ["Settings"] = "Opciones", ["Language:"] = "Idioma:", ["Font:"] = "Fuente:", ["Font Size:"] = "Tamaño:", ["Delay"] = "Retraso", ["Auto whisper"] = "Susurro auto" },
+    esMX = { ["Settings"] = "Opciones", ["Language:"] = "Idioma:", ["Font:"] = "Fuente:", ["Font Size:"] = "Tamaño:", ["Delay"] = "Retraso", ["Auto whisper"] = "Susurro auto" },
+    frFR = { ["Settings"] = "Options", ["Language:"] = "Langue :", ["Font:"] = "Police :", ["Font Size:"] = "Taille :", ["Delay"] = "Délai", ["Auto whisper"] = "Chuchotement auto" },
+    itIT = { ["Settings"] = "Impostazioni", ["Language:"] = "Lingua:", ["Font:"] = "Font:", ["Font Size:"] = "Dimensione:", ["Delay"] = "Ritardo", ["Auto whisper"] = "Sussurro auto" },
+    ptBR = { ["Settings"] = "Configurações", ["Language:"] = "Idioma:", ["Font:"] = "Fonte:", ["Font Size:"] = "Tamanho:", ["Delay"] = "Atraso", ["Auto whisper"] = "Sussurro auto" },
+    koKR = { ["Settings"] = "설정", ["Language:"] = "언어:", ["Font:"] = "글꼴:", ["Font Size:"] = "글꼴 크기:", ["Delay"] = "지연", ["Auto whisper"] = "자동 귓속말" },
+    zhCN = { ["Settings"] = "设置", ["Language:"] = "语言:", ["Font:"] = "字体:", ["Font Size:"] = "字体大小:", ["Delay"] = "延迟", ["Auto whisper"] = "自动密语" },
+    zhTW = { ["Settings"] = "設定", ["Language:"] = "語言:", ["Font:"] = "字型:", ["Font Size:"] = "字型大小:", ["Delay"] = "延遲", ["Auto whisper"] = "自動密語" },
+}
+
+for locale, labels in pairs(simpleLocaleLabels) do
+    LABELS_BY_LOCALE[locale] = {}
+    for key, value in pairs(LABELS_BY_LOCALE.enUS) do
+        LABELS_BY_LOCALE[locale][key] = labels[key] or value
+    end
+end
 
 local DEFAULTS = {
     autoWhisper = false,
@@ -11,6 +169,11 @@ local DEFAULTS = {
     maxHistoryGroups = 10,
     maxSessionRows = 50,
     minQuality = 2,
+    forceLocale = "auto",
+    font = DEFAULT_FONT,
+    fontSize = 12,
+    minFontSize = 8,
+    maxFontSize = 24,
 }
 
 local VALID_EQUIP_LOCS = {
@@ -317,6 +480,148 @@ local function isVisibleQuality(quality, minQuality)
     return number ~= nil and number >= minQuality
 end
 
+function Core.FontPathKey(fontPath)
+    if type(fontPath) ~= "string" then
+        return nil
+    end
+    return (fontPath:gsub("/", "\\"):lower())
+end
+
+function Core.SameFontPath(left, right)
+    local leftKey = Core.FontPathKey(left)
+    local rightKey = Core.FontPathKey(right)
+    return leftKey ~= nil and rightKey ~= nil and leftKey == rightKey
+end
+
+function Core.IsBlizzardFontPath(fontPath)
+    local key = Core.FontPathKey(fontPath)
+    return key ~= nil and key:sub(1, 6) == "fonts\\"
+end
+
+function Core.LocaleAwareDefaultFont(standardTextFont)
+    if Core.IsBlizzardFontPath(standardTextFont) then
+        return standardTextFont
+    end
+    return DEFAULT_FONT
+end
+
+function Core.GetDefaultFont()
+    return DEFAULT_FONT
+end
+
+function Core.GetLanguageOption(value)
+    for index = 1, #LANGUAGE_OPTIONS do
+        if LANGUAGE_OPTIONS[index].value == value then
+            return LANGUAGE_OPTIONS[index]
+        end
+    end
+    return nil
+end
+
+function Core.GetLanguageOptions()
+    return copyList(LANGUAGE_OPTIONS)
+end
+
+function Core.NormalizeForceLocale(value)
+    if Core.GetLanguageOption(value) then
+        return value
+    end
+    return "auto"
+end
+
+function Core.ResolveActiveLocale(forceLocale, clientLocale)
+    local force = Core.NormalizeForceLocale(forceLocale)
+    local client = Core.GetLanguageOption(clientLocale) and clientLocale or "enUS"
+    if force == "auto" then
+        return client
+    end
+    return force
+end
+
+function Core.GetLocaleGlyphRequirement(locale)
+    return LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN
+end
+
+function Core.GetLocaleLabel(key, locale)
+    local labels = LABELS_BY_LOCALE[locale] or LABELS_BY_LOCALE.enUS
+    return labels[key] or LABELS_BY_LOCALE.enUS[key] or key
+end
+
+function Core.GetBlizzardFonts(clientLocale)
+    local fonts = {}
+    for index = 1, #BLIZZARD_SHIPPED_FONTS do
+        local font = BLIZZARD_SHIPPED_FONTS[index]
+        if font.locale == nil or font.locale == clientLocale then
+            fonts[#fonts + 1] = {
+                name = font.name,
+                path = font.path,
+            }
+        end
+    end
+    return fonts
+end
+
+function Core.FontSupports(fontPath, glyph, clientLocale)
+    if fontPath == nil then
+        return glyph == GLYPH_LATIN
+    end
+
+    local key = Core.FontPathKey(fontPath)
+    if not key then
+        return glyph == GLYPH_LATIN
+    end
+
+    local frizKey = Core.FontPathKey(DEFAULT_FONT)
+    local entry
+    if key == frizKey then
+        entry = clientLocale == "ruRU" and { GLYPH_LATIN, GLYPH_CYR } or { GLYPH_LATIN }
+    else
+        entry = FONT_GLYPH_SUPPORT[key]
+    end
+    if not entry then
+        local lowerName = (fontPath:match("[^\\/]+$") or fontPath):lower()
+        for index = 1, #FONT_GLYPH_PATTERNS do
+            local pattern = FONT_GLYPH_PATTERNS[index]
+            if lowerName:find(pattern.pattern) then
+                entry = pattern.glyphs
+                FONT_GLYPH_SUPPORT[key] = entry
+                break
+            end
+        end
+    end
+    if not entry then
+        return glyph == GLYPH_LATIN
+    end
+    for index = 1, #entry do
+        if entry[index] == glyph then
+            return true
+        end
+    end
+    return false
+end
+
+function Core.FindCompatibleFont(currentFont, glyph, fonts, clientLocale)
+    if Core.FontSupports(currentFont, glyph, clientLocale) then
+        return currentFont
+    end
+
+    fonts = type(fonts) == "table" and fonts or {}
+    for index = 1, #fonts do
+        local font = fonts[index]
+        if type(font) == "table" and Core.FontSupports(font.path, glyph, clientLocale) then
+            return font.path
+        end
+    end
+
+    local blizzardFonts = Core.GetBlizzardFonts(clientLocale)
+    for index = 1, #blizzardFonts do
+        if Core.FontSupports(blizzardFonts[index].path, glyph, clientLocale) then
+            return blizzardFonts[index].path
+        end
+    end
+    return currentFont or DEFAULT_FONT
+end
+
 function Core.NormalizeSettings(saved)
     saved = type(saved) == "table" and saved or {}
 
@@ -335,6 +640,10 @@ function Core.NormalizeSettings(saved)
     settings.maxHistoryGroups = math.max(1, math.floor(asNumber(saved.maxHistoryGroups, DEFAULTS.maxHistoryGroups)))
     settings.maxSessionRows = math.max(1, math.floor(asNumber(saved.maxSessionRows, DEFAULTS.maxSessionRows)))
     settings.minQuality = math.max(0, math.floor(asNumber(saved.minQuality, DEFAULTS.minQuality)))
+    settings.forceLocale = Core.NormalizeForceLocale(saved.forceLocale)
+    settings.font = type(saved.font) == "string" and saved.font ~= "" and saved.font or DEFAULTS.font
+    settings.fontSize = math.floor(clamp(asNumber(saved.fontSize, DEFAULTS.fontSize), DEFAULTS.minFontSize, DEFAULTS.maxFontSize) + 0.5)
+    settings.fontBeforeAutoSwitch = type(saved.fontBeforeAutoSwitch) == "string" and saved.fontBeforeAutoSwitch ~= "" and saved.fontBeforeAutoSwitch or nil
     return settings
 end
 
