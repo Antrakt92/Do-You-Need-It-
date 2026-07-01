@@ -77,6 +77,8 @@ local FONT_GLYPH_PATTERNS = {
     { pattern = "nanum", glyphs = { GLYPH_LATIN, GLYPH_HANGUL } },
 }
 
+local CYRILLIC_UTF8_LEAD_PATTERN = "[\208\209]"
+
 local BLIZZARD_SHIPPED_FONTS = {
     { path = "Fonts\\FRIZQT__.TTF", name = "Friz Quadrata TT" },
     { path = "Fonts\\ARIALN.TTF", name = "Arial Narrow" },
@@ -845,6 +847,18 @@ end
 
 function Core.GetLocaleGlyphRequirement(locale)
     return LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN
+end
+
+function Core.GetTextGlyphRequirement(text)
+    if type(text) ~= "string" or text == "" then
+        return nil
+    end
+    -- WHY: WoW Lua is byte-based; this only detects UTF-8 Cyrillic lead bytes
+    -- and does not slice or transform the user-visible text.
+    if text:find(CYRILLIC_UTF8_LEAD_PATTERN) then
+        return GLYPH_CYR
+    end
+    return nil
 end
 
 function Core.GetLocaleLabel(key, locale)

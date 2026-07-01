@@ -122,6 +122,44 @@ local function testMainWindowLayoutBoundsLongText()
     assertTruthy(row.status:GetWidth() <= 420, "status text leaves room for the Ask button column")
 end
 
+local function testCyrillicLootTextUsesGlyphCapableFont()
+    local h = Harness.new({
+        db = {
+            settings = {
+                font = "Fonts\\FRIZQT__.TTF",
+            },
+        },
+    })
+    h:setUnit("party1", {
+        name = "Игрок",
+        realm = "Ravencrest",
+        guid = "CyrillicGUID",
+        classToken = "PALADIN",
+    })
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    local item = h:addItem(22001, {
+        name = "Eye of the Drowning Void",
+        equipLoc = "INVTYPE_TRINKET",
+        classID = 4,
+        subclassID = 0,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fireLoot("Игрок", item)
+
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "cyrillic looter row is visible")
+    assertEqual(rows[1].looter.font, "Fonts\\ARIALN.TTF", "cyrillic looter name falls back to Arial Narrow")
+    assertEqual(rows[1].drop.font, "Fonts\\FRIZQT__.TTF", "latin item text keeps the selected Friz font")
+    assertEqual(h.env.DoYouNeedItFrame.title.font, "Fonts\\FRIZQT__.TTF", "main title keeps the selected Friz font")
+end
+
 local function testInstanceChangeCompletesCurrentGroup()
     local h = Harness.new()
     h:loadAddon()
@@ -577,6 +615,7 @@ testSlashTestRowsAndManualWhisper()
 testCustomWhisperTemplateIsUsedForManualAsk()
 testManualWhisperFailureLeavesRowRetryable()
 testMainWindowLayoutBoundsLongText()
+testCyrillicLootTextUsesGlyphCapableFont()
 testInstanceChangeCompletesCurrentGroup()
 testInstanceChangeHistoryTitleUsesActiveLocale()
 testDebugPersistenceIsOptIn()

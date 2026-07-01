@@ -279,7 +279,7 @@ local function L(key)
     return Core.GetLocaleLabel(key, ActiveLocale())
 end
 
-local function RegisterFontString(fontString, size, flags, stable)
+local function RegisterFontString(fontString, size, flags, stable, dynamic)
     if not fontString then
         return
     end
@@ -288,6 +288,7 @@ local function RegisterFontString(fontString, size, flags, stable)
         size = size,
         flags = flags,
         stable = stable == true,
+        dynamic = dynamic == true,
     }
     if ApplyCurrentFont then
         ApplyCurrentFont()
@@ -404,6 +405,8 @@ ApplyCurrentFont = function()
     local settings = Addon.state and Addon.state.settings or Core.NormalizeSettings({})
     local previewFont = Addon.previewFont or settings.font or Core.GetDefaultFont()
     local stableFont
+    local dynamicFonts
+    local dynamicFallbacks = {}
     local selectedSize = tonumber(settings.fontSize) or 12
     for index = 1, #Addon.fontStrings do
         local entry = Addon.fontStrings[index]
@@ -412,6 +415,18 @@ ApplyCurrentFont = function()
             if entry.stable then
                 stableFont = stableFont or StableSettingsFont()
                 font = stableFont
+            end
+            if entry.dynamic then
+                local text = type(entry.fontString.GetText) == "function" and SafeCall(entry.fontString.GetText, entry.fontString) or nil
+                local glyph = Core.GetTextGlyphRequirement(text)
+                if glyph then
+                    dynamicFonts = dynamicFonts or BuildFontsList(ActiveLocale())
+                    local cacheKey = tostring(font) .. "\001" .. glyph
+                    if dynamicFallbacks[cacheKey] == nil then
+                        dynamicFallbacks[cacheKey] = Core.FindCompatibleFont(font, glyph, dynamicFonts, ClientLocale()) or font
+                    end
+                    font = dynamicFallbacks[cacheKey]
+                end
             end
             SafeCall(entry.fontString.SetFont, entry.fontString, font, Core.ResolveFontSize(entry.size, selectedSize), entry.flags)
         end
@@ -1164,6 +1179,8 @@ local function RefreshRows()
             rowFrame:Hide()
         end
     end
+
+    ApplyCurrentFont()
 
     if #rows == 0 then
         Addon.emptyText:SetText(Addon.selectedTab == "all" and L("No gear drops in this view.") or L("No askable gear drops in this view."))
@@ -2036,14 +2053,14 @@ local function CreateRow(parent, index)
     row.looter:SetWidth(ROW_LOOTER_WIDTH)
     row.looter:SetJustifyH("LEFT")
     KeepOneLine(row.looter)
-    RegisterFontString(row.looter, 11)
+    RegisterFontString(row.looter, 11, nil, false, true)
 
     row.drop = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     row.drop:SetPoint("LEFT", row.looter, "RIGHT", 8, 0)
     row.drop:SetWidth(ROW_DROP_WIDTH)
     row.drop:SetJustifyH("LEFT")
     KeepOneLine(row.drop)
-    RegisterFontString(row.drop, 11)
+    RegisterFontString(row.drop, 11, nil, false, true)
 
     row.dropLink = CreateFrame("Button", nil, row)
     row.dropLink:SetPoint("LEFT", row.looter, "RIGHT", 6, 0)
@@ -2063,7 +2080,7 @@ local function CreateRow(parent, index)
     row.equipped:SetWidth(ROW_EQUIPPED_WIDTH)
     row.equipped:SetJustifyH("LEFT")
     KeepOneLine(row.equipped)
-    RegisterFontString(row.equipped, 11)
+    RegisterFontString(row.equipped, 11, nil, false, true)
 
     row.equippedLink = CreateFrame("Button", nil, row)
     row.equippedLink:SetPoint("LEFT", row.drop, "RIGHT", 8, 0)
@@ -2083,7 +2100,7 @@ local function CreateRow(parent, index)
     row.status:SetWidth(ROW_STATUS_WIDTH)
     row.status:SetJustifyH("LEFT")
     KeepOneLine(row.status)
-    RegisterFontString(row.status, 10)
+    RegisterFontString(row.status, 10, nil, false, true)
 
     row.whisper = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
     row.whisper:SetSize(48, 20)
