@@ -43,6 +43,20 @@ local function addWeapon(h, itemID, name)
     })
 end
 
+local function addUncachedWeapon(h, itemID, name)
+    return h:addItem(itemID, {
+        name = name,
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+        cacheLoaded = false,
+    })
+end
+
 local function testDifferentGuidLootInspectsAreSerialized()
     local h = newLoadedHarness()
     local first = addWeapon(h, 21001, "First Sword")
@@ -211,6 +225,25 @@ local function testStaleInspectRetryAfterClearDoesNotRequeueOldRow()
     assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 0, "stale retry does not repersist cleared all-gear rows")
 end
 
+local function testStaleItemLoadAfterClearDoesNotAddOldLoot()
+    local h = newLoadedHarness()
+    local item = addUncachedWeapon(h, 21018, "Slow Cache Sword")
+
+    h:fireLoot("Otherplayer", item)
+    assertEqual(#h:visibleRows(), 0, "uncached item waits for item metadata before adding rows")
+
+    h:slash("clear")
+    h:runTimers(0, 10)
+    h:runTimers(3, 10)
+
+    assertEqual(#h:visibleRows(), 0, "stale item-load callback after clear does not show old loot")
+    assertEqual(#h.env.DoYouNeedItDB.sessionRows, 0, "stale item-load callback after clear does not repersist askable rows")
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 0, "stale item-load callback after clear does not repersist all-gear rows")
+
+    h:fireLoot("Otherplayer", item)
+    assertEqual(#h:visibleRows(), 1, "fresh loot after item cache load still adds a row")
+end
+
 local function testQueuedInspectRejectsUnitGuidMismatchBeforeNotify()
     local h = newLoadedHarness()
     local first = addWeapon(h, 21012, "Queued First Sword")
@@ -343,6 +376,7 @@ testExpiredCachedFallbackIsIgnored()
 testRosterUpdateDoesNotReadReplacementUnitForActiveLootInspect()
 testClearCancelsInspectWorkAndUnblocksNewLoot()
 testStaleInspectRetryAfterClearDoesNotRequeueOldRow()
+testStaleItemLoadAfterClearDoesNotAddOldLoot()
 testQueuedInspectRejectsUnitGuidMismatchBeforeNotify()
 testSameGuidRosterMoveStillCompletes()
 testClearDropsCachedFallbackForFutureLoot()

@@ -788,6 +788,11 @@ function Harness.new(options)
             return itemID, itemType, itemSubType, equipLoc, icon, classID, subclassID
         end,
         GetItemInfo = function(itemLink)
+            local itemID = linkItemID(itemLink)
+            local info = self.items[itemID] or {}
+            if info.cacheLoaded == false then
+                return nil
+            end
             local _, _, _, _, _, _, _, name, link, quality, itemLevel, requiredLevel, itemTypeText,
                 itemSubTypeText, stackCount, equipLoc, itemIcon, sellPrice, classID, subclassID, bindType,
                 expansionID, setID, isCraftingReagent = self:itemInfo(itemLink)
@@ -807,7 +812,12 @@ function Harness.new(options)
         CreateFromItemID = function(itemID)
             return {
                 ContinueOnItemLoad = function(_, callback)
-                    env.C_Timer.After(0, callback)
+                    env.C_Timer.After(0, function()
+                        if self.items[itemID] then
+                            self.items[itemID].cacheLoaded = true
+                        end
+                        callback()
+                    end)
                 end,
             }
         end,
