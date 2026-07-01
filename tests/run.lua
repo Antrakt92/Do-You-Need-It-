@@ -101,6 +101,19 @@ local tradeWarningGear = {
 local tradeWarningAskable = Core.ClassifyTradeCandidate(tradeWarningGear, "Otherplayer", "Player")
 assertEqual(tradeWarningAskable.visible, true, "bind-on-pickup gear with trade warning is askable")
 
+local unknownEquipGear = {
+    link = "|cffa335ee|Hitem:19024:::::::::::::|h[Unknown Equip Chest]|h|r",
+    quality = 4,
+    classID = 4,
+    equipLoc = "INVTYPE_CHEST",
+    bindType = 2,
+}
+local unknownEquipAllGear = Core.ClassifyGearLoot(unknownEquipGear, "Otherplayer", Core.NormalizeSettings({}))
+assertEqual(unknownEquipAllGear.visible, true, "gear with unknown player usability stays visible in all gear")
+local unknownEquipAskable = Core.ClassifyTradeCandidate(unknownEquipGear, "Otherplayer", "Player")
+assertEqual(unknownEquipAskable.visible, false, "gear with unknown player usability is not askable")
+assertEqual(unknownEquipAskable.reason, "player_equip_unknown", "unknown player usability rejection is explicit")
+
 local unknownBindGear = {
     link = "|cffa335ee|Hitem:19023:::::::::::::|h[Unknown Bind Chest]|h|r",
     quality = 4,
@@ -148,6 +161,7 @@ local sameBaseDifferentRealm = Core.ClassifyTradeCandidate({
     classID = 2,
     equipLoc = "INVTYPE_WEAPON",
     bindType = 2,
+    playerCanEquip = true,
 }, "Player-OtherRealm", "Player-Ravencrest")
 assertEqual(sameBaseDifferentRealm.visible, true, "same short name on a different realm is not self loot")
 local sameBaseDifferentRealmWithShortPlayerName = Core.ClassifyTradeCandidate({
@@ -156,6 +170,7 @@ local sameBaseDifferentRealmWithShortPlayerName = Core.ClassifyTradeCandidate({
     classID = 2,
     equipLoc = "INVTYPE_WEAPON",
     bindType = 2,
+    playerCanEquip = true,
 }, "Player-OtherRealm", "Player")
 assertEqual(sameBaseDifferentRealmWithShortPlayerName.visible, true, "same short name on another realm is not self loot when player realm is unavailable")
 
@@ -195,6 +210,19 @@ end
 assertEqual(#state.history, 10, "history prunes to 10")
 assertEqual(state.history[1].title, "Dungeon - Boss 12 (1 drop)", "newest group first")
 assertEqual(state.history[10].title, "Dungeon - Boss 3 (1 drop)", "oldest retained group")
+local oversizedSavedHistory = {}
+for index = 12, 1, -1 do
+    oversizedSavedHistory[#oversizedSavedHistory + 1] = {
+        title = "Saved Boss " .. index,
+        rows = {
+            { id = "saved-row-" .. index },
+        },
+    }
+end
+local prunedSavedHistory = Core.SnapshotHistoryForSave(oversizedSavedHistory, 10)
+assertEqual(#prunedSavedHistory, 10, "history save snapshot prunes to limit")
+assertEqual(prunedSavedHistory[1].title, "Saved Boss 12", "history save snapshot keeps newest group")
+assertEqual(prunedSavedHistory[10].title, "Saved Boss 3", "history save snapshot drops oldest groups")
 
 local emptyState = Core.CreateState({ maxHistoryGroups = 10 })
 Core.CompleteCurrentGroup(emptyState, { title = "No Drops", endedAt = 1 })
@@ -268,6 +296,20 @@ assertEqual(
     "equipment cache rejects empty captures"
 )
 
+local rosterIndex = Core.CreateRosterIndex({
+    { unit = "player", fullName = "Player-Ravencrest", shortName = "Player" },
+    { unit = "party1", fullName = "Otherplayer-Ravencrest", shortName = "Otherplayer" },
+    { unit = "party2", fullName = "Alex-RealmA", shortName = "Alex" },
+    { unit = "party3", fullName = "Alex-RealmB", shortName = "Alex" },
+    { unit = "party4", fullName = "UNKNOWNOBJECT", shortName = "UNKNOWNOBJECT" },
+})
+assertEqual(Core.IsPlaceholderName("UNKNOWNOBJECT"), true, "placeholder identity is recognized")
+assertEqual(Core.ResolveRosterName("Otherplayer", rosterIndex, "Player-Ravencrest"), "Otherplayer-Ravencrest", "unambiguous short roster alias resolves")
+assertEqual(Core.GetRosterUnit(rosterIndex, "Otherplayer"), "party1", "roster unit lookup resolves through unambiguous short alias")
+assertEqual(Core.ResolveRosterName("Alex", rosterIndex, "Player-Ravencrest"), nil, "ambiguous short roster alias is rejected")
+assertEqual(Core.ResolveRosterName("Alex-RealmA", rosterIndex, "Player-Ravencrest"), "Alex-RealmA", "full cross-realm roster name resolves")
+assertEqual(Core.ResolveRosterName("UNKNOWNOBJECT", rosterIndex, "Player-Ravencrest"), nil, "placeholder roster name is rejected")
+
 local pendingRow = { id = "pending" }
 local otherPendingRow = { id = "other" }
 local pendingRows = {
@@ -279,6 +321,23 @@ assertEqual(pendingRows.inspectGuid[1], otherPendingRow, "pending inspect cleanu
 assertEqual(Core.RemovePendingRow(pendingRows, "inspectGuid", otherPendingRow), 1, "pending inspect cleanup removes the final row")
 assertEqual(pendingRows.inspectGuid, nil, "pending inspect cleanup drops empty guid buckets")
 assertEqual(Core.RemovePendingRow(pendingRows, "missingGuid", pendingRow), 0, "pending inspect cleanup tolerates missing buckets")
+local pendingItems = {}
+local pendingItemLink = "|cff0070dd|Hitem:500:::::::::::::|h[Pending Sword]|h|r"
+local bucket, created = Core.AddPendingItemWaiter(pendingItems, pendingItemLink, { looter = "One", generation = 1 })
+assertEqual(created, true, "first pending item waiter creates bucket")
+bucket.attempts = 2
+bucket.loadRequested = true
+local sameBucket, secondCreated = Core.AddPendingItemWaiter(pendingItems, pendingItemLink, { looter = "Two", generation = 1 })
+assertEqual(secondCreated, false, "second pending item waiter reuses bucket")
+assertEqual(sameBucket, bucket, "pending item waiters share one bucket per full item link")
+assertEqual(sameBucket.attempts, 2, "adding a waiter does not consume a retry attempt")
+assertEqual(#sameBucket.waiters, 2, "pending item bucket keeps every looter waiter")
+local staleDrain = Core.DrainPendingItemWaiters(pendingItems, pendingItemLink, 2)
+assertEqual(#staleDrain, 0, "stale pending item generation drains no waiters")
+assertEqual(pendingItems[pendingItemLink], bucket, "stale pending item generation preserves current bucket")
+local drainedWaiters = Core.DrainPendingItemWaiters(pendingItems, pendingItemLink, 1)
+assertEqual(#drainedWaiters, 2, "current pending item generation drains all waiters")
+assertEqual(pendingItems[pendingItemLink], nil, "draining pending item waiters clears bucket")
 
 local sessionState = Core.CreateState({ maxSessionRows = 3 })
 for index = 1, 5 do
@@ -322,14 +381,23 @@ local persistedRows = Core.SnapshotRowsForSave({
         statusText = "sent",
         manualWhispered = true,
     },
+    {
+        id = "sending",
+        looter = "Otherplayer",
+        itemLink = "|cff0070dd|Hitem:19021:::::::::::::|h[Test Ring]|h|r",
+        statusText = "sending",
+        whisperInFlight = true,
+    },
 }, 10)
-assertEqual(#persistedRows, 2, "save snapshot keeps persistable rows")
+assertEqual(#persistedRows, 3, "save snapshot keeps persistable rows")
 assertEqual(persistedRows[1].statusText, "candidate", "save snapshot clears stale pending auto status")
 assertEqual(persistedRows[1].equippedText, "Equipped: unknown", "save snapshot clears stale pending inspect status")
 assertEqual(persistedRows[1].pendingAutoWhisper, nil, "save snapshot drops pending auto flag")
 assertEqual(persistedRows[1].autoToken, nil, "save snapshot drops runtime auto token")
 assertEqual(persistedRows[1].runtimeOnly, nil, "save snapshot drops non-primitive runtime fields")
 assertEqual(persistedRows[2].manualWhispered, true, "save snapshot keeps sent whisper state")
+assertEqual(persistedRows[3].statusText, "candidate", "save snapshot clears transient whisper sending status")
+assertEqual(persistedRows[3].whisperInFlight, nil, "save snapshot drops transient whisper in-flight flag")
 local persistedHistory = Core.SnapshotHistoryForSave({
     {
         title = "Dungeon - Boss (1 drop)",
@@ -373,6 +441,27 @@ local blocked = Core.GetAutoWhisperDecision(
     { looter = "Otherplayer", itemLink = "|cff0070dd|Hitem:1:::::::::::::|h[Test]|h|r", unsafe = true }
 )
 assertEqual(blocked.shouldSchedule, false, "unsafe rows do not schedule auto whisper")
+local inFlightAuto = Core.GetAutoWhisperDecision(
+    Core.NormalizeSettings({ autoWhisper = true, autoDelay = 12 }),
+    { looter = "Otherplayer", itemLink = "|cff0070dd|Hitem:1:::::::::::::|h[Test]|h|r", whisperInFlight = true }
+)
+assertEqual(inFlightAuto.shouldSchedule, false, "in-flight whispers do not schedule another auto whisper")
+local askButton = Core.GetWhisperButtonState("askable", "current", { askable = true })
+assertEqual(askButton.visible, true, "current askable row shows Ask button")
+assertEqual(askButton.enabled, true, "current askable row enables Ask button")
+assertEqual(askButton.text, "Ask", "current askable row uses Ask text")
+local sentButton = Core.GetWhisperButtonState("askable", "current", { askable = true, manualWhispered = true })
+assertEqual(sentButton.visible, true, "sent current row keeps visible status button")
+assertEqual(sentButton.enabled, false, "sent current row disables whisper button")
+assertEqual(sentButton.text, "Sent", "sent current row uses Sent text")
+local sendingButton = Core.GetWhisperButtonState("askable", "current", { askable = true, whisperInFlight = true })
+assertEqual(sendingButton.visible, true, "in-flight current row keeps visible status button")
+assertEqual(sendingButton.enabled, false, "in-flight current row disables whisper button")
+assertEqual(sendingButton.text, "Sending", "in-flight current row uses Sending text")
+local sessionButton = Core.GetWhisperButtonState("askable", "session", { askable = true })
+assertEqual(sessionButton.visible, false, "session rows do not show Ask button")
+assertEqual(Core.GetLocaleLabel("sent", "ruRU"), "отправлено", "manual whisper success status is localized")
+assertEqual(Core.GetLocaleLabel("auto sent", "ruRU"), "авто отправлено", "auto whisper success status is localized")
 assertEqual(Core.ShouldAutoShowWindow({ itemLink = "|cff0070dd|Hitem:1:::::::::::::|h[Test]|h|r" }), true, "new loot rows auto-show the window")
 assertEqual(Core.ShouldAutoShowWindow(nil), false, "missing rows do not auto-show the window")
 
@@ -405,6 +494,25 @@ assertEqual(
     Core.FindRosterNameInMessage(sameBaseRealmMessage, sameBaseRealmRoster, "Player"),
     "Player-OtherRealm",
     "loot parser keeps same-base cross-realm looters when player realm is unavailable"
+)
+local indexedPlayerLinkMessage = "|Hplayer:Otherplayer-Ravencrest:1|h[Otherplayer]|h receives loot: |cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r."
+assertEqual(
+    Core.FindRosterNameInMessage(indexedPlayerLinkMessage, rosterIndex, "Player-Ravencrest"),
+    "Otherplayer-Ravencrest",
+    "loot parser resolves full names through roster identity index"
+)
+local substringRoster = Core.CreateRosterIndex({
+    { unit = "party1", fullName = "Ann-Realm", shortName = "Ann" },
+})
+assertEqual(
+    Core.FindRosterNameInMessage("Annie receives loot: |cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r.", substringRoster, "Player"),
+    nil,
+    "loot parser does not match roster names inside longer player names"
+)
+assertEqual(
+    Core.FindRosterNameInMessage("Someone receives loot: |cff0070dd|Hitem:19019:::::::::::::|h[Anniversary Sword]|h|r.", substringRoster, "Player"),
+    nil,
+    "loot parser does not match roster names inside item names"
 )
 
 local lootPatterns = Core.CreateLootMessagePatterns({

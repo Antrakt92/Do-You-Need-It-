@@ -14,7 +14,8 @@ local Addon = {
     selectedHistoryIndex = nil,
     selectedView = "current",
     selectedTab = "askable",
-    itemRetryCount = {},
+    pendingItems = {},
+    lootGeneration = 0,
     fontStrings = {},
 }
 
@@ -231,7 +232,7 @@ end
 
 local function SafePlayerName()
     local fullName, shortName = SafeUnitName("player")
-    return fullName or shortName or UnitName("player")
+    return fullName or shortName
 end
 
 local function SafeInstanceName()
@@ -402,15 +403,16 @@ local function RecordDiagnostic(stage, fields)
 end
 
 local function BuildRoster()
-    Addon.roster = {}
+    local entries = {}
 
     local function addUnit(unit)
         local fullName, shortName = SafeUnitName(unit)
-        if fullName then
-            Addon.roster[fullName] = unit
-        end
-        if shortName then
-            Addon.roster[shortName] = unit
+        if fullName and not Core.IsPlaceholderName(fullName) then
+            entries[#entries + 1] = {
+                unit = unit,
+                fullName = fullName,
+                shortName = shortName,
+            }
         end
     end
 
@@ -421,13 +423,14 @@ local function BuildRoster()
     for index = 1, 40 do
         addUnit("raid" .. index)
     end
+    Addon.roster = Core.CreateRosterIndex(entries)
 end
 
 local function ResolveUnitForName(name)
     if not Addon.roster then
         BuildRoster()
     end
-    return name and Addon.roster[name] or nil
+    return Core.GetRosterUnit(Addon.roster, name)
 end
 
 local function FindLooterFromMessage(message, ...)
@@ -443,12 +446,20 @@ local function FindLooterFromMessage(message, ...)
             return resolved.name
         end
         local canonical = Core.FindRosterNameInMessage(resolved.name, Addon.roster, playerName)
-        return canonical or resolved.name
+            or Core.ResolveRosterName(resolved.name, Addon.roster)
+        if canonical then
+            return canonical, false
+        end
+        local cleanName = CleanString(resolved.name)
+        if cleanName and not Core.IsPlaceholderName(cleanName) then
+            return cleanName, true, "looter_unresolved"
+        end
+        return nil
     end
 
     local looter = Core.FindRosterNameInMessage(cleanMessage, Addon.roster, playerName)
     if looter then
-        return looter
+        return looter, false
     end
 
     for index = 1, select("#", ...) do
@@ -456,11 +467,29 @@ local function FindLooterFromMessage(message, ...)
         if value then
             looter = Core.FindRosterNameInMessage(value, Addon.roster, playerName)
             if looter then
-                return looter
+                return looter, false
             end
         end
     end
     return nil
+end
+
+local function BuildDropContext(unsafe, unsafeReason)
+    local now = Now()
+    return {
+        instanceName = Addon.currentInstanceName or SafeInstanceName(),
+        encounterName = Core.ResolveDropEncounterName(
+            Addon.currentEncounterName,
+            Addon.recentEncounterName,
+            Addon.recentEncounterEndedAt,
+            now,
+            ENCOUNTER_LOOT_GRACE
+        ),
+        timestamp = now,
+        generation = Addon.lootGeneration or 0,
+        unsafe = unsafe == true,
+        unsafeReason = unsafeReason,
+    }
 end
 
 local function RequestItemLoad(itemLink, callback)
@@ -710,6 +739,9 @@ local function CaptureEquipmentForUnit(unit, source)
     if not fullName and not shortName then
         return false
     end
+    if not Addon.roster then
+        BuildRoster()
+    end
 
     local equippedByLoc = {}
     for equipLoc in pairs(EQUIP_LOC_SLOTS) do
@@ -720,11 +752,14 @@ local function CaptureEquipmentForUnit(unit, source)
     end
 
     local names = {}
-    if fullName then
+    local canonical = Core.ResolveRosterName(fullName, Addon.roster) or Core.ResolveRosterName(shortName, Addon.roster)
+    if canonical then
+        names[#names + 1] = canonical
+        if shortName and shortName ~= canonical and Core.ResolveRosterName(shortName, Addon.roster) == canonical then
+            names[#names + 1] = shortName
+        end
+    elseif fullName and not Core.IsPlaceholderName(fullName) then
         names[#names + 1] = fullName
-    end
-    if shortName and shortName ~= fullName then
-        names[#names + 1] = shortName
     end
 
     local captured = Core.StoreEquipmentCache(Addon.equipmentCache, names, equippedByLoc, Now())
@@ -781,8 +816,11 @@ end
 
 local function AddScanUnit(queue, seen, unit, source)
     local fullName, shortName = SafeUnitName(unit)
-    local key = fullName or shortName
-    if not key or seen[key] then
+    local key = Core.ResolveRosterName(fullName, Addon.roster)
+        or Core.ResolveRosterName(shortName, Addon.roster)
+        or fullName
+        or shortName
+    if not key or Core.IsPlaceholderName(key) or seen[key] then
         return
     end
     seen[key] = true
@@ -929,9 +967,14 @@ local function RefreshRows()
             rowFrame.dropLink:SetShown(rowFrame.dropLink.itemLink ~= nil)
             rowFrame.equippedLink:SetShown(rowFrame.equippedLink.itemLink ~= nil)
             rowFrame.status:SetText(L(row.statusText or row.reason or "candidate"))
-            if Addon.selectedTab == "askable" and Addon.selectedView ~= "history" and row.askable ~= false then
-                rowFrame.whisper:Enable()
-                rowFrame.whisper:SetText(row.manualWhispered and L("Sent") or L("Ask"))
+            local whisperState = Core.GetWhisperButtonState(Addon.selectedTab, Addon.selectedView, row)
+            if whisperState.visible then
+                rowFrame.whisper:SetText(L(whisperState.text))
+                if whisperState.enabled then
+                    rowFrame.whisper:Enable()
+                else
+                    rowFrame.whisper:Disable()
+                end
                 rowFrame.whisper:Show()
             else
                 rowFrame.whisper:Disable()
@@ -973,29 +1016,56 @@ local function SendWhisper(row, isAuto)
     if not row or not row.looter or not row.itemLink then
         return
     end
+    if row.manualWhispered == true or row.autoWhispered == true or row.whisperInFlight == true then
+        return
+    end
 
     row.pendingAutoWhisper = false
     row.autoToken = nil
     local message = string.format(WHISPER_TEMPLATE, row.itemLink)
     local target = row.looter
+    local token = {}
+    row.whisperInFlight = true
+    row.whisperToken = token
+    row.statusText = isAuto and "auto sending" or "sending"
+    RefreshRows()
 
     C_Timer.After(0, function()
-        if C_ChatInfo and type(C_ChatInfo.SendChatMessage) == "function" then
-            C_ChatInfo.SendChatMessage(message, "WHISPER", nil, target)
-        else
-            SendChatMessage(message, "WHISPER", nil, target)
+        if row.whisperToken ~= token or row.whisperInFlight ~= true then
+            return
         end
-    end)
 
-    if isAuto then
-        row.autoWhispered = true
-        row.statusText = "auto sent"
-    else
-        row.manualWhispered = true
-        row.statusText = "sent"
-    end
+        local sendFn = SendChatMessage
+        if C_ChatInfo and type(C_ChatInfo.SendChatMessage) == "function" then
+            sendFn = C_ChatInfo.SendChatMessage
+        end
+
+        local ok = false
+        if type(sendFn) == "function" then
+            ok = pcall(sendFn, message, "WHISPER", nil, target)
+        end
+
+        row.whisperInFlight = false
+        row.whisperToken = nil
+        if ok then
+            if isAuto then
+                row.autoWhispered = true
+                row.statusText = "auto sent"
+            else
+                row.manualWhispered = true
+                row.statusText = "sent"
+            end
+        else
+            row.statusText = "whisper failed"
+            RecordDiagnostic("whisper_failed", {
+                looter = target,
+                itemLink = row.itemLink,
+            })
+        end
+        SaveDB()
+        RefreshRows()
+    end)
     SaveDB()
-    RefreshRows()
 end
 
 local function CancelPendingAuto(row)
@@ -1159,7 +1229,8 @@ RequestInspectForRow = function(row)
     end)
 end
 
-local function AddTradeCandidate(looter, itemLink, metadata)
+local function AddTradeCandidate(looter, itemLink, metadata, context)
+    context = type(context) == "table" and context or BuildDropContext(false)
     local playerName = SafePlayerName()
     local gearClassification = DoYouNeedItCore.ClassifyGearLoot(metadata, looter, Addon.state.settings)
     if not gearClassification.visible then
@@ -1176,7 +1247,9 @@ local function AddTradeCandidate(looter, itemLink, metadata)
         return false, gearClassification.reason
     end
 
-    local classification = DoYouNeedItCore.ClassifyTradeCandidate(metadata, looter, playerName, Addon.state.settings)
+    local classification = context.unsafe == true
+        and { visible = false, reason = context.unsafeReason or "looter_unresolved" }
+        or DoYouNeedItCore.ClassifyTradeCandidate(metadata, looter, playerName, Addon.state.settings)
     local askable = classification.visible == true
     if not askable then
         RecordDiagnostic("all_gear_only", {
@@ -1197,19 +1270,13 @@ local function AddTradeCandidate(looter, itemLink, metadata)
         itemLink = metadata.link or itemLink,
         equipLoc = metadata.equipLoc,
         itemID = metadata.itemID,
-        instanceName = Addon.currentInstanceName or SafeInstanceName(),
-        encounterName = Core.ResolveDropEncounterName(
-            Addon.currentEncounterName,
-            Addon.recentEncounterName,
-            Addon.recentEncounterEndedAt,
-            Now(),
-            ENCOUNTER_LOOT_GRACE
-        ),
-        timestamp = Now(),
+        instanceName = context.instanceName or Addon.currentInstanceName or SafeInstanceName(),
+        encounterName = context.encounterName,
+        timestamp = context.timestamp or Now(),
         reason = askable and "trade candidate" or classification.reason,
         statusText = askable and "candidate" or (classification.reason or "not askable"),
         equippedText = cachedEquippedText or UNKNOWN_EQUIPPED,
-        unsafe = false,
+        unsafe = context.unsafe == true,
     }, askable)
     if not row then
         RecordDiagnostic("row_failed", {
@@ -1228,7 +1295,9 @@ local function AddTradeCandidate(looter, itemLink, metadata)
         askable = askable,
         playerCanEquip = metadata.playerCanEquip,
     })
-    RequestInspectForRow(row)
+    if not row.unsafe then
+        RequestInspectForRow(row)
+    end
     if askable then
         ScheduleAutoWhisper(row)
     end
@@ -1281,63 +1350,115 @@ local function AddTestRow()
     end
 end
 
-local function TryProcessItemMetadata(looter, itemLink)
-    if Addon.itemRetryCount[itemLink] == nil then
+local RetryPendingItem
+
+local function FailPendingItem(itemLink, bucket, reason)
+    if Addon.pendingItems[itemLink] == bucket then
+        Addon.pendingItems[itemLink] = nil
+    end
+    local waiters = type(bucket) == "table" and type(bucket.waiters) == "table" and bucket.waiters or {}
+    for index = 1, #waiters do
+        RecordDiagnostic("metadata_failed", {
+            reason = reason or "unresolved_item",
+            looter = waiters[index].looter,
+            itemLink = itemLink,
+            attempt = bucket and bucket.attempts or 0,
+        })
+    end
+end
+
+local function ProcessPendingItem(itemLink, bucket)
+    bucket = bucket or Addon.pendingItems[itemLink]
+    if type(bucket) ~= "table" or Addon.pendingItems[itemLink] ~= bucket then
+        return true
+    end
+    if bucket.generation ~= (Addon.lootGeneration or 0) then
         return true
     end
 
     local metadata = ReadItemMetadata(itemLink)
-    if metadata then
-        Addon.itemRetryCount[itemLink] = nil
-        AddTradeCandidate(looter, itemLink, metadata)
-        return true
+    if not metadata then
+        return false
     end
-    return false
+
+    local waiters = Core.DrainPendingItemWaiters(Addon.pendingItems, itemLink, bucket.generation)
+    for index = 1, #waiters do
+        local waiter = waiters[index]
+        if waiter.generation == (Addon.lootGeneration or 0) then
+            AddTradeCandidate(waiter.looter, itemLink, metadata, waiter.context)
+        end
+    end
+    return true
 end
 
-local function RetryItemLater(looter, itemLink)
-    local count = (Addon.itemRetryCount[itemLink] or 0) + 1
-    Addon.itemRetryCount[itemLink] = count
-    if count > MAX_ITEM_RETRIES then
-        RecordDiagnostic("metadata_failed", {
-            reason = "retry_limit",
-            looter = looter,
-            itemLink = itemLink,
-        })
+local function SchedulePendingItemRetry(itemLink, bucket, delay)
+    local token = {}
+    bucket.retryToken = token
+    local generation = bucket.generation
+    C_Timer.After(delay or ITEM_RETRY_DELAY, function()
+        if Addon.pendingItems[itemLink] ~= bucket or bucket.retryToken ~= token or bucket.generation ~= generation then
+            return
+        end
+        bucket.retryToken = nil
+        RetryPendingItem(itemLink)
+    end)
+end
+
+RetryPendingItem = function(itemLink)
+    local bucket = Addon.pendingItems[itemLink]
+    if type(bucket) ~= "table" then
+        return
+    end
+    if bucket.generation ~= (Addon.lootGeneration or 0) then
+        return
+    end
+    if ProcessPendingItem(itemLink, bucket) then
         return
     end
 
-    if count == 1 and RequestItemLoad(itemLink, function()
-        if not TryProcessItemMetadata(looter, itemLink) then
-            RetryItemLater(looter, itemLink)
+    bucket.attempts = (bucket.attempts or 0) + 1
+    if bucket.attempts > MAX_ITEM_RETRIES then
+        FailPendingItem(itemLink, bucket, "retry_limit")
+        return
+    end
+
+    if bucket.loadRequested ~= true and RequestItemLoad(itemLink, function()
+        local current = Addon.pendingItems[itemLink]
+        if type(current) == "table" and current == bucket and not ProcessPendingItem(itemLink, current) then
+            SchedulePendingItemRetry(itemLink, current, ITEM_RETRY_DELAY)
         end
     end) then
+        bucket.loadRequested = true
         RecordDiagnostic("metadata_requested", {
-            looter = looter,
             itemLink = itemLink,
             itemID = Core.ExtractItemID(itemLink),
+            count = #(bucket.waiters or {}),
         })
-        C_Timer.After(ITEM_RETRY_DELAY * 3, function()
-            if not TryProcessItemMetadata(looter, itemLink) then
-                RetryItemLater(looter, itemLink)
-            end
-        end)
+        SchedulePendingItemRetry(itemLink, bucket, ITEM_RETRY_DELAY * 3)
         return
     end
 
-    C_Timer.After(ITEM_RETRY_DELAY, function()
-        if not TryProcessItemMetadata(looter, itemLink) then
-            if count < MAX_ITEM_RETRIES then
-                RetryItemLater(looter, itemLink)
-                return
-            end
-            RecordDiagnostic("metadata_failed", {
-                reason = "unresolved_item",
-                looter = looter,
-                itemLink = itemLink,
-            })
-        end
-    end)
+    SchedulePendingItemRetry(itemLink, bucket, ITEM_RETRY_DELAY)
+end
+
+local function RetryItemLater(looter, itemLink, context)
+    context = type(context) == "table" and context or BuildDropContext(false)
+    local bucket, created = Core.AddPendingItemWaiter(Addon.pendingItems, itemLink, {
+        looter = looter,
+        context = context,
+        generation = context.generation,
+    })
+    if not bucket then
+        return
+    end
+    if created then
+        RetryPendingItem(itemLink)
+    end
+end
+
+local function InvalidatePendingLoot()
+    Addon.lootGeneration = (Addon.lootGeneration or 0) + 1
+    Addon.pendingItems = {}
 end
 
 local function HandleLootMessage(message, ...)
@@ -1353,7 +1474,7 @@ local function HandleLootMessage(message, ...)
         return
     end
 
-    local looter = FindLooterFromMessage(message, ...)
+    local looter, unsafe, unsafeReason = FindLooterFromMessage(message, ...)
     if not looter then
         RecordDiagnostic("no_looter", {
             itemLink = itemLink,
@@ -1362,17 +1483,18 @@ local function HandleLootMessage(message, ...)
         return
     end
 
+    local context = BuildDropContext(unsafe, unsafeReason)
     local metadata = ReadItemMetadata(itemLink)
     if not metadata then
         RecordDiagnostic("metadata_pending", {
             looter = looter,
             itemLink = itemLink,
         })
-        RetryItemLater(looter, itemLink)
+        RetryItemLater(looter, itemLink, context)
         return
     end
 
-    AddTradeCandidate(looter, itemLink, metadata)
+    AddTradeCandidate(looter, itemLink, metadata, context)
 end
 
 local function CompleteCurrentGroup(encounterName)
@@ -2150,6 +2272,7 @@ local function HandleSlash(message)
         SetDelay(rest)
     elseif command == "clear" then
         CancelAllPendingAuto()
+        InvalidatePendingLoot()
         Addon.state.currentRows = {}
         Addon.state.allRows = {}
         Addon.state.sessionRows = {}
@@ -2231,6 +2354,8 @@ local function Initialize()
     Addon.diagnostics = type(DoYouNeedItDB.diagnostics) == "table" and DoYouNeedItDB.diagnostics or {}
     Addon.equipmentCache = {}
     Addon.pendingEquipmentScan = {}
+    Addon.pendingItems = {}
+    Addon.lootGeneration = 0
     Addon.equipmentScanQueue = {}
     Addon.equipmentScanActive = nil
     Addon.equipmentScanScheduled = false
@@ -2281,10 +2406,17 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         SaveDB()
     elseif event == "PLAYER_ENTERING_WORLD" then
         local instanceName = SafeInstanceName()
-        if Addon.currentInstanceName and Addon.currentInstanceName ~= instanceName and Addon.state and (#Addon.state.currentRows > 0 or #(Addon.state.allRows or {}) > 0) then
-            CompleteCurrentGroup(Addon.currentEncounterName)
+        local instanceChanged = Addon.currentInstanceName and Addon.currentInstanceName ~= instanceName
+        if instanceChanged then
+            if Addon.state and (#Addon.state.currentRows > 0 or #(Addon.state.allRows or {}) > 0) then
+                CompleteCurrentGroup(Addon.currentEncounterName)
+            end
             Addon.recentEncounterName = nil
             Addon.recentEncounterEndedAt = nil
+            Addon.currentEncounterID = nil
+            Addon.currentEncounterName = nil
+            Addon.currentEncounterStartedAt = nil
+            InvalidatePendingLoot()
         end
         Addon.currentInstanceName = instanceName
         BuildRoster()

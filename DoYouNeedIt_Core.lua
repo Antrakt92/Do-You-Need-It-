@@ -101,15 +101,23 @@ local LABELS_BY_LOCALE = {
         ["No gear drops in this view."] = "No gear drops in this view.",
         ["Ask"] = "Ask",
         ["Sent"] = "Sent",
+        ["Sending"] = "Sending",
         ["Auto: off"] = "Auto: off",
         ["Auto: %ds"] = "Auto: %ds",
         ["candidate"] = "candidate",
+        ["sent"] = "sent",
+        ["auto sent"] = "auto sent",
+        ["sending"] = "sending",
+        ["auto sending"] = "auto sending",
+        ["whisper failed"] = "whisper failed",
         ["test row"] = "test row",
         ["bind_on_pickup"] = "bind on pickup",
         ["bind_unknown"] = "trade status unknown",
         ["player_cannot_equip"] = "cannot equip",
+        ["player_equip_unknown"] = "equip unknown",
         ["self_loot"] = "own loot",
         ["not_tradeable"] = "not tradeable",
+        ["looter_unresolved"] = "looter unresolved",
         ["Font may not render %s glyphs."] = "Font may not render %s glyphs.",
     },
     ruRU = {
@@ -130,15 +138,23 @@ local LABELS_BY_LOCALE = {
         ["No gear drops in this view."] = "Нет шмота в этом виде.",
         ["Ask"] = "Ask",
         ["Sent"] = "Отпр.",
+        ["Sending"] = "Отпр...",
         ["Auto: off"] = "Авто: выкл",
         ["Auto: %ds"] = "Авто: %dс",
         ["candidate"] = "кандидат",
+        ["sent"] = "отправлено",
+        ["auto sent"] = "авто отправлено",
+        ["sending"] = "отправка",
+        ["auto sending"] = "авто-отправка",
+        ["whisper failed"] = "виспер не отправлен",
         ["test row"] = "тест",
         ["bind_on_pickup"] = "персональный",
         ["bind_unknown"] = "статус передачи неизвестен",
         ["player_cannot_equip"] = "не надеть",
+        ["player_equip_unknown"] = "неизвестно, можно ли надеть",
         ["self_loot"] = "свой лут",
         ["not_tradeable"] = "не передать",
+        ["looter_unresolved"] = "лутер не найден",
         ["Font may not render %s glyphs."] = "Шрифт может не отображать символы %s.",
     },
 }
@@ -264,6 +280,13 @@ local function pruneListStart(list, limit)
     end
 end
 
+local function pruneListEnd(list, limit)
+    limit = math.max(1, math.floor(asNumber(limit, 1)))
+    while #list > limit do
+        table.remove(list)
+    end
+end
+
 local function copyPrimitiveFields(source, allowedKeys)
     local copy = {}
     if type(source) ~= "table" then
@@ -281,7 +304,13 @@ end
 
 local function snapshotRowForSave(row)
     local saved = copyPrimitiveFields(row, PERSISTED_ROW_KEYS)
-    if saved.statusText and saved.statusText:find("auto in", 1, true) == 1 then
+    if saved.statusText
+        and (
+            saved.statusText:find("auto in", 1, true) == 1
+            or saved.statusText == "sending"
+            or saved.statusText == "auto sending"
+        )
+    then
         saved.statusText = "candidate"
     end
     if saved.equippedText == "Equipped: checking..." then
@@ -364,16 +393,50 @@ local function isSelfLootName(looter, playerName)
     return true
 end
 
-local function stripChatMarkup(text)
+function Core.IsPlaceholderName(name)
+    return name == "UNKNOWNOBJECT" or name == "UNKNOWN" or name == "Unknown"
+end
+
+local function stripRosterSearchText(text)
     if type(text) ~= "string" or text == "" then
         return nil
     end
     text = text:gsub("|c%x%x%x%x%x%x%x%x", "")
     text = text:gsub("|r", "")
     text = text:gsub("|Hplayer:([^:|]+)[^|]*|h%[([^%]]+)%]|h", "%1 %2")
-    text = text:gsub("|H.-|h%[(.-)%]|h", "%1")
+    text = text:gsub("|H.-|h%[.-%]|h", " ")
     text = text:gsub("|A.-|a", "")
     return text
+end
+
+local function isNameByte(byte)
+    return byte ~= nil and (
+        (byte >= 48 and byte <= 57)
+        or (byte >= 65 and byte <= 90)
+        or (byte >= 97 and byte <= 122)
+        or byte == 45
+        or byte >= 128
+    )
+end
+
+local function findPlainName(text, name)
+    if type(text) ~= "string" or type(name) ~= "string" or text == "" or name == "" then
+        return nil
+    end
+
+    local start = 1
+    while true do
+        local foundStart, foundEnd = text:find(name, start, true)
+        if not foundStart then
+            return nil
+        end
+        local previousByte = foundStart > 1 and text:byte(foundStart - 1) or nil
+        local nextByte = foundEnd < #text and text:byte(foundEnd + 1) or nil
+        if not isNameByte(previousByte) and not isNameByte(nextByte) then
+            return foundStart, foundEnd
+        end
+        start = foundStart + 1
+    end
 end
 
 local function sortedRosterNames(roster)
@@ -381,7 +444,8 @@ local function sortedRosterNames(roster)
     if type(roster) ~= "table" then
         return names
     end
-    for name in pairs(roster) do
+    local aliases = type(roster.aliases) == "table" and roster.aliases or roster
+    for name in pairs(aliases) do
         if type(name) == "string" and name ~= "" then
             names[#names + 1] = name
         end
@@ -399,6 +463,12 @@ local function canonicalRosterName(candidate, roster)
     if type(candidate) ~= "string" or candidate == "" or type(roster) ~= "table" then
         return nil
     end
+    if Core.IsPlaceholderName(candidate) then
+        return nil
+    end
+    if type(roster.aliases) == "table" then
+        return roster.aliases[candidate]
+    end
     if roster[candidate] ~= nil then
         return candidate
     end
@@ -410,6 +480,61 @@ local function canonicalRosterName(candidate, roster)
         end
     end
     return nil
+end
+
+function Core.CreateRosterIndex(entries)
+    local roster = {
+        aliases = {},
+        units = {},
+        ambiguous = {},
+    }
+    local shortOwners = {}
+    entries = type(entries) == "table" and entries or {}
+
+    for index = 1, #entries do
+        local entry = entries[index]
+        if type(entry) == "table" then
+            local fullName = type(entry.fullName) == "string" and entry.fullName ~= "" and entry.fullName or nil
+            local shortName = type(entry.shortName) == "string" and entry.shortName ~= "" and entry.shortName or nil
+            if fullName and not Core.IsPlaceholderName(fullName) then
+                roster.aliases[fullName] = fullName
+                if type(entry.unit) == "string" and entry.unit ~= "" then
+                    roster.units[fullName] = entry.unit
+                end
+                if shortName and shortName ~= fullName and not Core.IsPlaceholderName(shortName) then
+                    local owner = shortOwners[shortName]
+                    if owner == nil then
+                        shortOwners[shortName] = fullName
+                    elseif owner ~= fullName then
+                        shortOwners[shortName] = false
+                        roster.ambiguous[shortName] = true
+                    end
+                end
+            end
+        end
+    end
+
+    for shortName, fullName in pairs(shortOwners) do
+        if type(fullName) == "string" and not roster.ambiguous[shortName] then
+            roster.aliases[shortName] = fullName
+        end
+    end
+    return roster
+end
+
+function Core.ResolveRosterName(candidate, roster)
+    return canonicalRosterName(candidate, roster)
+end
+
+function Core.GetRosterUnit(roster, name)
+    if type(roster) ~= "table" then
+        return nil
+    end
+    local canonical = canonicalRosterName(name, roster)
+    if type(roster.units) == "table" then
+        return canonical and roster.units[canonical] or nil
+    end
+    return canonical and roster[canonical] or nil
 end
 
 local function appendCandidate(list, seen, value)
@@ -677,7 +802,7 @@ function Core.SnapshotHistoryForSave(history, limit)
             end
         end
     end
-    pruneListStart(saved, limit or DEFAULTS.maxHistoryGroups)
+    pruneListEnd(saved, limit or DEFAULTS.maxHistoryGroups)
     return saved
 end
 
@@ -772,6 +897,48 @@ function Core.RemovePendingRow(pending, key, row)
     return removed
 end
 
+function Core.AddPendingItemWaiter(pending, itemLink, waiter)
+    if type(pending) ~= "table" or type(itemLink) ~= "string" or itemLink == "" or type(waiter) ~= "table" then
+        return nil, false
+    end
+
+    local bucket = pending[itemLink]
+    local created = false
+    if type(bucket) ~= "table" then
+        bucket = {
+            itemLink = itemLink,
+            waiters = {},
+            attempts = 0,
+            loadRequested = false,
+            generation = waiter.generation,
+        }
+        pending[itemLink] = bucket
+        created = true
+    end
+    bucket.waiters = type(bucket.waiters) == "table" and bucket.waiters or {}
+    bucket.waiters[#bucket.waiters + 1] = waiter
+    return bucket, created
+end
+
+function Core.DrainPendingItemWaiters(pending, itemLink, generation)
+    if type(pending) ~= "table" or type(itemLink) ~= "string" or itemLink == "" then
+        return {}
+    end
+
+    local bucket = pending[itemLink]
+    if type(bucket) ~= "table" then
+        return {}
+    end
+    if generation ~= nil and bucket.generation ~= generation then
+        return {}
+    end
+
+    pending[itemLink] = nil
+    local waiters = type(bucket.waiters) == "table" and bucket.waiters or {}
+    bucket.waiters = {}
+    return waiters
+end
+
 function Core.FindRosterNameInMessage(message, roster, playerName)
     if type(message) ~= "string" or type(roster) ~= "table" then
         return nil
@@ -784,12 +951,12 @@ function Core.FindRosterNameInMessage(message, roster, playerName)
         appendCandidate(candidates, seen, label)
     end
 
-    local plainMessage = stripChatMarkup(message)
+    local plainMessage = stripRosterSearchText(message)
     if plainMessage then
         local names = sortedRosterNames(roster)
         for index = 1, #names do
             local name = names[index]
-            if plainMessage:find(name, 1, true) then
+            if findPlainName(plainMessage, name) then
                 appendCandidate(candidates, seen, name)
             end
         end
@@ -990,9 +1157,6 @@ function Core.ClassifyTradeCandidate(item, looter, playerName, settings)
     if isSelfLootName(looter, playerName) then
         return { visible = false, reason = "self_loot" }
     end
-    if item.playerCanEquip == false then
-        return { visible = false, reason = "player_cannot_equip" }
-    end
     if item.canTrade == false then
         return { visible = false, reason = "not_tradeable" }
     end
@@ -1005,6 +1169,9 @@ function Core.ClassifyTradeCandidate(item, looter, playerName, settings)
     end
     if bindType == 4 then
         return { visible = false, reason = "quest_bound" }
+    end
+    if item.playerCanEquip ~= true then
+        return { visible = false, reason = item.playerCanEquip == false and "player_cannot_equip" or "player_equip_unknown" }
     end
 
     return {
@@ -1127,7 +1294,7 @@ function Core.GetAutoWhisperDecision(settings, row)
     if row.looter == nil or row.looter == "" or row.itemLink == nil or row.itemLink == "" then
         return { shouldSchedule = false, reason = "incomplete_row" }
     end
-    if row.manualWhispered == true or row.autoWhispered == true or row.pendingAutoWhisper == true then
+    if row.manualWhispered == true or row.autoWhispered == true or row.pendingAutoWhisper == true or row.whisperInFlight == true then
         return { shouldSchedule = false, reason = "already_handled" }
     end
     return {
@@ -1135,6 +1302,30 @@ function Core.GetAutoWhisperDecision(settings, row)
         reason = "eligible",
         delay = settings.autoDelay,
     }
+end
+
+function Core.GetWhisperButtonState(selectedTab, selectedView, row)
+    local state = {
+        visible = false,
+        enabled = false,
+        text = "Ask",
+    }
+    if selectedTab ~= "askable" or selectedView ~= "current" or type(row) ~= "table" or row.askable == false then
+        return state
+    end
+
+    state.visible = true
+    if row.whisperInFlight == true then
+        state.text = "Sending"
+        return state
+    end
+    if row.manualWhispered == true or row.autoWhispered == true then
+        state.text = "Sent"
+        return state
+    end
+
+    state.enabled = true
+    return state
 end
 
 function Core.ShouldAutoShowWindow(row)
