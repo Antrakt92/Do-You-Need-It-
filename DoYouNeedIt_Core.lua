@@ -91,6 +91,8 @@ local LABELS_BY_LOCALE = {
         ["Current"] = "Current",
         ["This Session"] = "This Session",
         ["History"] = "History",
+        ["Run"] = "Run",
+        ["Loot"] = "Loot",
         ["Auto whisper"] = "Auto whisper",
         ["Delay"] = "Delay",
         ["Low"] = "Low",
@@ -111,6 +113,9 @@ local LABELS_BY_LOCALE = {
         ["Equipped: unknown"] = "Equipped: unknown",
         ["Equipped: checking..."] = "Equipped: checking...",
         ["Equipped: unavailable"] = "Equipped: unavailable",
+        ["drop_one"] = "drop",
+        ["drop_few"] = "drops",
+        ["drop_many"] = "drops",
         ["candidate"] = "candidate",
         ["sent"] = "sent",
         ["auto sent"] = "auto sent",
@@ -142,6 +147,8 @@ local LABELS_BY_LOCALE = {
         ["Current"] = "Текущий",
         ["This Session"] = "Эта сессия",
         ["History"] = "История",
+        ["Run"] = "Проход",
+        ["Loot"] = "Лут",
         ["Auto whisper"] = "Авто-виспер",
         ["Delay"] = "Задержка",
         ["Low"] = "Мин.",
@@ -162,6 +169,9 @@ local LABELS_BY_LOCALE = {
         ["Equipped: unknown"] = "Надето: неизвестно",
         ["Equipped: checking..."] = "Надето: проверка...",
         ["Equipped: unavailable"] = "Надето: недоступно",
+        ["drop_one"] = "дроп",
+        ["drop_few"] = "дропа",
+        ["drop_many"] = "дропов",
         ["candidate"] = "кандидат",
         ["sent"] = "отправлено",
         ["auto sent"] = "авто отправлено",
@@ -1318,23 +1328,40 @@ function Core.AddVisibleRow(state, row, askable)
     return saved
 end
 
+local function localizedDropNoun(locale, dropCount)
+    local count = math.abs(math.floor(asNumber(dropCount, 0)))
+    if locale == "ruRU" then
+        local mod10 = count % 10
+        local mod100 = count % 100
+        if mod10 == 1 and mod100 ~= 11 then
+            return Core.GetLocaleLabel("drop_one", locale)
+        end
+        if mod10 >= 2 and mod10 <= 4 and (mod100 < 12 or mod100 > 14) then
+            return Core.GetLocaleLabel("drop_few", locale)
+        end
+        return Core.GetLocaleLabel("drop_many", locale)
+    end
+    return Core.GetLocaleLabel(dropCount == 1 and "drop_one" or "drop_many", locale)
+end
+
 local function groupTitle(meta, dropCount)
     local instanceName = type(meta.instanceName) == "string" and meta.instanceName ~= "" and meta.instanceName or nil
     local encounterName = type(meta.encounterName) == "string" and meta.encounterName ~= "" and meta.encounterName or nil
     local title = type(meta.title) == "string" and meta.title ~= "" and meta.title or nil
+    local locale = type(meta.locale) == "string" and meta.locale ~= "" and meta.locale or "enUS"
 
     local base
     if instanceName and encounterName then
         base = instanceName .. " - " .. encounterName
     elseif instanceName then
-        base = instanceName .. " - Run"
+        base = instanceName .. " - " .. Core.GetLocaleLabel("Run", locale)
     elseif encounterName then
         base = encounterName
     else
-        base = title or "Loot"
+        base = title or Core.GetLocaleLabel("Loot", locale)
     end
 
-    local noun = dropCount == 1 and "drop" or "drops"
+    local noun = localizedDropNoun(locale, dropCount)
     return base .. " (" .. tostring(dropCount) .. " " .. noun .. ")"
 end
 

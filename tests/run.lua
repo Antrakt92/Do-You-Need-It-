@@ -67,6 +67,21 @@ assertEqual(
     "Fonts\\ARIALN.TTF",
     "compatible font lookup falls back to a glyph-capable font"
 )
+assertEqual(
+    Core.FindCompatibleFont("Fonts\\FRIZQT__.TTF", Core.GetLocaleGlyphRequirement("koKR"), Core.GetBlizzardFonts("koKR"), "koKR"),
+    "Fonts\\2002.ttf",
+    "Korean font fallback chooses a Hangul-capable Blizzard font"
+)
+assertEqual(
+    Core.FindCompatibleFont("Fonts\\FRIZQT__.TTF", Core.GetLocaleGlyphRequirement("zhCN"), Core.GetBlizzardFonts("zhCN"), "zhCN"),
+    "Fonts\\ARKai_T.ttf",
+    "Simplified Chinese font fallback chooses a Han-capable Blizzard font"
+)
+assertEqual(
+    Core.FindCompatibleFont("Fonts\\FRIZQT__.TTF", Core.GetLocaleGlyphRequirement("zhTW"), Core.GetBlizzardFonts("zhTW"), "zhTW"),
+    "Fonts\\bHEI00M.ttf",
+    "Traditional Chinese font fallback chooses a Han-capable Blizzard font"
+)
 
 local accepted = Core.ClassifyTradeCandidate({
     link = "|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r",
@@ -281,6 +296,25 @@ assertEqual(#mixedGroup.rows, 1, "history askable rows stay filtered")
 assertEqual(#mixedGroup.allRows, 2, "history all gear keeps every gear row")
 assertEqual(#mixedState.currentRows, 0, "completion clears current askable rows")
 assertEqual(#mixedState.allRows, 0, "completion clears current all gear rows")
+
+local localizedHistoryState = Core.CreateState({ maxHistoryGroups = 10, maxSessionRows = 10 })
+Core.AddVisibleRow(localizedHistoryState, {
+    id = "localized-row-1",
+    looter = "Otherplayer",
+    itemLink = "|cff0070dd|Hitem:301:::::::::::::|h[Localized One]|h|r",
+}, true)
+Core.AddVisibleRow(localizedHistoryState, {
+    id = "localized-row-2",
+    looter = "Otherplayer",
+    itemLink = "|cff0070dd|Hitem:302:::::::::::::|h[Localized Two]|h|r",
+}, false)
+local localizedGroup = Core.CompleteCurrentGroup(localizedHistoryState, {
+    instanceName = "Dungeon",
+    encounterName = "Boss",
+    locale = "ruRU",
+    endedAt = 1,
+})
+assertEqual(localizedGroup.title, "Dungeon - Boss (2 дропа)", "history title localizes drop-count wording")
 
 assertEqual(
     Core.GetAutoShowTabForRow({ currentRows = {} }, { askable = false, itemLink = "|cff0070dd|Hitem:101:::::::::::::|h[All Only]|h|r" }),

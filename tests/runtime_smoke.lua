@@ -99,6 +99,23 @@ local function testInstanceChangeCompletesCurrentGroup()
     assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 2, "session all gear loot survives instance change")
 end
 
+local function testInstanceChangeHistoryTitleUsesActiveLocale()
+    local h = Harness.new({
+        db = {
+            settings = { forceLocale = "ruRU", font = "Fonts\\ARIALN.TTF" },
+        },
+    })
+    h:loadAddon()
+    h:slash("test")
+
+    h.instanceName = "Halls of Infusion"
+    h:fire("PLAYER_ENTERING_WORLD")
+
+    assertEqual(#h.env.DoYouNeedItDB.history, 1, "localized instance change saves current drops to history")
+    assertTruthy(h.env.DoYouNeedItDB.history[1].title:find("%(2 дропа%)"), "history title uses localized drop-count wording")
+    assertEqual(h.env.DoYouNeedItDB.history[1].title:find("drops", 1, true), nil, "history title does not keep English drop-count wording")
+end
+
 local function testDebugPersistenceIsOptIn()
     local h = Harness.new()
     h:loadAddon()
@@ -439,6 +456,7 @@ testLoadAndSettings()
 testSlashTestRowsAndManualWhisper()
 testMainWindowLayoutBoundsLongText()
 testInstanceChangeCompletesCurrentGroup()
+testInstanceChangeHistoryTitleUsesActiveLocale()
 testDebugPersistenceIsOptIn()
 testDebugPersistenceLoadState()
 testLegacySavedAllGearFallbackDisplays()

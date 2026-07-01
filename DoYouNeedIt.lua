@@ -1960,6 +1960,7 @@ local function CompleteCurrentGroup(encounterName)
     Core.CompleteCurrentGroup(Addon.state, {
         instanceName = Addon.currentInstanceName or SafeInstanceName(),
         encounterName = encounterName or Addon.currentEncounterName or Core.FirstRowEncounterName(Addon.state.currentRows) or Core.FirstRowEncounterName(Addon.state.allRows),
+        locale = ActiveLocale(),
         startedAt = Addon.currentEncounterStartedAt,
         endedAt = Now(),
     })
