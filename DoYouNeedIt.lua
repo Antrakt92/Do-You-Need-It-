@@ -8,6 +8,7 @@ local Addon = {
     inspectQueue = {},
     inspectActive = nil,
     inspectByGuid = {},
+    inspectGeneration = 0,
     equipmentCache = {},
     equipmentScanQueue = {},
     equipmentScanScheduled = false,
@@ -448,6 +449,95 @@ local function ResolveUnitForName(name)
         BuildRoster()
     end
     return Core.GetRosterUnit(Addon.roster, name)
+end
+
+local function UnitMatchesGuid(unit, guid)
+    return type(unit) == "string"
+        and type(guid) == "string"
+        and guid ~= ""
+        and SafeUnitGUID(unit) == guid
+end
+
+local function IsRowInList(list, row)
+    if type(list) ~= "table" or type(row) ~= "table" then
+        return false
+    end
+    for index = 1, #list do
+        if list[index] == row then
+            return true
+        end
+    end
+    return false
+end
+
+local function IsRowStillTracked(row)
+    if type(row) ~= "table" or type(Addon.state) ~= "table" then
+        return false
+    end
+    if IsRowInList(Addon.state.currentRows, row)
+        or IsRowInList(Addon.state.allRows, row)
+        or IsRowInList(Addon.state.sessionRows, row)
+        or IsRowInList(Addon.state.sessionAllRows, row)
+    then
+        return true
+    end
+
+    local history = Addon.state.history
+    if type(history) == "table" then
+        for index = 1, #history do
+            local group = history[index]
+            if type(group) == "table" and (IsRowInList(group.rows, row) or IsRowInList(group.allRows, row)) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function ResolveUnitMatchingRequest(request, preferredUnit)
+    if type(request) ~= "table" then
+        return nil
+    end
+    if UnitMatchesGuid(preferredUnit, request.guid) then
+        request.unit = preferredUnit
+        return preferredUnit
+    end
+    if UnitMatchesGuid(request.unit, request.guid) then
+        return request.unit
+    end
+    return nil
+end
+
+local function ResolveRowUnitForRequest(request, row)
+    local unit = type(row) == "table" and ResolveUnitForName(row.looter) or nil
+    return ResolveUnitMatchingRequest(request, unit)
+end
+
+local function ResolveScanUnitForRequest(request)
+    local scan = type(request) == "table" and request.scan or nil
+    local unit = type(scan) == "table" and ResolveUnitForName(scan.name) or nil
+    return ResolveUnitMatchingRequest(request, unit)
+end
+
+local function ResolveInspectRequestUnit(request)
+    if type(request) ~= "table" then
+        return nil
+    end
+    local rows = type(request.rows) == "table" and request.rows or {}
+    for index = 1, #rows do
+        local row = rows[index]
+        if IsRowStillTracked(row) then
+            local unit = ResolveRowUnitForRequest(request, row)
+            if unit then
+                return unit
+            end
+        end
+    end
+    local scanUnit = ResolveScanUnitForRequest(request)
+    if scanUnit then
+        return scanUnit
+    end
+    return ResolveUnitMatchingRequest(request, nil)
 end
 
 local function FindLooterFromMessage(message, ...)
@@ -1122,6 +1212,12 @@ local function ScheduleInspectRetry(row, reason)
         return false
     end
 
+    if not IsRowStillTracked(row) then
+        row.inspectPending = false
+        row.inspectToken = nil
+        return false
+    end
+
     row.inspectPending = false
     local attempt = (row.inspectRetryCount or 0) + 1
     row.inspectRetryCount = attempt
@@ -1146,8 +1242,9 @@ local function ScheduleInspectRetry(row, reason)
     SaveDB()
     RefreshRows()
 
+    local generation = Addon.inspectGeneration or 0
     C_Timer.After(INSPECT_RETRY_DELAY, function()
-        if row.inspectToken ~= token then
+        if row.inspectToken ~= token or generation ~= (Addon.inspectGeneration or 0) or not IsRowStillTracked(row) then
             return
         end
         row.inspectToken = nil
@@ -1234,7 +1331,9 @@ local function FinishInspectRequestRows(request, reason)
         if type(row) == "table" and row.inspectPending == true then
             row.inspectPending = false
             row.inspectToken = nil
-            ScheduleInspectRetry(row, reason)
+            if IsRowStillTracked(row) then
+                ScheduleInspectRetry(row, reason)
+            end
         end
     end
 end
@@ -1282,6 +1381,59 @@ CancelActiveInspectRequest = function(reason, requeueScan)
     return true
 end
 
+local function ClearInspectWorkRows()
+    local seen = {}
+    local function clearList(list)
+        if type(list) ~= "table" then
+            return
+        end
+        for index = 1, #list do
+            local row = list[index]
+            if type(row) == "table" and not seen[row] then
+                seen[row] = true
+                row.inspectPending = false
+                row.inspectToken = nil
+                row.inspectRetryCount = nil
+                if row.equippedText == EQUIPPED_PENDING then
+                    row.equippedText = UNKNOWN_EQUIPPED
+                end
+            end
+        end
+    end
+
+    if type(Addon.state) ~= "table" then
+        return
+    end
+    clearList(Addon.state.currentRows)
+    clearList(Addon.state.allRows)
+    clearList(Addon.state.sessionRows)
+    clearList(Addon.state.sessionAllRows)
+    local history = Addon.state.history
+    if type(history) == "table" then
+        for index = 1, #history do
+            local group = history[index]
+            if type(group) == "table" then
+                clearList(group.rows)
+                clearList(group.allRows)
+            end
+        end
+    end
+end
+
+local function CancelAllInspectWork()
+    Addon.inspectGeneration = (Addon.inspectGeneration or 0) + 1
+    local hadActive = Addon.inspectActive ~= nil
+    Addon.inspectActive = nil
+    Addon.inspectQueue = {}
+    Addon.inspectByGuid = {}
+    Addon.equipmentScanQueue = {}
+    Addon.equipmentScanScheduled = false
+    ClearInspectWorkRows()
+    if hadActive then
+        ClearOwnedInspectState()
+    end
+end
+
 StartNextInspectRequest = function()
     if Addon.inspectActive then
         return
@@ -1291,7 +1443,12 @@ StartNextInspectRequest = function()
     if not request then
         return
     end
-    if not CanInspectClean(request.unit) then
+    local unit = ResolveInspectRequestUnit(request)
+    if not unit then
+        FinishInspectRequest(request, "guid_mismatch", false)
+        return
+    end
+    if not CanInspectClean(unit) then
         FinishInspectRequest(request, "inspect_blocked", false)
         return
     end
@@ -1299,6 +1456,7 @@ StartNextInspectRequest = function()
     local rows = type(request.rows) == "table" and request.rows or {}
     request.token = {}
     request.notified = true
+    request.unit = unit
     Addon.inspectActive = request
     Addon.inspectByGuid[request.guid] = request
 
@@ -1317,12 +1475,13 @@ StartNextInspectRequest = function()
             attempt = rows[1].inspectRetryCount or 0,
         })
     end
-    SafeCall(NotifyInspect, request.unit)
+    SafeCall(NotifyInspect, unit)
 
     local token = request.token
     local timeout = #rows > 0 and INSPECT_RETRY_DELAY or EQUIPMENT_SCAN_TIMEOUT
+    local generation = Addon.inspectGeneration or 0
     C_Timer.After(timeout, function()
-        if Addon.inspectActive ~= request or request.token ~= token then
+        if Addon.inspectActive ~= request or request.token ~= token or generation ~= (Addon.inspectGeneration or 0) then
             return
         end
         FinishInspectRequest(request, "inspect_timeout", true)
@@ -1337,12 +1496,13 @@ CompleteActiveInspectRequest = function(guid)
 
     Addon.inspectActive = nil
     Addon.inspectByGuid[request.guid] = nil
+    local requestUnit = ResolveInspectRequestUnit(request)
 
     if request.scan then
-        if CaptureEquipmentForUnit(request.scan.unit, request.scan.source or "scan") then
+        if requestUnit and CaptureEquipmentForUnit(requestUnit, request.scan.source or "scan") then
             ScheduleEquipmentScan(EQUIPMENT_SCAN_DELAY)
         else
-            RequeueEquipmentScan(request.scan, "links_missing")
+            RequeueEquipmentScan(request.scan, requestUnit and "links_missing" or "guid_mismatch")
         end
     end
 
@@ -1352,17 +1512,19 @@ CompleteActiveInspectRequest = function(guid)
         if type(row) == "table" and row.inspectPending == true then
             row.inspectPending = false
             row.inspectToken = nil
-            local unit = ResolveUnitForName(row.looter) or request.unit
-            if unit then
-                CaptureEquipmentForUnit(unit, "loot_ready")
-                local equippedText = FormatEquippedText(unit, row.equipLoc)
-                if equippedText ~= UNKNOWN_EQUIPPED then
-                    CompleteInspectRow(row, equippedText)
+            if IsRowStillTracked(row) then
+                local unit = ResolveRowUnitForRequest(request, row) or requestUnit
+                if unit then
+                    CaptureEquipmentForUnit(unit, "loot_ready")
+                    local equippedText = FormatEquippedText(unit, row.equipLoc)
+                    if equippedText ~= UNKNOWN_EQUIPPED then
+                        CompleteInspectRow(row, equippedText)
+                    else
+                        ScheduleInspectRetry(row, "links_missing")
+                    end
                 else
-                    ScheduleInspectRetry(row, "links_missing")
+                    ScheduleInspectRetry(row, "unit_missing")
                 end
-            else
-                ScheduleInspectRetry(row, "unit_missing")
             end
         end
     end
@@ -1375,6 +1537,14 @@ CompleteActiveInspectRequest = function(guid)
 end
 
 RequestInspectForRow = function(row)
+    if not IsRowStillTracked(row) then
+        if type(row) == "table" then
+            row.inspectPending = false
+            row.inspectToken = nil
+        end
+        return
+    end
+
     local unit = ResolveUnitForName(row.looter)
     if not unit then
         ScheduleInspectRetry(row, "unit_missing")
@@ -2460,6 +2630,8 @@ local function HandleSlash(message)
     elseif command == "clear" then
         CancelAllPendingAuto()
         InvalidatePendingLoot()
+        CancelAllInspectWork()
+        Addon.equipmentCache = {}
         Addon.state.currentRows = {}
         Addon.state.allRows = {}
         Addon.state.sessionRows = {}
@@ -2550,6 +2722,7 @@ local function Initialize()
     Addon.inspectQueue = {}
     Addon.inspectActive = nil
     Addon.inspectByGuid = {}
+    Addon.inspectGeneration = 0
     Addon.pendingItems = {}
     Addon.lootGeneration = 0
     Addon.equipmentScanQueue = {}
@@ -2622,6 +2795,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         QueueEquipmentScan("challenge_start", true)
     elseif event == "GROUP_ROSTER_UPDATE" then
         BuildRoster()
+        Addon.equipmentCache = {}
         QueueEquipmentScan("group_roster_update", true)
     elseif event == "ENCOUNTER_START" then
         local encounterID, encounterName = ...

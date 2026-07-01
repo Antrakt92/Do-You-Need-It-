@@ -17,8 +17,7 @@ local function newLoadedHarness()
     h:loadAddon()
     h:runNextTimer(0)
     h.timers = {}
-    h.notifyInspectCalls = {}
-    h.clearInspectCalls = 0
+    h:resetSideEffects()
     return h
 end
 
@@ -35,17 +34,13 @@ local function addWeapon(h, itemID, name)
     })
 end
 
-local function fireLoot(h, looterName, itemLink)
-    h:fire("CHAT_MSG_LOOT", looterName .. " receives loot: " .. itemLink .. ".")
-end
-
 local function testDifferentGuidLootInspectsAreSerialized()
     local h = newLoadedHarness()
     local first = addWeapon(h, 21001, "First Sword")
     local second = addWeapon(h, 21002, "Second Sword")
 
-    fireLoot(h, "Otherplayer", first)
-    fireLoot(h, "Secondplayer", second)
+    h:fireLoot("Otherplayer", first)
+    h:fireLoot("Secondplayer", second)
 
     assertEqual(#h.notifyInspectCalls, 1, "two loot rows start only one live inspect")
     assertEqual(h.notifyInspectCalls[1], "party1", "first loot inspect starts first")
@@ -61,8 +56,8 @@ local function testSameGuidLootInspectsCoalesce()
     local first = addWeapon(h, 21003, "First Ring")
     local second = addWeapon(h, 21004, "Second Ring")
 
-    fireLoot(h, "Otherplayer", first)
-    fireLoot(h, "Otherplayer", second)
+    h:fireLoot("Otherplayer", first)
+    h:fireLoot("Otherplayer", second)
     assertEqual(#h.notifyInspectCalls, 1, "same-guid loot rows share one NotifyInspect")
 
     h:setInventoryLink("party1", "MainHandSlot", "|cff1eff00|Hitem:26:::::::::::::|h[Shared Worn Sword]|h|r")
@@ -77,7 +72,7 @@ local function testInspectTimeoutClearsOwnedInspectState()
     local h = newLoadedHarness()
     local item = addWeapon(h, 21005, "Timeout Sword")
 
-    fireLoot(h, "Otherplayer", item)
+    h:fireLoot("Otherplayer", item)
     assertEqual(#h.notifyInspectCalls, 1, "timeout test starts one inspect")
     assertEqual(h:runNextTimer(0.8), true, "timeout timer ran")
     assertEqual(h.clearInspectCalls, 1, "timeout clears Blizzard inspect state")
@@ -92,12 +87,11 @@ local function testCachedFallbackSurvivesLiveInspectFailure()
     assertEqual(h:runNextTimer(1.1), true, "pre-scan starts party inspect")
     h:fire("INSPECT_READY", "PartyGUID1")
     h.timers = {}
-    h.notifyInspectCalls = {}
-    h.clearInspectCalls = 0
+    h:resetSideEffects()
     h:setInventoryLink("party1", "MainHandSlot", nil)
 
     local item = addWeapon(h, 21006, "Cached Drop Sword")
-    fireLoot(h, "Otherplayer", item)
+    h:fireLoot("Otherplayer", item)
     local rows = h:visibleRows()
     assertEqual(#rows, 1, "cached fallback row is visible")
     assertTruthy(rows[1].row.equippedText:find("Cached: ", 1, true), "loot row uses cached equipped fallback before live ready")
@@ -106,9 +100,198 @@ local function testCachedFallbackSurvivesLiveInspectFailure()
     assertTruthy(rows[1].row.equippedText:find("Cached Worn Sword", 1, true), "cached equipped fallback survives timeout")
 end
 
+local function testRosterUpdateDoesNotReadReplacementUnitForActiveLootInspect()
+    local h = newLoadedHarness()
+    local item = addWeapon(h, 21007, "Roster Swap Sword")
+    local replacementLink = "|cff1eff00|Hitem:28:::::::::::::|h[Replacement Worn Sword]|h|r"
+
+    h:fireLoot("Otherplayer", item)
+    assertEqual(#h.notifyInspectCalls, 1, "roster swap test starts one inspect")
+    h:setUnit("party1", {
+        name = "Replacement",
+        realm = "Ravencrest",
+        guid = "ReplacementGUID",
+        classToken = "WARRIOR",
+    })
+    h:setInventoryLink("party1", "MainHandSlot", replacementLink)
+    h:fire("GROUP_ROSTER_UPDATE")
+    h:fire("INSPECT_READY", "PartyGUID1")
+
+    local rows = h.env.DoYouNeedItDB.sessionRows
+    assertEqual(#rows, 1, "stale ready keeps original loot row saved")
+    assertEqual(rows[1].equippedText:find("Replacement Worn Sword", 1, true), nil, "stale ready does not read replacement unit gear")
+end
+
+local function testClearCancelsInspectWorkAndUnblocksNewLoot()
+    local h = newLoadedHarness()
+    local first = addWeapon(h, 21008, "Clear First Sword")
+    local second = addWeapon(h, 21009, "Clear Second Sword")
+    local third = addWeapon(h, 21010, "Clear Third Sword")
+
+    h:fireLoot("Otherplayer", first)
+    h:fireLoot("Secondplayer", second)
+    assertEqual(#h.notifyInspectCalls, 1, "clear test starts only the active inspect")
+
+    h:slash("clear")
+    assertEqual(#h.env.DoYouNeedItDB.sessionRows, 0, "clear removes askable session rows")
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 0, "clear removes all-gear session rows")
+    assertEqual(h.clearInspectCalls, 1, "clear releases Blizzard inspect ownership")
+
+    h:resetSideEffects()
+    h:fireLoot("Thirdplayer", third)
+    assertEqual(#h.notifyInspectCalls, 1, "new loot starts inspect immediately after clear")
+    assertEqual(h.notifyInspectCalls[1], "party3", "new loot inspect is not blocked by stale requests")
+end
+
+local function testStaleInspectRetryAfterClearDoesNotRequeueOldRow()
+    local h = newLoadedHarness()
+    local item = addWeapon(h, 21011, "Retry After Clear Sword")
+
+    h:fireLoot("Otherplayer", item)
+    assertEqual(#h.notifyInspectCalls, 1, "retry-after-clear test starts inspect")
+    h:slash("clear")
+    h:resetSideEffects()
+
+    h:runTimers(0.8, 5)
+    assertEqual(#h.notifyInspectCalls, 0, "stale inspect timers do not requeue old rows after clear")
+    assertEqual(#h.env.DoYouNeedItDB.sessionRows, 0, "stale retry does not repersist cleared askable rows")
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 0, "stale retry does not repersist cleared all-gear rows")
+end
+
+local function testQueuedInspectRejectsUnitGuidMismatchBeforeNotify()
+    local h = newLoadedHarness()
+    local first = addWeapon(h, 21012, "Queued First Sword")
+    local second = addWeapon(h, 21013, "Queued Second Sword")
+
+    h:fireLoot("Otherplayer", first)
+    h:fireLoot("Secondplayer", second)
+    assertEqual(#h.notifyInspectCalls, 1, "queued mismatch test starts only first inspect")
+
+    h:setUnit("party2", {
+        name = "Replacement",
+        realm = "Ravencrest",
+        guid = "ReplacementGUID",
+        classToken = "WARRIOR",
+    })
+    h:fire("GROUP_ROSTER_UPDATE")
+    h:setInventoryLink("party1", "MainHandSlot", "|cff1eff00|Hitem:29:::::::::::::|h[First Worn Sword]|h|r")
+    h:fire("INSPECT_READY", "PartyGUID1")
+
+    assertEqual(#h.notifyInspectCalls, 1, "queued inspect with mismatched unit GUID is not notified")
+end
+
+local function testSameGuidRosterMoveStillCompletes()
+    local h = newLoadedHarness()
+    local item = addWeapon(h, 21014, "Moved Roster Sword")
+    local movedLink = "|cff1eff00|Hitem:30:::::::::::::|h[Moved Worn Sword]|h|r"
+
+    h:fireLoot("Otherplayer", item)
+    assertEqual(#h.notifyInspectCalls, 1, "same-guid move test starts one inspect")
+    h:setUnit("party1", {
+        name = "Replacement",
+        realm = "Ravencrest",
+        guid = "ReplacementGUID",
+        classToken = "WARRIOR",
+    })
+    h:setUnit("party2", {
+        name = "Otherplayer",
+        realm = "Ravencrest",
+        guid = "PartyGUID1",
+        classToken = "PALADIN",
+    })
+    h:setInventoryLink("party2", "MainHandSlot", movedLink)
+    h:fire("GROUP_ROSTER_UPDATE")
+    h:fire("INSPECT_READY", "PartyGUID1")
+
+    assertTruthy(h.env.DoYouNeedItDB.sessionRows[1].equippedText:find("Moved Worn Sword", 1, true), "same GUID roster move still reads the moved unit")
+end
+
+local function testClearDropsCachedFallbackForFutureLoot()
+    local h = Harness.new()
+    local cachedLink = "|cff1eff00|Hitem:31:::::::::::::|h[Cached Clear Sword]|h|r"
+    h:setInventoryLink("party1", "MainHandSlot", cachedLink)
+    h:loadAddon()
+    assertEqual(h:runNextTimer(0), true, "clear-cache test starts with player capture")
+    assertEqual(h:runNextTimer(1.1), true, "clear-cache test starts party inspect")
+    h:fire("INSPECT_READY", "PartyGUID1")
+    h.timers = {}
+    h:slash("clear")
+    h:resetSideEffects()
+    h:setInventoryLink("party1", "MainHandSlot", nil)
+    h.canInspect.party1 = false
+
+    local item = addWeapon(h, 21015, "After Clear Drop Sword")
+    h:fireLoot("Otherplayer", item)
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "post-clear loot row is visible")
+    assertEqual(rows[1].row.equippedText:find("Cached Clear Sword", 1, true), nil, "clear prevents stale cached fallback on future loot")
+end
+
+local function testRosterUpdateDropsCachedFallbackForChangedIdentity()
+    local h = Harness.new()
+    local cachedLink = "|cff1eff00|Hitem:32:::::::::::::|h[Cached Roster Sword]|h|r"
+    h:setInventoryLink("party1", "MainHandSlot", cachedLink)
+    h:loadAddon()
+    assertEqual(h:runNextTimer(0), true, "roster-cache test starts with player capture")
+    assertEqual(h:runNextTimer(1.1), true, "roster-cache test starts party inspect")
+    h:fire("INSPECT_READY", "PartyGUID1")
+    h.timers = {}
+    h:setUnit("party1", {
+        name = "Replacement",
+        realm = "Ravencrest",
+        guid = "ReplacementGUID",
+        classToken = "WARRIOR",
+    })
+    h:fire("GROUP_ROSTER_UPDATE")
+    h.timers = {}
+    h:setInventoryLink("party1", "MainHandSlot", nil)
+    h.canInspect.party1 = false
+
+    local item = addWeapon(h, 21016, "After Roster Drop Sword")
+    h:fireLoot("Otherplayer", item)
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "post-roster loot row is visible")
+    assertEqual(rows[1].row.equippedText:find("Cached Roster Sword", 1, true), nil, "roster identity change prevents stale cached fallback")
+end
+
+local function testStaleScanReadyDoesNotCacheReplacementUnit()
+    local h = Harness.new()
+    local replacementLink = "|cff1eff00|Hitem:33:::::::::::::|h[Stale Scan Replacement Sword]|h|r"
+    h:setInventoryLink("party1", "MainHandSlot", replacementLink)
+    h:loadAddon()
+    assertEqual(h:runNextTimer(0), true, "stale-scan test starts with player capture")
+    assertEqual(h:runNextTimer(1.1), true, "stale-scan test starts party inspect")
+
+    h:setUnit("party1", {
+        name = "Replacement",
+        realm = "Ravencrest",
+        guid = "ReplacementGUID",
+        classToken = "WARRIOR",
+    })
+    h:fire("INSPECT_READY", "PartyGUID1")
+    h.timers = {}
+    h:resetSideEffects()
+    h:setInventoryLink("party1", "MainHandSlot", nil)
+    h.canInspect.party1 = false
+
+    local item = addWeapon(h, 21017, "Replacement Drop Sword")
+    h:fireLoot("Replacement", item)
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "replacement loot row is visible after stale scan ready")
+    assertEqual(rows[1].row.equippedText:find("Stale Scan Replacement Sword", 1, true), nil, "stale scan ready does not cache replacement unit gear")
+end
+
 testDifferentGuidLootInspectsAreSerialized()
 testSameGuidLootInspectsCoalesce()
 testInspectTimeoutClearsOwnedInspectState()
 testCachedFallbackSurvivesLiveInspectFailure()
+testRosterUpdateDoesNotReadReplacementUnitForActiveLootInspect()
+testClearCancelsInspectWorkAndUnblocksNewLoot()
+testStaleInspectRetryAfterClearDoesNotRequeueOldRow()
+testQueuedInspectRejectsUnitGuidMismatchBeforeNotify()
+testSameGuidRosterMoveStillCompletes()
+testClearDropsCachedFallbackForFutureLoot()
+testRosterUpdateDropsCachedFallbackForChangedIdentity()
+testStaleScanReadyDoesNotCacheReplacementUnit()
 
 print("runtime inspect ok")

@@ -295,6 +295,21 @@ assertEqual(
     false,
     "equipment cache rejects empty captures"
 )
+assertEqual(
+    Core.StoreEquipmentCache(equipmentCache, { "Otherplayer", "Otherplayer-Realm" }, {}, 1236),
+    false,
+    "equipment cache empty capture reports no usable slots for existing aliases"
+)
+assertEqual(
+    Core.GetCachedEquippedText(equipmentCache, "Otherplayer", "INVTYPE_WEAPON"),
+    nil,
+    "equipment cache empty capture clears stale short-name alias"
+)
+assertEqual(
+    Core.GetCachedEquippedText(equipmentCache, "Otherplayer-Realm", "INVTYPE_WEAPON"),
+    nil,
+    "equipment cache empty capture clears stale full-name alias"
+)
 
 local rosterIndex = Core.CreateRosterIndex({
     { unit = "player", fullName = "Player-Ravencrest", shortName = "Player" },

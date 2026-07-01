@@ -373,6 +373,37 @@ function Harness:setInventoryLink(unit, slotName, link)
     self.inventoryLinks[unit][slotName] = link
 end
 
+function Harness:setUnit(unit, fields)
+    fields = fields or {}
+    local current = self.units[unit] or {}
+    local updated = {}
+    for key, value in pairs(current) do
+        updated[key] = value
+    end
+    for key, value in pairs(fields) do
+        updated[key] = value
+    end
+    self.units[unit] = updated
+end
+
+function Harness:removeUnit(unit)
+    self.units[unit] = nil
+    self.inventoryLinks[unit] = nil
+    self.canInspect[unit] = nil
+end
+
+function Harness:resetSideEffects()
+    self.messages = {}
+    self.sentMessages = {}
+    self.notifyInspectCalls = {}
+    self.clearInspectCalls = 0
+    self.inventoryReadCalls = {}
+end
+
+function Harness:fireLoot(looterName, itemLink)
+    self:fire("CHAT_MSG_LOOT", looterName .. " receives loot: " .. itemLink .. ".")
+end
+
 function Harness:findFrame(predicate, root)
     root = root or self.env.UIParent
     if predicate(root) then
@@ -479,6 +510,7 @@ function Harness.new(options)
         sentMessages = {},
         notifyInspectCalls = {},
         clearInspectCalls = 0,
+        inventoryReadCalls = {},
         dropdownAdds = {},
         items = {},
         inventoryLinks = {},
@@ -629,7 +661,7 @@ function Harness.new(options)
         if self.canInspect[unit] ~= nil then
             return self.canInspect[unit]
         end
-        return unit ~= "player"
+        return unit ~= "player" and self.units[unit] ~= nil
     end
 
     env.GetInventorySlotInfo = function(slotName)
@@ -637,6 +669,10 @@ function Harness.new(options)
     end
     env.GetInventoryItemLink = function(unit, slotID)
         local slotName = slotNamesByID[slotID] or slotID
+        self.inventoryReadCalls[#self.inventoryReadCalls + 1] = {
+            unit = unit,
+            slotName = slotName,
+        }
         local links = self.inventoryLinks[unit]
         return links and links[slotName] or nil
     end

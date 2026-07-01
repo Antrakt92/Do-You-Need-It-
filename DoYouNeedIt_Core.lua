@@ -841,11 +841,6 @@ function Core.StoreEquipmentCache(cache, names, equippedByLoc, timestamp)
         return false
     end
 
-    local slots, slotCount = copyEquipmentSlots(equippedByLoc)
-    if slotCount == 0 then
-        return false
-    end
-
     local nameList = {}
     if type(names) == "string" then
         nameList[1] = names
@@ -853,6 +848,17 @@ function Core.StoreEquipmentCache(cache, names, equippedByLoc, timestamp)
         for index = 1, #names do
             nameList[#nameList + 1] = names[index]
         end
+    end
+
+    local slots, slotCount = copyEquipmentSlots(equippedByLoc)
+    if slotCount == 0 then
+        for index = 1, #nameList do
+            local name = nameList[index]
+            if type(name) == "string" and name ~= "" then
+                cache[name] = nil
+            end
+        end
+        return false
     end
 
     local wrote = false
