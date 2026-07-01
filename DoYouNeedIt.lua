@@ -1634,6 +1634,59 @@ local function CurrentLanguageLabel()
     return LanguageCompactLabel(option)
 end
 
+local function GetDropdownChild(dropdown, suffix)
+    if not dropdown then
+        return nil
+    end
+    if suffix == "Text" and dropdown.Text then
+        return dropdown.Text
+    end
+    if suffix == "Button" and dropdown.Button then
+        return dropdown.Button
+    end
+    local name = type(dropdown.GetName) == "function" and dropdown:GetName()
+    if not name then
+        return nil
+    end
+    return _G[name .. suffix]
+end
+
+local function DropdownCaptionFont()
+    local settings = Addon.state and Addon.state.settings or Core.NormalizeSettings({})
+    local requiredGlyph = Core.GetLocaleGlyphRequirement(ActiveLocale())
+    local font = Core.FindCompatibleFont(Core.GetDefaultFont(), requiredGlyph, BuildFontsList(), ClientLocale())
+    return font or Core.GetDefaultFont(), Core.ResolveFontSize(12, settings.fontSize)
+end
+
+local function ShowDropdownPart(dropdown, suffix)
+    local part = GetDropdownChild(dropdown, suffix)
+    if part then
+        SafeCall(part.Show, part)
+        SafeCall(part.SetAlpha, part, 1)
+    end
+    return part
+end
+
+local function SetDropdownTextSafe(dropdown, text)
+    if not dropdown then
+        return
+    end
+    SafeCall(UIDropDownMenu_SetText, dropdown, text or "")
+    local font, size = DropdownCaptionFont()
+    local textRegion = ShowDropdownPart(dropdown, "Text")
+    if textRegion then
+        SafeCall(textRegion.SetFont, textRegion, font, size, "")
+        SafeCall(textRegion.SetText, textRegion, text or "")
+    end
+    local button = ShowDropdownPart(dropdown, "Button")
+    if button then
+        SafeCall(button.Enable, button)
+    end
+    ShowDropdownPart(dropdown, "Left")
+    ShowDropdownPart(dropdown, "Middle")
+    ShowDropdownPart(dropdown, "Right")
+end
+
 local function RefreshFontWarning()
     if not Addon.fontWarning or not Addon.state then
         return
@@ -1691,10 +1744,10 @@ RefreshSettingsControls = function()
         Addon.fontSizeValue:SetText(settings.fontSize)
     end
     if Addon.languageDropdown then
-        UIDropDownMenu_SetText(Addon.languageDropdown, CurrentLanguageLabel())
+        SetDropdownTextSafe(Addon.languageDropdown, CurrentLanguageLabel())
     end
     if Addon.fontDropdown then
-        UIDropDownMenu_SetText(Addon.fontDropdown, FindFontName(settings.font))
+        SetDropdownTextSafe(Addon.fontDropdown, FindFontName(settings.font))
     end
     RefreshFontWarning()
 end
@@ -1772,16 +1825,20 @@ local function PreviewFont(path)
     end
     Addon.previewFont = path
     ApplyCurrentFont()
-    RefreshFontWarning()
+    RefreshSettingsControls()
 end
 
 local function CancelFontPreview()
-    if not Addon.previewFont then
-        return
-    end
     Addon.previewFont = nil
     ApplyCurrentFont()
-    RefreshFontWarning()
+    RefreshSettingsControls()
+end
+
+local function CancelSettingsPreview()
+    Addon.previewLocale = nil
+    Addon.previewFont = nil
+    ApplyCurrentFont()
+    RefreshLocalization()
 end
 
 local function HookSettingsDropdownButtons()
@@ -1795,10 +1852,29 @@ local function HookSettingsDropdownButtons()
         end
         if not button._dyniPreviewHooked then
             button:HookScript("OnEnter", function(btn)
+                Addon.dropdownPreviewGen = (Addon.dropdownPreviewGen or 0) + 1
                 if UIDROPDOWNMENU_OPEN_MENU == Addon.languageDropdown and btn.value ~= nil then
                     PreviewLanguage(btn.value)
                 elseif UIDROPDOWNMENU_OPEN_MENU == Addon.fontDropdown and btn.value ~= nil then
                     PreviewFont(btn.value)
+                end
+            end)
+            button:HookScript("OnLeave", function()
+                local generation = Addon.dropdownPreviewGen or 0
+                local function restoreIfStillAway()
+                    if generation ~= (Addon.dropdownPreviewGen or 0) then
+                        return
+                    end
+                    if UIDROPDOWNMENU_OPEN_MENU == Addon.languageDropdown then
+                        CancelLanguagePreview()
+                    elseif UIDROPDOWNMENU_OPEN_MENU == Addon.fontDropdown then
+                        CancelFontPreview()
+                    end
+                end
+                if C_Timer and type(C_Timer.After) == "function" then
+                    C_Timer.After(0, restoreIfStillAway)
+                else
+                    restoreIfStillAway()
                 end
             end)
             button._dyniPreviewHooked = true
@@ -1841,6 +1917,7 @@ CreateSettingsUI = function()
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    frame:SetScript("OnHide", CancelSettingsPreview)
     frame:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",

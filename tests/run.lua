@@ -498,7 +498,7 @@ assertEqual(#diagnostics, 10, "diagnostics prune to limit")
 assertEqual(diagnostics[1].stage, "stage12", "newest diagnostic first")
 assertEqual(diagnostics[10].stage, "stage3", "oldest retained diagnostic kept at limit")
 
-assertEqual(Core.VERSION, "0.1.19", "core exposes current version")
+assertEqual(Core.VERSION, "0.1.20", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -509,7 +509,7 @@ end
 
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
-assertTruthy(toc:find("## Version: 0.1.19", 1, true), "toc version present")
+assertTruthy(toc:find("## Version: 0.1.20", 1, true), "toc version present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")
 assertTruthy(toc:find("DoYouNeedIt.lua", 1, true), "toc loads runtime")
@@ -541,6 +541,10 @@ assertTruthy(runtime:find("PreviewLanguage", 1, true), "runtime previews languag
 assertTruthy(runtime:find("CancelLanguagePreview", 1, true), "runtime cancels language preview")
 assertTruthy(runtime:find("PreviewFont", 1, true), "runtime previews font on hover")
 assertTruthy(runtime:find("CancelFontPreview", 1, true), "runtime cancels font preview")
+assertTruthy(runtime:find("CancelSettingsPreview", 1, true), "runtime force-clears settings hover previews")
+assertTruthy(runtime:find("SetDropdownTextSafe", 1, true), "runtime repairs dropdown captions after preview changes")
+assertTruthy(runtime:find("HookScript(\"OnLeave\"", 1, true), "runtime restores font previews when leaving dropdown buttons")
+assertTruthy(runtime:find("frame:SetScript(\"OnHide\", CancelSettingsPreview)", 1, true), "settings window restores previews on close")
 assertTruthy(runtime:find("LibSharedMedia%-3%.0", 1, false), "runtime reads LibSharedMedia fonts")
 assertTruthy(runtime:find("DropDownList1:HookScript(\"OnHide\"", 1, true), "runtime rolls back dropdown hover previews on close")
 assertTruthy(runtime:find("Core.GetLocaleLabel", 1, true), "runtime localizes visible UI strings")
