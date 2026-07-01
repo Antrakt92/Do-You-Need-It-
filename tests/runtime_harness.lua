@@ -543,10 +543,18 @@ function Harness.new(options)
         self:newFrame("Button", "DropDownList1Button" .. index, env.DropDownList1)
     end
 
+    local configuredFonts = self.options.lsmFonts or {
+        { name = "Friz Quadrata TT", path = "Fonts\\FRIZQT__.TTF" },
+        { name = "Arial Narrow", path = "Fonts\\ARIALN.TTF" },
+    }
     local lsm = {
         List = function(_, kind)
             if kind == "font" then
-                return { "Friz Quadrata TT", "Arial Narrow" }
+                local names = {}
+                for index = 1, #configuredFonts do
+                    names[#names + 1] = configuredFonts[index].name
+                end
+                return names
             end
             return {}
         end,
@@ -554,10 +562,12 @@ function Harness.new(options)
             if kind ~= "font" then
                 return nil
             end
-            if name == "Arial Narrow" then
-                return "Fonts\\ARIALN.TTF"
+            for index = 1, #configuredFonts do
+                if configuredFonts[index].name == name then
+                    return configuredFonts[index].path
+                end
             end
-            return "Fonts\\FRIZQT__.TTF"
+            return nil
         end,
     }
     env.LibStub = function(name, silent)

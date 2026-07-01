@@ -264,7 +264,7 @@ local function L(key)
     return Core.GetLocaleLabel(key, ActiveLocale())
 end
 
-local function RegisterFontString(fontString, size, flags)
+local function RegisterFontString(fontString, size, flags, stable)
     if not fontString then
         return
     end
@@ -272,15 +272,16 @@ local function RegisterFontString(fontString, size, flags)
         fontString = fontString,
         size = size,
         flags = flags,
+        stable = stable == true,
     }
     if ApplyCurrentFont then
         ApplyCurrentFont()
     end
 end
 
-local function RegisterButtonFont(button, size, flags)
+local function RegisterButtonFont(button, size, flags, stable)
     if button and type(button.GetFontString) == "function" then
-        RegisterFontString(button:GetFontString(), size, flags)
+        RegisterFontString(button:GetFontString(), size, flags, stable)
     end
 end
 
@@ -322,6 +323,11 @@ local function BuildFontsList()
     return fonts
 end
 
+local function StableSettingsFont()
+    local requiredGlyph = Core.GetLocaleGlyphRequirement(ActiveLocale())
+    return Core.FindCompatibleFont(Core.GetDefaultFont(), requiredGlyph, BuildFontsList(), ClientLocale()) or Core.GetDefaultFont()
+end
+
 local function FindFontName(path)
     local fonts = BuildFontsList()
     for index = 1, #fonts do
@@ -334,11 +340,17 @@ end
 
 ApplyCurrentFont = function()
     local settings = Addon.state and Addon.state.settings or Core.NormalizeSettings({})
-    local font = Addon.previewFont or settings.font or Core.GetDefaultFont()
+    local previewFont = Addon.previewFont or settings.font or Core.GetDefaultFont()
+    local stableFont
     local selectedSize = tonumber(settings.fontSize) or 12
     for index = 1, #Addon.fontStrings do
         local entry = Addon.fontStrings[index]
         if entry and entry.fontString and type(entry.fontString.SetFont) == "function" then
+            local font = previewFont
+            if entry.stable then
+                stableFont = stableFont or StableSettingsFont()
+                font = stableFont
+            end
             SafeCall(entry.fontString.SetFont, entry.fontString, font, Core.ResolveFontSize(entry.size, selectedSize), entry.flags)
         end
     end
@@ -2134,9 +2146,7 @@ end
 
 local function DropdownCaptionFont()
     local settings = Addon.state and Addon.state.settings or Core.NormalizeSettings({})
-    local requiredGlyph = Core.GetLocaleGlyphRequirement(ActiveLocale())
-    local font = Core.FindCompatibleFont(Core.GetDefaultFont(), requiredGlyph, BuildFontsList(), ClientLocale())
-    return font or Core.GetDefaultFont(), Core.ResolveFontSize(12, settings.fontSize)
+    return StableSettingsFont(), Core.ResolveFontSize(12, settings.fontSize)
 end
 
 local function ShowDropdownPart(dropdown, suffix)
@@ -2411,7 +2421,7 @@ CreateSettingsUI = function()
     frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -16)
     frame.title:SetText(L("Settings"))
-    RegisterFontString(frame.title, 16, "OUTLINE")
+    RegisterFontString(frame.title, 16, "OUTLINE", true)
     Addon.settingsTitle = frame.title
 
     frame.close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
@@ -2428,13 +2438,13 @@ CreateSettingsUI = function()
 
     frame.autoCheckLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     frame.autoCheckLabel:SetPoint("LEFT", frame.autoCheck, "RIGHT", 4, 0)
-    RegisterFontString(frame.autoCheckLabel, 12)
+    RegisterFontString(frame.autoCheckLabel, 12, nil, true)
     Addon.autoCheckLabel = frame.autoCheckLabel
 
     y = y - 36
     frame.delayLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     frame.delayLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, y)
-    RegisterFontString(frame.delayLabel, 12)
+    RegisterFontString(frame.delayLabel, 12, nil, true)
     Addon.delayLabel = frame.delayLabel
 
     frame.delaySlider = CreateFrame("Slider", nil, frame, "OptionsSliderTemplate")
@@ -2457,13 +2467,13 @@ CreateSettingsUI = function()
     frame.delayValue:SetPoint("LEFT", frame.delaySlider, "RIGHT", 12, 0)
     frame.delayValue:SetWidth(40)
     frame.delayValue:SetJustifyH("LEFT")
-    RegisterFontString(frame.delayValue, 12)
+    RegisterFontString(frame.delayValue, 12, nil, true)
     Addon.delayValue = frame.delayValue
 
     y = y - 42
     frame.languageLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     frame.languageLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, y)
-    RegisterFontString(frame.languageLabel, 12)
+    RegisterFontString(frame.languageLabel, 12, nil, true)
     Addon.languageLabel = frame.languageLabel
 
     frame.languageDropdown = CreateFrame("Frame", "DoYouNeedItLanguageDropdown", frame, "UIDropDownMenuTemplate")
@@ -2495,7 +2505,7 @@ CreateSettingsUI = function()
     y = y - 42
     frame.fontLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     frame.fontLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, y)
-    RegisterFontString(frame.fontLabel, 12)
+    RegisterFontString(frame.fontLabel, 12, nil, true)
     Addon.fontLabel = frame.fontLabel
 
     frame.fontDropdown = CreateFrame("Frame", "DoYouNeedItFontDropdown", frame, "UIDropDownMenuTemplate")
@@ -2527,7 +2537,7 @@ CreateSettingsUI = function()
     y = y - 42
     frame.fontSizeLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     frame.fontSizeLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, y)
-    RegisterFontString(frame.fontSizeLabel, 12)
+    RegisterFontString(frame.fontSizeLabel, 12, nil, true)
     Addon.fontSizeLabel = frame.fontSizeLabel
 
     frame.fontSizeSlider = CreateFrame("Slider", nil, frame, "OptionsSliderTemplate")
@@ -2550,7 +2560,7 @@ CreateSettingsUI = function()
     frame.fontSizeValue:SetPoint("LEFT", frame.fontSizeSlider, "RIGHT", 12, 0)
     frame.fontSizeValue:SetWidth(40)
     frame.fontSizeValue:SetJustifyH("LEFT")
-    RegisterFontString(frame.fontSizeValue, 12)
+    RegisterFontString(frame.fontSizeValue, 12, nil, true)
     Addon.fontSizeValue = frame.fontSizeValue
 
     frame.fontWarning = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -2558,7 +2568,7 @@ CreateSettingsUI = function()
     frame.fontWarning:SetWidth(316)
     frame.fontWarning:SetJustifyH("LEFT")
     frame.fontWarning:SetTextColor(1, 0.6, 0.2)
-    RegisterFontString(frame.fontWarning, 11)
+    RegisterFontString(frame.fontWarning, 11, nil, true)
     Addon.fontWarning = frame.fontWarning
 
     Addon.settingsFrame = frame

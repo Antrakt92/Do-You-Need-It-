@@ -185,6 +185,41 @@ local function testLegacyPlainItemTextDoesNotCreateDropHoverTarget()
     assertEqual(rows[1].dropLink.itemLink, nil, "plain item text is not treated as an item hyperlink")
 end
 
+local function testFontHoverPreviewKeepsSettingsControlsReadable()
+    local brokenFontPath = "Interface\\AddOns\\Broken\\Unreadable.ttf"
+    local h = Harness.new({
+        lsmFonts = {
+            { name = "Broken Font", path = brokenFontPath },
+        },
+    })
+    h:loadAddon()
+    h:slash("settings")
+
+    local settingsFrame = h.env.DoYouNeedItSettingsFrame
+    local fontDropdown = h.env.DoYouNeedItFontDropdown
+    assertTruthy(settingsFrame and settingsFrame.title, "settings title exists")
+    assertTruthy(fontDropdown and fontDropdown.Button and fontDropdown.initialize, "font dropdown can be opened")
+
+    fontDropdown.Button:FireScript("OnClick")
+    h:runTimers(0, 10)
+    h.dropdownAdds = {}
+    h.env.UIDROPDOWNMENU_OPEN_MENU = fontDropdown
+    fontDropdown.initialize()
+    h.env.DropDownList1:Show()
+
+    local brokenButton = h:findFrame(function(frame)
+        return frame.value == brokenFontPath
+    end, h.env.DropDownList1)
+    assertTruthy(brokenButton, "broken font option is present")
+    brokenButton:FireScript("OnEnter")
+
+    assertEqual(settingsFrame.title.font == brokenFontPath, false, "font hover does not apply preview font to settings title")
+    assertEqual(h.env.DoYouNeedItLanguageDropdown.Text.font == brokenFontPath, false, "font hover does not apply preview font to language caption")
+    assertEqual(h.env.DoYouNeedItFontDropdown.Text.font == brokenFontPath, false, "font hover does not apply preview font to font caption")
+    assertTruthy(h.env.DoYouNeedItLanguageDropdown.Text:GetText() ~= "", "language caption survives font hover")
+    assertTruthy(h.env.DoYouNeedItFontDropdown.Text:GetText() ~= "", "font caption survives font hover")
+end
+
 testLoadAndSettings()
 testSlashTestRowsAndManualWhisper()
 testInstanceChangeCompletesCurrentGroup()
@@ -192,5 +227,6 @@ testDebugPersistenceIsOptIn()
 testDebugPersistenceLoadState()
 testLegacySavedAllGearFallbackDisplays()
 testLegacyPlainItemTextDoesNotCreateDropHoverTarget()
+testFontHoverPreviewKeepsSettingsControlsReadable()
 
 print("runtime smoke ok")
