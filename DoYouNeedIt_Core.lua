@@ -349,12 +349,23 @@ local function truncateUtf8Bytes(text, maxBytes)
     return text:sub(1, lastCompleteByte)
 end
 
+local function stripPartialItemPlaceholder(text)
+    local placeholder = "{item}"
+    for length = #placeholder - 1, 1, -1 do
+        local suffix = text:sub(-length)
+        if suffix == placeholder:sub(1, length) then
+            return text:sub(1, #text - length)
+        end
+    end
+    return text
+end
+
 function Core.NormalizeWhisperTemplate(template)
     if type(template) ~= "string" or not template:match("%S") then
         return DEFAULT_WHISPER_TEMPLATE
     end
     if #template > MAX_WHISPER_TEMPLATE_LENGTH then
-        return truncateUtf8Bytes(template, MAX_WHISPER_TEMPLATE_LENGTH)
+        return stripPartialItemPlaceholder(truncateUtf8Bytes(template, MAX_WHISPER_TEMPLATE_LENGTH))
     end
     return template
 end
