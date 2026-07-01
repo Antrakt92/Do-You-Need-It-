@@ -62,6 +62,14 @@ Run from the repository root:
 
 The check script runs the Lua regression tests, Lua 5.1 syntax checks, and a public-source leakage guard.
 
+Build a local addon zip with:
+
+```powershell
+.\scripts\package.ps1
+```
+
+The package is written to `dist\DoYouNeedIt-<version>.zip` with `DoYouNeedIt/` as the zip root. It includes the addon TOC, Lua files, bundled runtime libraries, README, license, and third-party notices, while excluding tests, scripts, and local development files. The main check script also validates this package shape.
+
 ## License
 
 MIT. This project is intended to be freely modifiable and redistributable under the license terms.
