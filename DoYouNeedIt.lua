@@ -2344,7 +2344,7 @@ RefreshSettingsControls = function()
     if Addon.whisperLabel then
         Addon.whisperLabel:SetText(L("Whisper text:"))
     end
-    if Addon.whisperEditBox and Addon.whisperEditBox:GetText() ~= settings.whisperTemplate then
+    if Addon.whisperEditBox and not Addon.whisperTemplateFocused and Addon.whisperEditBox:GetText() ~= settings.whisperTemplate then
         Addon.whisperEditBox:SetText(settings.whisperTemplate)
     end
     if Addon.whisperResetButton then
@@ -2851,11 +2851,15 @@ CreateSettingsUI = function()
     if frame.whisperEditBox.SetMaxLetters then
         frame.whisperEditBox:SetMaxLetters(Core.MAX_WHISPER_TEMPLATE_LENGTH)
     end
+    frame.whisperEditBox:SetScript("OnEditFocusGained", function()
+        Addon.whisperTemplateFocused = true
+    end)
     frame.whisperEditBox:SetScript("OnEnterPressed", function(editBox)
         if Addon.committingWhisperTemplate then
             return
         end
         Addon.committingWhisperTemplate = true
+        Addon.whisperTemplateFocused = false
         SetWhisperTemplate(editBox:GetText())
         SafeCall(editBox.ClearFocus, editBox)
         Addon.committingWhisperTemplate = false
@@ -2865,10 +2869,12 @@ CreateSettingsUI = function()
             return
         end
         Addon.committingWhisperTemplate = true
+        Addon.whisperTemplateFocused = false
         SetWhisperTemplate(editBox:GetText())
         Addon.committingWhisperTemplate = false
     end)
     frame.whisperEditBox:SetScript("OnEscapePressed", function(editBox)
+        Addon.whisperTemplateFocused = false
         editBox:SetText(Addon.state.settings.whisperTemplate)
         SafeCall(editBox.ClearFocus, editBox)
     end)
@@ -2879,6 +2885,7 @@ CreateSettingsUI = function()
     frame.whisperResetButton:SetPoint("LEFT", frame.whisperEditBox, "RIGHT", 8, 0)
     frame.whisperResetButton:SetSize(58, 22)
     frame.whisperResetButton:SetScript("OnClick", function()
+        Addon.whisperTemplateFocused = false
         SetWhisperTemplate(nil)
         SafeCall(frame.whisperEditBox.ClearFocus, frame.whisperEditBox)
     end)

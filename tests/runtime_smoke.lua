@@ -75,6 +75,22 @@ local function testCustomWhisperTemplateIsUsedForManualAsk()
     assertEqual(h.sentMessages[1].message, "Could you trade " .. rows[1].row.itemLink .. " please?", "manual Ask uses saved custom whisper template")
 end
 
+local function testManualWhisperFailureLeavesRowRetryable()
+    local h = Harness.new()
+    h.failWhisper = true
+    h:loadAddon()
+    h:slash("test")
+
+    local rows = h:visibleRows()
+    rows[1].whisper:FireScript("OnClick")
+    h:runTimers(0)
+
+    assertEqual(rows[1].row.statusKey, "whisper_failed", "failed manual whisper stores a stable failure status")
+    assertEqual(rows[1].row.manualWhispered, nil, "failed manual whisper does not mark the row sent")
+    assertEqual(rows[1].row.whisperInFlight, false, "failed manual whisper clears in-flight state")
+    assertEqual(rows[1].whisper:IsEnabled(), true, "failed manual whisper leaves Ask retry enabled")
+end
+
 local function testMainWindowLayoutBoundsLongText()
     local h = Harness.new()
     h:loadAddon()
@@ -523,9 +539,28 @@ local function testSettingsWhisperTemplateEditBoxSaves()
     assertEqual(frame.whisperEditBox:GetText(), "Hey, do you need {item}?", "whisper template reset refreshes edit box text")
 end
 
+local function testSettingsRefreshKeepsFocusedWhisperDraft()
+    local h = Harness.new()
+    h:loadAddon()
+    h:slash("settings")
+
+    local frame = h.env.DoYouNeedItSettingsFrame
+    local draft = "Could you spare {item}?"
+    frame.whisperEditBox:FireScript("OnEditFocusGained")
+    frame.whisperEditBox:SetText(draft)
+
+    frame.fontSizeSlider:SetValue(13)
+    assertEqual(frame.whisperEditBox:GetText(), draft, "settings refresh keeps focused whisper template draft")
+    assertEqual(h.env.DoYouNeedItDB.settings.whisperTemplate, "Hey, do you need {item}?", "focused whisper draft is not saved before commit")
+
+    frame.whisperEditBox:FireScript("OnEditFocusLost")
+    assertEqual(h.env.DoYouNeedItDB.settings.whisperTemplate, draft, "focused whisper draft saves on focus loss")
+end
+
 testLoadAndSettings()
 testSlashTestRowsAndManualWhisper()
 testCustomWhisperTemplateIsUsedForManualAsk()
+testManualWhisperFailureLeavesRowRetryable()
 testMainWindowLayoutBoundsLongText()
 testInstanceChangeCompletesCurrentGroup()
 testInstanceChangeHistoryTitleUsesActiveLocale()
@@ -542,5 +577,6 @@ testLanguageDropdownCloseRepairsCaptionsAfterSharedListCleanup()
 testSettingsSliderTemplateTextDoesNotLeak()
 testSettingsControlsUseFixedColumnLayout()
 testSettingsWhisperTemplateEditBoxSaves()
+testSettingsRefreshKeepsFocusedWhisperDraft()
 
 print("runtime smoke ok")
