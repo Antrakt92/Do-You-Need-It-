@@ -57,6 +57,32 @@ local function addUncachedWeapon(h, itemID, name)
     })
 end
 
+local function addNeverCachedWeapon(h, itemID, name)
+    return h:addItem(itemID, {
+        name = name,
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+        cacheLoaded = false,
+        cacheNeverLoads = true,
+    })
+end
+
+local function findDiagnostic(h, stage, reason)
+    local diagnostics = h.env.DoYouNeedItDB.diagnostics or {}
+    for index = 1, #diagnostics do
+        local entry = diagnostics[index]
+        if entry.stage == stage and (reason == nil or entry.reason == reason) then
+            return entry
+        end
+    end
+    return nil
+end
+
 local function testDifferentGuidLootInspectsAreSerialized()
     local h = newLoadedHarness()
     local first = addWeapon(h, 21001, "First Sword")
@@ -244,6 +270,67 @@ local function testStaleItemLoadAfterClearDoesNotAddOldLoot()
     assertEqual(#h:visibleRows(), 1, "fresh loot after item cache load still adds a row")
 end
 
+local function testNeverLoadedItemMetadataFailsAndClearsPendingLoot()
+    local h = newLoadedHarnessWithDB({
+        settings = {
+            debug = true,
+            font = "Fonts\\FRIZQT__.TTF",
+        },
+    })
+    local item = addNeverCachedWeapon(h, 21020, "Never Cached Sword")
+
+    h:fireLoot("Otherplayer", item)
+    assertEqual(#h:visibleRows(), 0, "never-cached item waits for item metadata before adding rows")
+
+    h:runTimers(3, 20)
+
+    assertEqual(#h:visibleRows(), 0, "never-cached item does not show an unverified loot row after retry limit")
+    assertEqual(#(h.env.DoYouNeedItDB.sessionRows or {}), 0, "never-cached item does not persist askable rows after retry limit")
+    assertEqual(#(h.env.DoYouNeedItDB.sessionAllRows or {}), 0, "never-cached item does not persist all-gear rows after retry limit")
+    assertTruthy(findDiagnostic(h, "metadata_failed", "retry_limit"), "never-cached item records a retry-limit metadata diagnostic")
+
+    h:resetSideEffects()
+    h:fireLoot("Otherplayer", item)
+    h:runTimers(3, 20)
+    assertEqual(#h:visibleRows(), 0, "retry-limit cleanup lets later failed loot start and finish without stale rows")
+end
+
+local function testUnresolvedLootMessageNameCreatesUnsafeAllGearOnlyRow()
+    local h = newLoadedHarnessWithDB({
+        settings = {
+            autoWhisper = true,
+            font = "Fonts\\FRIZQT__.TTF",
+        },
+    })
+    local item = addWeapon(h, 21021, "Unresolved Looter Sword")
+
+    h:fireLoot("Crossrealmhero", item)
+
+    assertEqual(#(h.env.DoYouNeedItDB.sessionRows or {}), 0, "unresolved live looter is not saved as askable")
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 1, "unresolved live looter is saved in all-gear history")
+    assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].unsafe, true, "unresolved live looter row is marked unsafe")
+    assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].statusKey, "looter_unresolved", "unresolved live looter keeps a visible reason")
+    assertEqual(#h.notifyInspectCalls, 0, "unresolved live looter does not start inspect")
+    h:runTimers(20, 10)
+    assertEqual(#h.sentMessages, 0, "unresolved live looter does not auto-whisper")
+
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "unresolved live looter auto-opens all gear when there are no askable rows")
+    assertEqual(rows[1].row.askable, false, "unresolved live looter visible row is all-gear only")
+    assertEqual(rows[1].whisper:IsShown(), false, "unresolved live looter row hides Ask")
+end
+
+local function testPlaceholderLootMessageNameIsIgnored()
+    local h = newLoadedHarness()
+    local item = addWeapon(h, 21022, "Placeholder Looter Sword")
+
+    h:fireLoot("UNKNOWNOBJECT", item)
+
+    assertEqual(#(h.env.DoYouNeedItDB.sessionRows or {}), 0, "placeholder live looter does not create askable rows")
+    assertEqual(#(h.env.DoYouNeedItDB.sessionAllRows or {}), 0, "placeholder live looter does not create all-gear rows")
+    assertEqual(#h.notifyInspectCalls, 0, "placeholder live looter does not inspect")
+end
+
 local function testQueuedInspectRejectsUnitGuidMismatchBeforeNotify()
     local h = newLoadedHarness()
     local first = addWeapon(h, 21012, "Queued First Sword")
@@ -377,6 +464,9 @@ testRosterUpdateDoesNotReadReplacementUnitForActiveLootInspect()
 testClearCancelsInspectWorkAndUnblocksNewLoot()
 testStaleInspectRetryAfterClearDoesNotRequeueOldRow()
 testStaleItemLoadAfterClearDoesNotAddOldLoot()
+testNeverLoadedItemMetadataFailsAndClearsPendingLoot()
+testUnresolvedLootMessageNameCreatesUnsafeAllGearOnlyRow()
+testPlaceholderLootMessageNameIsIgnored()
 testQueuedInspectRejectsUnitGuidMismatchBeforeNotify()
 testSameGuidRosterMoveStillCompletes()
 testClearDropsCachedFallbackForFutureLoot()

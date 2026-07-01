@@ -790,7 +790,7 @@ function Harness.new(options)
         GetItemInfo = function(itemLink)
             local itemID = linkItemID(itemLink)
             local info = self.items[itemID] or {}
-            if info.cacheLoaded == false then
+            if info.cacheLoaded == false or info.cacheNeverLoads == true then
                 return nil
             end
             local _, _, _, _, _, _, _, name, link, quality, itemLevel, requiredLevel, itemTypeText,
@@ -814,7 +814,9 @@ function Harness.new(options)
                 ContinueOnItemLoad = function(_, callback)
                     env.C_Timer.After(0, function()
                         if self.items[itemID] then
-                            self.items[itemID].cacheLoaded = true
+                            if self.items[itemID].cacheNeverLoads ~= true then
+                                self.items[itemID].cacheLoaded = true
+                            end
                         end
                         callback()
                     end)
