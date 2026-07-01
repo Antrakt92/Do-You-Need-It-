@@ -143,20 +143,21 @@ local function FirstItemLink(text)
         return nil
     end
     return text:match("(|c%x%x%x%x%x%x%x%x|Hitem:.-|h%[.-%]|h|r)")
+        or text:match("(|Hitem:.-|h%[.-%]|h)")
 end
 
 local function ShowItemTooltip(owner, itemLink)
     if not owner or type(itemLink) ~= "string" or itemLink == "" or not GameTooltip then
         return
     end
-    GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
-    GameTooltip:SetHyperlink(itemLink)
-    GameTooltip:Show()
+    pcall(GameTooltip.SetOwner, GameTooltip, owner, "ANCHOR_RIGHT")
+    pcall(GameTooltip.SetHyperlink, GameTooltip, itemLink)
+    pcall(GameTooltip.Show, GameTooltip)
 end
 
 local function HideItemTooltip()
     if GameTooltip then
-        GameTooltip:Hide()
+        pcall(GameTooltip.Hide, GameTooltip)
     end
 end
 
@@ -164,7 +165,8 @@ local function OpenItemLink(owner, itemLink)
     if type(itemLink) ~= "string" or itemLink == "" then
         return
     end
-    if HandleModifiedItemClick and HandleModifiedItemClick(itemLink) then
+    local modifiedOk, modifiedHandled = pcall(HandleModifiedItemClick, itemLink)
+    if modifiedOk and modifiedHandled == true then
         return
     end
     ShowItemTooltip(owner, itemLink)
@@ -1033,7 +1035,7 @@ local function RefreshRows()
             rowFrame.looter:SetText(row.looter or "?")
             rowFrame.drop:SetText(row.itemLink or "")
             rowFrame.equipped:SetText(row.equippedText or UNKNOWN_EQUIPPED)
-            rowFrame.dropLink.itemLink = row.itemLink
+            rowFrame.dropLink.itemLink = FirstItemLink(row.itemLink)
             rowFrame.equippedLink.itemLink = FirstItemLink(row.equippedText)
             rowFrame.dropLink:SetShown(rowFrame.dropLink.itemLink ~= nil)
             rowFrame.equippedLink:SetShown(rowFrame.equippedLink.itemLink ~= nil)

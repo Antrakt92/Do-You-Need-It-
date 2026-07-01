@@ -161,11 +161,36 @@ local function testLegacySavedAllGearFallbackDisplays()
     assertEqual(rows[1].row.id, "legacy-history", "legacy history fallback keeps row identity")
 end
 
+local function testLegacyPlainItemTextDoesNotCreateDropHoverTarget()
+    local h = Harness.new({
+        db = {
+            settings = { font = "Fonts\\FRIZQT__.TTF" },
+            sessionRows = {
+                {
+                    id = "legacy-plain-item",
+                    looter = "Otherplayer-Ravencrest",
+                    itemLink = "Legacy Plain Item Name",
+                    equippedText = "Equipped: unknown",
+                    askable = true,
+                },
+            },
+        },
+    })
+    h:loadAddon()
+    h:slash("history")
+
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "legacy plain item row remains visible")
+    assertEqual(rows[1].dropLink:IsShown(), false, "plain item text does not expose a tooltip hover target")
+    assertEqual(rows[1].dropLink.itemLink, nil, "plain item text is not treated as an item hyperlink")
+end
+
 testLoadAndSettings()
 testSlashTestRowsAndManualWhisper()
 testInstanceChangeCompletesCurrentGroup()
 testDebugPersistenceIsOptIn()
 testDebugPersistenceLoadState()
 testLegacySavedAllGearFallbackDisplays()
+testLegacyPlainItemTextDoesNotCreateDropHoverTarget()
 
 print("runtime smoke ok")

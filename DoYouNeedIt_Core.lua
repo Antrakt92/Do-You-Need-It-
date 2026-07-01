@@ -219,29 +219,29 @@ local VALID_EQUIP_LOCS = {
 }
 
 local PERSISTED_ROW_KEYS = {
-    id = true,
-    looter = true,
-    itemLink = true,
-    equipLoc = true,
-    itemID = true,
-    instanceName = true,
-    encounterName = true,
-    timestamp = true,
-    reason = true,
-    statusText = true,
-    equippedText = true,
-    unsafe = true,
-    manualWhispered = true,
-    autoWhispered = true,
-    askable = true,
+    id = "string",
+    looter = "string",
+    itemLink = "string",
+    equipLoc = "string",
+    itemID = "number",
+    instanceName = "string",
+    encounterName = "string",
+    timestamp = "number",
+    reason = "string",
+    statusText = "string",
+    equippedText = "string",
+    unsafe = "boolean",
+    manualWhispered = "boolean",
+    autoWhispered = "boolean",
+    askable = "boolean",
 }
 
 local PERSISTED_GROUP_KEYS = {
-    title = true,
-    instanceName = true,
-    encounterName = true,
-    startedAt = true,
-    endedAt = true,
+    title = "string",
+    instanceName = "string",
+    encounterName = "string",
+    startedAt = "number",
+    endedAt = "number",
 }
 
 local function asNumber(value, fallback)
@@ -295,7 +295,10 @@ local function copyPrimitiveFields(source, allowedKeys)
     for key in pairs(allowedKeys) do
         local value = source[key]
         local valueType = type(value)
-        if valueType == "string" or valueType == "number" or valueType == "boolean" then
+        local allowedType = allowedKeys[key]
+        if allowedType == true and (valueType == "string" or valueType == "number" or valueType == "boolean") then
+            copy[key] = value
+        elseif allowedType == valueType then
             copy[key] = value
         end
     end

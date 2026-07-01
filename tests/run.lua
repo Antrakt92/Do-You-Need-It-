@@ -415,6 +415,22 @@ assertEqual(persistedRows[1].runtimeOnly, nil, "save snapshot drops non-primitiv
 assertEqual(persistedRows[2].manualWhispered, true, "save snapshot keeps sent whisper state")
 assertEqual(persistedRows[3].statusText, "candidate", "save snapshot clears transient whisper sending status")
 assertEqual(persistedRows[3].whisperInFlight, nil, "save snapshot drops transient whisper in-flight flag")
+local malformedSavedRows = Core.NormalizeSavedRows({
+    {
+        id = 123,
+        looter = true,
+        itemLink = 42,
+        itemID = "19019",
+        timestamp = "bad",
+        statusText = 99,
+        equippedText = true,
+        askable = "yes",
+    },
+}, 10)
+assertEqual(#malformedSavedRows, 1, "malformed saved rows do not abort normalization")
+assertEqual(malformedSavedRows[1].statusText, nil, "malformed status text is dropped during row normalization")
+assertEqual(malformedSavedRows[1].itemLink, nil, "malformed item link is dropped during row normalization")
+assertEqual(malformedSavedRows[1].askable, nil, "malformed askable flag is dropped during row normalization")
 local persistedHistory = Core.SnapshotHistoryForSave({
     {
         title = "Dungeon - Boss (1 drop)",
@@ -746,7 +762,8 @@ assertEqual(runtime:find("/duni", 1, true), nil, "runtime does not register typo
 assertEqual(runtime:find("SLASH_DOYOUNEEDIT2", 1, true), nil, "runtime keeps only the canonical slash command")
 assertTruthy(runtime:find("dropLink", 1, true), "runtime has a hover target for dropped item links")
 assertTruthy(runtime:find("equippedLink", 1, true), "runtime has a hover target for equipped item links")
-assertTruthy(runtime:find("GameTooltip:SetHyperlink", 1, true), "runtime shows real item tooltips from item links")
+assertTruthy(runtime:find("GameTooltip.SetHyperlink", 1, true), "runtime shows real item tooltips from item links")
+assertTruthy(runtime:find("pcall(GameTooltip.SetHyperlink", 1, true), "runtime guards tooltip hyperlink API errors")
 assertTruthy(runtime:find("HandleModifiedItemClick", 1, true), "runtime supports standard modified item-link clicks")
 assertTruthy(runtime:find("MAX_INSPECT_RETRIES", 1, true), "runtime retries equipped-item inspect")
 assertTruthy(runtime:find("EQUIPPED_PENDING", 1, true), "runtime shows pending equipped-item state")
