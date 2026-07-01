@@ -1091,7 +1091,7 @@ local function SaveDB()
     DoYouNeedItDB = DoYouNeedItDB or {}
     local settings = Addon.state and Addon.state.settings or Core.NormalizeSettings({})
     DoYouNeedItDB.settings = settings
-    DoYouNeedItDB.history = Addon.state and Core.SnapshotHistoryForSave(Addon.state.history, settings.maxHistoryGroups) or {}
+    DoYouNeedItDB.history = Addon.state and Core.SnapshotHistoryForSave(Addon.state.history, settings.maxHistoryGroups, settings.maxSessionRows) or {}
     DoYouNeedItDB.sessionRows = Addon.state and Core.SnapshotRowsForSave(Addon.state.sessionRows, settings.maxSessionRows) or {}
     DoYouNeedItDB.sessionAllRows = Addon.state and Core.SnapshotRowsForSave(Addon.state.sessionAllRows, settings.maxSessionRows) or {}
     PersistDiagnostics()
@@ -2916,6 +2916,10 @@ local function HandleSlash(message)
                 .. "; usage: /dyni debug on|off")
         end
     elseif command == "diag" then
+        if not ShouldPersistDiagnostics() then
+            Print("debug diagnostics are off; use /dyni debug on to record diagnostics")
+            return
+        end
         local diagnostics = Addon.diagnostics or {}
         if #diagnostics == 0 then
             Print("no diagnostics recorded yet")
@@ -2957,7 +2961,7 @@ local function Initialize()
     end
     Addon.state = Core.CreateState(settings)
     local fontChanged = MaybeAutoSwitchFont()
-    Addon.state.history = Core.SnapshotHistoryForSave(DoYouNeedItDB.history, Addon.state.settings.maxHistoryGroups)
+    Addon.state.history = Core.SnapshotHistoryForSave(DoYouNeedItDB.history, Addon.state.settings.maxHistoryGroups, Addon.state.settings.maxSessionRows)
     Addon.state.sessionRows = Core.NormalizeSavedRows(DoYouNeedItDB.sessionRows, Addon.state.settings.maxSessionRows)
     Addon.state.sessionAllRows = Core.NormalizeSavedAllRows(
         DoYouNeedItDB.sessionAllRows,

@@ -225,10 +225,39 @@ local prunedSavedHistory = Core.SnapshotHistoryForSave(oversizedSavedHistory, 10
 assertEqual(#prunedSavedHistory, 10, "history save snapshot prunes to limit")
 assertEqual(prunedSavedHistory[1].title, "Saved Boss 12", "history save snapshot keeps newest group")
 assertEqual(prunedSavedHistory[10].title, "Saved Boss 3", "history save snapshot drops oldest groups")
+local oversizedHistoryGroup = {
+    title = "Saved Oversized Boss",
+    rows = {},
+    allRows = {},
+}
+for index = 1, 6 do
+    oversizedHistoryGroup.rows[#oversizedHistoryGroup.rows + 1] = { id = "askable-history-" .. index }
+    oversizedHistoryGroup.allRows[#oversizedHistoryGroup.allRows + 1] = { id = "all-history-" .. index }
+end
+local cappedSavedHistory = Core.SnapshotHistoryForSave({ oversizedHistoryGroup }, 10, 3)
+assertEqual(#cappedSavedHistory[1].rows, 3, "history save snapshot caps askable rows per group")
+assertEqual(cappedSavedHistory[1].rows[1].id, "askable-history-4", "history askable row cap keeps newest retained row first")
+assertEqual(#cappedSavedHistory[1].allRows, 3, "history save snapshot caps all-gear rows per group")
+assertEqual(cappedSavedHistory[1].allRows[1].id, "all-history-4", "history all-gear row cap keeps newest retained row first")
 
 local emptyState = Core.CreateState({ maxHistoryGroups = 10 })
 Core.CompleteCurrentGroup(emptyState, { title = "No Drops", endedAt = 1 })
 assertEqual(#emptyState.history, 0, "empty groups are not saved")
+
+local oversizedCurrentState = Core.CreateState({ maxHistoryGroups = 10, maxSessionRows = 3 })
+for index = 1, 6 do
+    Core.AddVisibleRow(oversizedCurrentState, {
+        id = "current-row-" .. index,
+        looter = "Otherplayer",
+        itemLink = "|cff0070dd|Hitem:" .. (200 + index) .. ":::::::::::::|h[Test]|h|r",
+        timestamp = index,
+    }, true)
+end
+local cappedCurrentGroup = Core.CompleteCurrentGroup(oversizedCurrentState, { instanceName = "Dungeon", encounterName = "Boss", endedAt = 1 })
+assertEqual(#cappedCurrentGroup.rows, 3, "completed history group caps askable rows")
+assertEqual(cappedCurrentGroup.rows[1].id, "current-row-4", "completed askable row cap keeps newest retained row first")
+assertEqual(#cappedCurrentGroup.allRows, 3, "completed history group caps all-gear rows")
+assertEqual(cappedCurrentGroup.allRows[1].id, "current-row-4", "completed all-gear row cap keeps newest retained row first")
 
 local mixedState = Core.CreateState({ maxHistoryGroups = 10, maxSessionRows = 10 })
 Core.AddVisibleRow(mixedState, {

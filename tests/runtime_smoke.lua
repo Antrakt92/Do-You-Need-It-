@@ -74,17 +74,25 @@ local function testDebugPersistenceIsOptIn()
 
     h:slash("scan")
     assertFalsy(h.env.DoYouNeedItDB.diagnostics, "debug off does not persist scan diagnostics")
+    h:slash("diag")
+    assertTruthy(h.messages[#h.messages]:find("debug diagnostics are off", 1, true), "debug-off diag reports disabled diagnostics")
+    assertEqual(h.messages[#h.messages]:find("diag 1:", 1, true), nil, "debug-off diag does not reveal in-memory diagnostic entries")
 
     h:slash("debug on")
     assertEqual(type(h.env.DoYouNeedItDB.diagnostics), "table", "debug on creates diagnostic buffer")
     assertEqual(#h.env.DoYouNeedItDB.diagnostics, 0, "debug on starts with a fresh diagnostic buffer")
     h:slash("scan")
     assertEqual(#h.env.DoYouNeedItDB.diagnostics, 1, "debug on persists new diagnostics")
+    h:slash("diag")
+    assertTruthy(h.messages[#h.messages]:find("diag 1:", 1, true), "debug-on diag prints diagnostic entries")
 
     h:slash("debug off")
     assertFalsy(h.env.DoYouNeedItDB.diagnostics, "debug off clears persisted diagnostics")
     h:slash("scan")
     assertFalsy(h.env.DoYouNeedItDB.diagnostics, "debug off stops later diagnostic persistence")
+    h:slash("diag")
+    assertTruthy(h.messages[#h.messages]:find("debug diagnostics are off", 1, true), "debug-off diag stays disabled after toggling off")
+    assertEqual(h.messages[#h.messages]:find("diag 1:", 1, true), nil, "debug-off diag stays quiet after toggling off")
 end
 
 local function testDebugPersistenceLoadState()

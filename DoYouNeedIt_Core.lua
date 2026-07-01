@@ -808,15 +808,16 @@ function Core.SnapshotRowsForSave(rows, limit)
     return snapshotRowsForSave(rows, limit or DEFAULTS.maxSessionRows)
 end
 
-function Core.SnapshotHistoryForSave(history, limit)
+function Core.SnapshotHistoryForSave(history, limit, rowLimit)
     local saved = {}
+    local perGroupRowLimit = rowLimit or DEFAULTS.maxSessionRows
     if type(history) == "table" then
         for index = 1, #history do
             local group = history[index]
             if type(group) == "table" then
                 local savedGroup = copyPrimitiveFields(group, PERSISTED_GROUP_KEYS)
-                savedGroup.rows = snapshotRowsForSave(group.rows)
-                savedGroup.allRows = snapshotRowsForSaveWithFallback(group.allRows, group.rows)
+                savedGroup.rows = snapshotRowsForSave(group.rows, perGroupRowLimit)
+                savedGroup.allRows = snapshotRowsForSaveWithFallback(group.allRows, group.rows, perGroupRowLimit)
                 saved[#saved + 1] = savedGroup
             end
         end
@@ -1259,14 +1260,20 @@ function Core.CompleteCurrentGroup(state, groupMeta)
 
     groupMeta = type(groupMeta) == "table" and groupMeta or {}
     local dropCount = #state.allRows > 0 and #state.allRows or #state.currentRows
+    local rowLimit = state.settings and state.settings.maxSessionRows or DEFAULTS.maxSessionRows
+    local rows = copyList(state.currentRows)
+    local allRows = copyList(state.allRows)
+    pruneListStart(rows, rowLimit)
+    pruneListStart(allRows, rowLimit)
+
     local group = {
         title = groupTitle(groupMeta, dropCount),
         instanceName = groupMeta.instanceName,
         encounterName = groupMeta.encounterName,
         startedAt = groupMeta.startedAt,
         endedAt = groupMeta.endedAt,
-        rows = copyList(state.currentRows),
-        allRows = copyList(state.allRows),
+        rows = rows,
+        allRows = allRows,
     }
 
     table.insert(state.history, 1, group)
