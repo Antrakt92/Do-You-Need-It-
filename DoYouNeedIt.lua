@@ -2351,6 +2351,9 @@ local function PreviewFont(path)
     if type(path) ~= "string" or path == "" then
         return
     end
+    if Core.SameFontPath(path, Addon.previewFont) then
+        return
+    end
     Addon.previewFont = path
     ApplyCurrentFont()
     RefreshSettingsControls()
@@ -2369,6 +2372,215 @@ local function CancelSettingsPreview()
     RefreshLocalization()
 end
 
+local function HideFontPicker()
+    if Addon.fontPickerFrame and Addon.fontPickerFrame:IsShown() then
+        Addon.fontPickerFrame:Hide()
+    end
+    if Addon.fontPickerCatcher and Addon.fontPickerCatcher:IsShown() then
+        Addon.fontPickerCatcher:Hide()
+    end
+end
+
+local function BuildFontPickerFrame()
+    local cols = 3
+    local buttonWidth = 160
+    local buttonHeight = 22
+    local pad = 8
+    local scrollbarWidth = 22
+    local visibleRows = 14
+    local frameWidth = cols * buttonWidth + pad * 2 + scrollbarWidth
+    local frameHeight = visibleRows * buttonHeight + pad * 2
+
+    local picker = CreateFrame("Frame", "DoYouNeedItFontPicker", UIParent, "BackdropTemplate")
+    picker:SetSize(frameWidth, frameHeight)
+    picker:SetFrameStrata("DIALOG")
+    picker:SetFrameLevel((Addon.settingsFrame and Addon.settingsFrame:GetFrameLevel() or 100) + 50)
+    picker:SetClampedToScreen(true)
+    picker:SetBackdrop({
+        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true,
+        tileSize = 16,
+        edgeSize = 16,
+        insets = { left = 4, right = 4, top = 4, bottom = 4 },
+    })
+    picker:SetBackdropColor(0, 0, 0, 0.92)
+    picker:Hide()
+
+    local catcher = CreateFrame("Frame", nil, UIParent)
+    catcher:SetAllPoints(UIParent)
+    catcher:SetFrameStrata("DIALOG")
+    catcher:SetFrameLevel(picker:GetFrameLevel() - 1)
+    catcher:EnableMouse(true)
+    catcher:Hide()
+    catcher:SetScript("OnMouseDown", HideFontPicker)
+
+    local scroll = CreateFrame("ScrollFrame", "DoYouNeedItFontPickerScroll", picker, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", pad, -pad)
+    scroll:SetPoint("BOTTOMRIGHT", -(pad + scrollbarWidth), pad)
+
+    local content = CreateFrame("Frame", "DoYouNeedItFontPickerContent", scroll)
+    content:SetSize(cols * buttonWidth, 1)
+    scroll:SetScrollChild(content)
+
+    picker:SetScript("OnHide", function()
+        if Addon.fontPickerCatcher then
+            Addon.fontPickerCatcher:Hide()
+        end
+        CancelFontPreview()
+    end)
+
+    if type(UISpecialFrames) == "table" then
+        table.insert(UISpecialFrames, "DoYouNeedItFontPicker")
+    end
+
+    Addon.fontPickerFrame = picker
+    Addon.fontPickerCatcher = catcher
+    Addon.fontPickerScroll = scroll
+    Addon.fontPickerContent = content
+    Addon.fontPickerButtons = {}
+end
+
+local function PopulateFontPicker()
+    if not Addon.fontPickerContent then
+        return
+    end
+
+    local cols = 3
+    local buttonWidth = 160
+    local buttonHeight = 22
+    local visibleRows = 14
+    local fonts = BuildFontsList()
+    local currentPath = Addon.state and Addon.state.settings and Addon.state.settings.font
+    local rows = math.ceil(#fonts / cols)
+    local currentRow
+
+    Addon.fontPickerContent:SetHeight(math.max(rows * buttonHeight, 1))
+
+    for index, font in ipairs(fonts) do
+        local button = Addon.fontPickerButtons[index]
+        if not button then
+            button = CreateFrame("Button", nil, Addon.fontPickerContent)
+            button:SetSize(buttonWidth, buttonHeight)
+
+            button.bg = button:CreateTexture(nil, "BACKGROUND")
+            button.bg:SetAllPoints()
+            button.bg:SetColorTexture(0, 0, 0, 0)
+
+            button:SetHighlightTexture("Interface\\Buttons\\UI-Listbox-Highlight2", "ADD")
+            local highlight = SafeCall(button.GetHighlightTexture, button)
+            if highlight then
+                SafeCall(highlight.SetBlendMode, highlight, "ADD")
+                SafeCall(highlight.SetVertexColor, highlight, 1, 1, 1, 0.4)
+            end
+
+            button.text = button:CreateFontString(nil, "OVERLAY")
+            RegisterFontString(button.text, 12, nil, true)
+            button.text:SetPoint("LEFT", 6, 0)
+            button.text:SetPoint("RIGHT", -4, 0)
+            button.text:SetJustifyH("LEFT")
+            if button.text.SetWordWrap then
+                button.text:SetWordWrap(false)
+            end
+            if button.text.SetMaxLines then
+                button.text:SetMaxLines(1)
+            end
+
+            button:SetScript("OnEnter", function(btn)
+                Addon.fontPickerHoverGen = (Addon.fontPickerHoverGen or 0) + 1
+                PreviewFont(btn.fontPath)
+            end)
+            button:SetScript("OnLeave", function()
+                local generation = Addon.fontPickerHoverGen or 0
+                local function restoreIfStillAway()
+                    if generation == (Addon.fontPickerHoverGen or 0) then
+                        CancelFontPreview()
+                    end
+                end
+                if C_Timer and type(C_Timer.After) == "function" then
+                    C_Timer.After(0, restoreIfStillAway)
+                else
+                    restoreIfStillAway()
+                end
+            end)
+            button:SetScript("OnClick", function(btn)
+                SetFontPath(btn.fontPath)
+                HideFontPicker()
+            end)
+
+            Addon.fontPickerButtons[index] = button
+        end
+
+        local row = math.floor((index - 1) / cols)
+        local col = (index - 1) % cols
+        button:ClearAllPoints()
+        button:SetPoint("TOPLEFT", col * buttonWidth, -row * buttonHeight)
+        button.fontName = font.name
+        button.fontPath = font.path
+        button.text:SetText(font.name)
+        if Core.SameFontPath(font.path, currentPath) then
+            button.bg:SetColorTexture(0, 1, 0.5, 0.18)
+            currentRow = row
+        else
+            button.bg:SetColorTexture(0, 0, 0, 0)
+        end
+        button:Show()
+    end
+
+    for index = #fonts + 1, #(Addon.fontPickerButtons or {}) do
+        Addon.fontPickerButtons[index]:Hide()
+    end
+
+    if Addon.fontPickerScroll then
+        if currentRow then
+            local centerOffset = math.floor(visibleRows / 2)
+            local targetScroll = math.max(0, (currentRow - centerOffset) * buttonHeight)
+            local maxScroll = math.max(0, rows * buttonHeight - visibleRows * buttonHeight)
+            Addon.fontPickerScroll:SetVerticalScroll(math.min(targetScroll, maxScroll))
+        else
+            Addon.fontPickerScroll:SetVerticalScroll(0)
+        end
+    end
+end
+
+local function ShowFontPicker()
+    if not Addon.fontPickerFrame then
+        BuildFontPickerFrame()
+    end
+    Addon.previewFont = nil
+    Addon.fontPickerHoverGen = (Addon.fontPickerHoverGen or 0) + 1
+    PopulateFontPicker()
+
+    local frameLevel = (Addon.settingsFrame and Addon.settingsFrame:GetFrameLevel() or 100) + 50
+    Addon.fontPickerFrame:SetFrameLevel(frameLevel)
+    if Addon.fontPickerCatcher then
+        Addon.fontPickerCatcher:SetFrameLevel(frameLevel - 1)
+    end
+
+    local button = _G["DoYouNeedItFontDropdownButton"] or (Addon.fontDropdown and Addon.fontDropdown.Button)
+    Addon.fontPickerFrame:ClearAllPoints()
+    if button then
+        Addon.fontPickerFrame:SetPoint("TOPLEFT", button, "BOTTOMLEFT", 0, -2)
+    elseif Addon.fontDropdown then
+        Addon.fontPickerFrame:SetPoint("TOPLEFT", Addon.fontDropdown, "BOTTOMLEFT", 16, -2)
+    else
+        Addon.fontPickerFrame:SetPoint("CENTER")
+    end
+    if Addon.fontPickerCatcher then
+        Addon.fontPickerCatcher:Show()
+    end
+    Addon.fontPickerFrame:Show()
+end
+
+local function ToggleFontPicker()
+    if Addon.fontPickerFrame and Addon.fontPickerFrame:IsShown() then
+        HideFontPicker()
+        return
+    end
+    SafeCall(CloseDropDownMenus)
+    ShowFontPicker()
+end
+
 local function HookSettingsDropdownButtons()
     if not DropDownList1 then
         return
@@ -2383,8 +2595,6 @@ local function HookSettingsDropdownButtons()
                 Addon.dropdownPreviewGen = (Addon.dropdownPreviewGen or 0) + 1
                 if UIDROPDOWNMENU_OPEN_MENU == Addon.languageDropdown and btn.value ~= nil then
                     PreviewLanguage(btn.value)
-                elseif UIDROPDOWNMENU_OPEN_MENU == Addon.fontDropdown and btn.value ~= nil then
-                    PreviewFont(btn.value)
                 end
             end)
             button:HookScript("OnLeave", function()
@@ -2395,8 +2605,6 @@ local function HookSettingsDropdownButtons()
                     end
                     if UIDROPDOWNMENU_OPEN_MENU == Addon.languageDropdown then
                         CancelLanguagePreview()
-                    elseif UIDROPDOWNMENU_OPEN_MENU == Addon.fontDropdown then
-                        CancelFontPreview()
                     end
                 end
                 if C_Timer and type(C_Timer.After) == "function" then
@@ -2446,7 +2654,10 @@ CreateSettingsUI = function()
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-    frame:SetScript("OnHide", CancelSettingsPreview)
+    frame:SetScript("OnHide", function()
+        HideFontPicker()
+        CancelSettingsPreview()
+    end)
     frame:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
@@ -2537,7 +2748,10 @@ CreateSettingsUI = function()
     Addon.languageDropdown = frame.languageDropdown
     local languageButton = _G["DoYouNeedItLanguageDropdownButton"] or frame.languageDropdown.Button
     if languageButton then
-        languageButton:HookScript("OnClick", ArmDropdownPreviewHooks)
+        languageButton:HookScript("OnClick", function()
+            HideFontPicker()
+            ArmDropdownPreviewHooks()
+        end)
     end
 
     y = y - 42
@@ -2550,26 +2764,10 @@ CreateSettingsUI = function()
     frame.fontDropdown:SetPoint("LEFT", frame.fontLabel, "RIGHT", 44, -4)
     UIDropDownMenu_SetWidth(frame.fontDropdown, 150)
     UIDropDownMenu_JustifyText(frame.fontDropdown, "CENTER")
-    UIDropDownMenu_Initialize(frame.fontDropdown, function()
-        local fonts = BuildFontsList()
-        local current = Addon.state.settings.font
-        for index = 1, #fonts do
-            local font = fonts[index]
-            local info = UIDropDownMenu_CreateInfo()
-            info.text = font.name
-            info.value = font.path
-            info.checked = Core.SameFontPath(font.path, current)
-            info.func = function()
-                SetFontPath(font.path)
-                CloseDropDownMenus()
-            end
-            UIDropDownMenu_AddButton(info)
-        end
-    end)
     Addon.fontDropdown = frame.fontDropdown
     local fontButton = _G["DoYouNeedItFontDropdownButton"] or frame.fontDropdown.Button
     if fontButton then
-        fontButton:HookScript("OnClick", ArmDropdownPreviewHooks)
+        fontButton:SetScript("OnClick", ToggleFontPicker)
     end
 
     y = y - 42

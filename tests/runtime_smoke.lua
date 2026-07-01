@@ -185,11 +185,14 @@ local function testLegacyPlainItemTextDoesNotCreateDropHoverTarget()
     assertEqual(rows[1].dropLink.itemLink, nil, "plain item text is not treated as an item hyperlink")
 end
 
-local function testFontHoverPreviewKeepsSettingsControlsReadable()
+local function testCustomFontPickerGridPreviewAndCommit()
     local brokenFontPath = "Interface\\AddOns\\Broken\\Unreadable.ttf"
     local h = Harness.new({
         lsmFonts = {
+            { name = "Readable One", path = "Interface\\AddOns\\Readable\\One.ttf" },
+            { name = "Readable Two", path = "Interface\\AddOns\\Readable\\Two.ttf" },
             { name = "Broken Font", path = brokenFontPath },
+            { name = "Readable Four", path = "Interface\\AddOns\\Readable\\Four.ttf" },
         },
     })
     h:loadAddon()
@@ -198,52 +201,71 @@ local function testFontHoverPreviewKeepsSettingsControlsReadable()
     local settingsFrame = h.env.DoYouNeedItSettingsFrame
     local fontDropdown = h.env.DoYouNeedItFontDropdown
     assertTruthy(settingsFrame and settingsFrame.title, "settings title exists")
-    assertTruthy(fontDropdown and fontDropdown.Button and fontDropdown.initialize, "font dropdown can be opened")
+    assertTruthy(fontDropdown and fontDropdown.Button, "font dropdown button exists")
 
     fontDropdown.Button:FireScript("OnClick")
-    h:runTimers(0, 10)
-    h.dropdownAdds = {}
-    h.env.UIDROPDOWNMENU_OPEN_MENU = fontDropdown
-    fontDropdown.initialize()
-    h.env.DropDownList1:Show()
+    local picker = h.env.DoYouNeedItFontPicker
+    assertTruthy(picker and picker:IsShown(), "font button opens the custom picker")
+    assertEqual(h.env.DropDownList1:IsShown(), false, "font picker does not use Blizzard shared dropdown list")
 
     local brokenButton = h:findFrame(function(frame)
-        return frame.value == brokenFontPath
-    end, h.env.DropDownList1)
-    assertTruthy(brokenButton, "broken font option is present")
+        return frame.fontPath == brokenFontPath
+    end, picker)
+    assertTruthy(brokenButton and brokenButton.text, "broken font option is present in the custom picker")
+
+    local firstButton = h:findFrame(function(frame)
+        return frame.fontName == "Friz Quadrata TT"
+    end, picker)
+    local secondButton = h:findFrame(function(frame)
+        return frame.fontName == "Arial Narrow"
+    end, picker)
+    local fourthButton = h:findFrame(function(frame)
+        return frame.fontName == "Readable One"
+    end, picker)
+    assertTruthy(firstButton and secondButton and fourthButton, "picker has enough font buttons to prove grid layout")
+    assertEqual(firstButton.points[1][3], secondButton.points[1][3], "first-row font buttons share a row")
+    assertTruthy(firstButton.points[1][2] ~= secondButton.points[1][2], "first-row font buttons use different columns")
+    assertTruthy(fourthButton.points[1][3] < firstButton.points[1][3], "fourth font starts the next row")
+
     brokenButton:FireScript("OnEnter")
 
+    assertEqual(h.env.DoYouNeedItFrame.title.font, brokenFontPath, "font hover previews on the main window")
     assertEqual(settingsFrame.title.font == brokenFontPath, false, "font hover does not apply preview font to settings title")
     assertEqual(h.env.DoYouNeedItLanguageDropdown.Text.font == brokenFontPath, false, "font hover does not apply preview font to language caption")
     assertEqual(h.env.DoYouNeedItFontDropdown.Text.font == brokenFontPath, false, "font hover does not apply preview font to font caption")
     assertTruthy(h.env.DoYouNeedItLanguageDropdown.Text:GetText() ~= "", "language caption survives font hover")
     assertTruthy(h.env.DoYouNeedItFontDropdown.Text:GetText() ~= "", "font caption survives font hover")
+
+    brokenButton:FireScript("OnLeave")
+    h:runTimers(0, 10)
+    assertEqual(h.env.DoYouNeedItFrame.title.font == brokenFontPath, false, "leaving a font option restores the committed font")
+
+    brokenButton:FireScript("OnClick")
+    assertEqual(h.env.DoYouNeedItDB.settings.font, brokenFontPath, "clicking a font option saves the font")
+    assertEqual(picker:IsShown(), false, "clicking a font option closes the custom picker")
+    assertEqual(h.env.DoYouNeedItFontDropdown.Text:GetText(), "Broken Font", "font caption updates after choosing a font")
 end
 
-local function testFontDropdownCloseRepairsCaptionsAfterSharedListCleanup()
-    local brokenFontPath = "Interface\\AddOns\\Broken\\Unreadable.ttf"
+local function testLanguageDropdownCloseRepairsCaptionsAfterSharedListCleanup()
     local h = Harness.new({
         blankSettingsDropdownCaptionsAfterListHide = true,
-        lsmFonts = {
-            { name = "Broken Font", path = brokenFontPath },
-        },
     })
     h:loadAddon()
     h:slash("settings")
 
-    local fontDropdown = h.env.DoYouNeedItFontDropdown
-    fontDropdown.Button:FireScript("OnClick")
+    local languageDropdown = h.env.DoYouNeedItLanguageDropdown
+    languageDropdown.Button:FireScript("OnClick")
     h:runTimers(0, 10)
     h.dropdownAdds = {}
-    h.env.UIDROPDOWNMENU_OPEN_MENU = fontDropdown
-    fontDropdown.initialize()
+    h.env.UIDROPDOWNMENU_OPEN_MENU = languageDropdown
+    languageDropdown.initialize()
     h.env.DropDownList1:Show()
 
-    local brokenButton = h:findFrame(function(frame)
-        return frame.value == brokenFontPath
+    local languageButton = h:findFrame(function(frame)
+        return frame.value == "ruRU"
     end, h.env.DropDownList1)
-    assertTruthy(brokenButton, "broken font option is present")
-    brokenButton:FireScript("OnEnter")
+    assertTruthy(languageButton, "language option is present")
+    languageButton:FireScript("OnEnter")
     h.env.DropDownList1:Hide()
     h:runTimers(0, 10)
 
@@ -270,8 +292,8 @@ testDebugPersistenceIsOptIn()
 testDebugPersistenceLoadState()
 testLegacySavedAllGearFallbackDisplays()
 testLegacyPlainItemTextDoesNotCreateDropHoverTarget()
-testFontHoverPreviewKeepsSettingsControlsReadable()
-testFontDropdownCloseRepairsCaptionsAfterSharedListCleanup()
+testCustomFontPickerGridPreviewAndCommit()
+testLanguageDropdownCloseRepairsCaptionsAfterSharedListCleanup()
 testSettingsSliderTemplateTextDoesNotLeak()
 
 print("runtime smoke ok")

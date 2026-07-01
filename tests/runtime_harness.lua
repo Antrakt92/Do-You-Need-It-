@@ -78,6 +78,18 @@ function FrameMethods:SetFrameStrata(strata)
     self.strata = strata
 end
 
+function FrameMethods:SetFrameLevel(level)
+    self.frameLevel = level
+end
+
+function FrameMethods:GetFrameLevel()
+    return self.frameLevel or 0
+end
+
+function FrameMethods:SetClampedToScreen(clamped)
+    self.clampedToScreen = clamped == true
+end
+
 function FrameMethods:EnableMouse(enabled)
     self.mouseEnabled = enabled
 end
@@ -187,6 +199,10 @@ function FrameMethods:SetBackdrop(backdrop)
     self.backdrop = backdrop
 end
 
+function FrameMethods:SetBackdropColor(...)
+    self.backdropColor = { ... }
+end
+
 function FrameMethods:SetNormalTexture(texture)
     self.normalTexture = texture
 end
@@ -198,10 +214,26 @@ end
 function FrameMethods:SetHighlightTexture(texture, blendMode)
     self.highlightTexture = texture
     self.highlightBlendMode = blendMode
+    if not self.highlightTextureFrame then
+        self.highlightTextureFrame = self.harness:newFrame("Texture", nil, self)
+    end
+    self.highlightTextureFrame.texture = texture
+end
+
+function FrameMethods:GetHighlightTexture()
+    return self.highlightTextureFrame
 end
 
 function FrameMethods:SetColorTexture(...)
     self.colorTexture = { ... }
+end
+
+function FrameMethods:SetBlendMode(blendMode)
+    self.blendMode = blendMode
+end
+
+function FrameMethods:SetVertexColor(...)
+    self.vertexColor = { ... }
 end
 
 function FrameMethods:SetAlpha(alpha)
@@ -258,6 +290,18 @@ function FrameMethods:GetValue()
     return self.value
 end
 
+function FrameMethods:SetScrollChild(child)
+    self.scrollChild = child
+end
+
+function FrameMethods:SetVerticalScroll(value)
+    self.verticalScroll = value
+end
+
+function FrameMethods:GetVerticalScroll()
+    return self.verticalScroll or 0
+end
+
 function FrameMethods:GetFontString()
     if not self.fontString then
         self.fontString = self.harness:newFrame("FontString", nil, self)
@@ -271,6 +315,14 @@ end
 
 function FrameMethods:CreateTexture(name)
     return self.harness:newFrame("Texture", name, self)
+end
+
+function FrameMethods:SetWordWrap(enabled)
+    self.wordWrap = enabled == true
+end
+
+function FrameMethods:SetMaxLines(lines)
+    self.maxLines = lines
 end
 
 function FrameMethods:SetOwner(owner, anchor)
@@ -541,6 +593,7 @@ function Harness.new(options)
     env._G = env
     env.DoYouNeedItDB = options and options.db or {}
     env.SlashCmdList = {}
+    env.UISpecialFrames = {}
     env.STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
     env.BIND_TRADE_TIME_REMAINING = "You may trade this item with eligible players for %s"
     env.LOOT_ITEM_SELF = "You receive loot: %s."
