@@ -45,6 +45,8 @@ assertEqual(Core.ResolveActiveLocale("auto", "ruRU"), "ruRU", "auto locale follo
 assertEqual(Core.ResolveActiveLocale("badLocale", "ruRU"), "ruRU", "invalid force locale falls back to client locale")
 assertEqual(Core.ResolveActiveLocale("frFR", "ruRU"), "frFR", "explicit locale overrides client locale")
 assertEqual(Core.GetLocaleLabel("Settings", "ruRU"), "Настройки", "localized labels resolve by active locale")
+assertEqual(Core.GetLocaleLabel("Low", "ruRU"), "Мин.", "slider low label is localized")
+assertEqual(Core.GetLocaleLabel("High", "ruRU"), "Макс.", "slider high label is localized")
 assertEqual(Core.GetLocaleLabel("Missing Label", "ruRU"), "Missing Label", "missing localized labels fall back to English key")
 assertEqual(Core.GetLanguageOption("ruRU").label, "Русский (Russian)", "language option lookup returns bilingual label")
 assertEqual(Core.GetLanguageOption("badLocale"), nil, "language option lookup returns nil for unknown locale")

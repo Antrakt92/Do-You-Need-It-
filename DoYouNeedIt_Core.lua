@@ -93,6 +93,8 @@ local LABELS_BY_LOCALE = {
         ["History"] = "History",
         ["Auto whisper"] = "Auto whisper",
         ["Delay"] = "Delay",
+        ["Low"] = "Low",
+        ["High"] = "High",
         ["Language:"] = "Language:",
         ["Font:"] = "Font:",
         ["Font Size:"] = "Font Size:",
@@ -130,6 +132,8 @@ local LABELS_BY_LOCALE = {
         ["History"] = "История",
         ["Auto whisper"] = "Авто-виспер",
         ["Delay"] = "Задержка",
+        ["Low"] = "Мин.",
+        ["High"] = "Макс.",
         ["Language:"] = "Язык:",
         ["Font:"] = "Шрифт:",
         ["Font Size:"] = "Размер шрифта:",
@@ -160,15 +164,15 @@ local LABELS_BY_LOCALE = {
 }
 
 local simpleLocaleLabels = {
-    deDE = { ["Settings"] = "Einstellungen", ["Language:"] = "Sprache:", ["Font:"] = "Schrift:", ["Font Size:"] = "Schriftgröße:", ["Delay"] = "Verzögerung", ["Auto whisper"] = "Auto-Flüstern" },
-    esES = { ["Settings"] = "Opciones", ["Language:"] = "Idioma:", ["Font:"] = "Fuente:", ["Font Size:"] = "Tamaño:", ["Delay"] = "Retraso", ["Auto whisper"] = "Susurro auto" },
-    esMX = { ["Settings"] = "Opciones", ["Language:"] = "Idioma:", ["Font:"] = "Fuente:", ["Font Size:"] = "Tamaño:", ["Delay"] = "Retraso", ["Auto whisper"] = "Susurro auto" },
-    frFR = { ["Settings"] = "Options", ["Language:"] = "Langue :", ["Font:"] = "Police :", ["Font Size:"] = "Taille :", ["Delay"] = "Délai", ["Auto whisper"] = "Chuchotement auto" },
-    itIT = { ["Settings"] = "Impostazioni", ["Language:"] = "Lingua:", ["Font:"] = "Font:", ["Font Size:"] = "Dimensione:", ["Delay"] = "Ritardo", ["Auto whisper"] = "Sussurro auto" },
-    ptBR = { ["Settings"] = "Configurações", ["Language:"] = "Idioma:", ["Font:"] = "Fonte:", ["Font Size:"] = "Tamanho:", ["Delay"] = "Atraso", ["Auto whisper"] = "Sussurro auto" },
-    koKR = { ["Settings"] = "설정", ["Language:"] = "언어:", ["Font:"] = "글꼴:", ["Font Size:"] = "글꼴 크기:", ["Delay"] = "지연", ["Auto whisper"] = "자동 귓속말" },
-    zhCN = { ["Settings"] = "设置", ["Language:"] = "语言:", ["Font:"] = "字体:", ["Font Size:"] = "字体大小:", ["Delay"] = "延迟", ["Auto whisper"] = "自动密语" },
-    zhTW = { ["Settings"] = "設定", ["Language:"] = "語言:", ["Font:"] = "字型:", ["Font Size:"] = "字型大小:", ["Delay"] = "延遲", ["Auto whisper"] = "自動密語" },
+    deDE = { ["Settings"] = "Einstellungen", ["Language:"] = "Sprache:", ["Font:"] = "Schrift:", ["Font Size:"] = "Schriftgröße:", ["Delay"] = "Verzögerung", ["Low"] = "Niedrig", ["High"] = "Hoch", ["Auto whisper"] = "Auto-Flüstern" },
+    esES = { ["Settings"] = "Opciones", ["Language:"] = "Idioma:", ["Font:"] = "Fuente:", ["Font Size:"] = "Tamaño:", ["Delay"] = "Retraso", ["Low"] = "Bajo", ["High"] = "Alto", ["Auto whisper"] = "Susurro auto" },
+    esMX = { ["Settings"] = "Opciones", ["Language:"] = "Idioma:", ["Font:"] = "Fuente:", ["Font Size:"] = "Tamaño:", ["Delay"] = "Retraso", ["Low"] = "Bajo", ["High"] = "Alto", ["Auto whisper"] = "Susurro auto" },
+    frFR = { ["Settings"] = "Options", ["Language:"] = "Langue :", ["Font:"] = "Police :", ["Font Size:"] = "Taille :", ["Delay"] = "Délai", ["Low"] = "Bas", ["High"] = "Haut", ["Auto whisper"] = "Chuchotement auto" },
+    itIT = { ["Settings"] = "Impostazioni", ["Language:"] = "Lingua:", ["Font:"] = "Font:", ["Font Size:"] = "Dimensione:", ["Delay"] = "Ritardo", ["Low"] = "Basso", ["High"] = "Alto", ["Auto whisper"] = "Sussurro auto" },
+    ptBR = { ["Settings"] = "Configurações", ["Language:"] = "Idioma:", ["Font:"] = "Fonte:", ["Font Size:"] = "Tamanho:", ["Delay"] = "Atraso", ["Low"] = "Baixo", ["High"] = "Alto", ["Auto whisper"] = "Sussurro auto" },
+    koKR = { ["Settings"] = "설정", ["Language:"] = "언어:", ["Font:"] = "글꼴:", ["Font Size:"] = "글꼴 크기:", ["Delay"] = "지연", ["Low"] = "낮음", ["High"] = "높음", ["Auto whisper"] = "자동 귓속말" },
+    zhCN = { ["Settings"] = "设置", ["Language:"] = "语言:", ["Font:"] = "字体:", ["Font Size:"] = "字体大小:", ["Delay"] = "延迟", ["Low"] = "低", ["High"] = "高", ["Auto whisper"] = "自动密语" },
+    zhTW = { ["Settings"] = "設定", ["Language:"] = "語言:", ["Font:"] = "字型:", ["Font Size:"] = "字型大小:", ["Delay"] = "延遲", ["Low"] = "低", ["High"] = "高", ["Auto whisper"] = "自動密語" },
 }
 
 for locale, labels in pairs(simpleLocaleLabels) do

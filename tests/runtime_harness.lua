@@ -134,6 +134,15 @@ end
 function FrameMethods:Hide()
     self.shown = false
     self:FireScript("OnHide")
+    if self.name == "DropDownList1" and self.harness.options.blankSettingsDropdownCaptionsAfterListHide then
+        local env = self.harness.env
+        if env.DoYouNeedItLanguageDropdown and env.DoYouNeedItLanguageDropdown.Text then
+            env.DoYouNeedItLanguageDropdown.Text:SetText("")
+        end
+        if env.DoYouNeedItFontDropdown and env.DoYouNeedItFontDropdown.Text then
+            env.DoYouNeedItFontDropdown.Text:SetText("")
+        end
+    end
 end
 
 function FrameMethods:IsShown()
@@ -314,6 +323,15 @@ function Harness:newFrame(frameType, name, parent, template)
         frame.Left = self:newFrame("Texture", name .. "Left", frame)
         frame.Middle = self:newFrame("Texture", name .. "Middle", frame)
         frame.Right = self:newFrame("Texture", name .. "Right", frame)
+    end
+
+    if template == "OptionsSliderTemplate" then
+        frame.Text = self:newFrame("FontString", name and name .. "Text" or nil, frame)
+        frame.Text:SetText("0")
+        frame.Low = self:newFrame("FontString", name and name .. "Low" or nil, frame)
+        frame.Low:SetText("Low")
+        frame.High = self:newFrame("FontString", name and name .. "High" or nil, frame)
+        frame.High:SetText("High")
     end
 
     return frame

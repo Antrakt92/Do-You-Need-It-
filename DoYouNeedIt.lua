@@ -2131,11 +2131,8 @@ local function GetDropdownChild(dropdown, suffix)
     if not dropdown then
         return nil
     end
-    if suffix == "Text" and dropdown.Text then
-        return dropdown.Text
-    end
-    if suffix == "Button" and dropdown.Button then
-        return dropdown.Button
+    if type(suffix) == "string" and dropdown[suffix] then
+        return dropdown[suffix]
     end
     local name = type(dropdown.GetName) == "function" and dropdown:GetName()
     if not name then
@@ -2178,6 +2175,31 @@ local function SetDropdownTextSafe(dropdown, text)
     ShowDropdownPart(dropdown, "Right")
 end
 
+local function ConfigureSliderTemplateLabels(slider, lowText, highText)
+    if not slider then
+        return
+    end
+    local font, size = DropdownCaptionFont()
+    local valueText = GetDropdownChild(slider, "Text")
+    if valueText then
+        SafeCall(valueText.SetText, valueText, "")
+        SafeCall(valueText.SetFont, valueText, font, size, "")
+        SafeCall(valueText.Hide, valueText)
+    end
+    local low = GetDropdownChild(slider, "Low")
+    if low then
+        SafeCall(low.SetText, low, lowText or "")
+        SafeCall(low.SetFont, low, font, size, "")
+        SafeCall(low.Show, low)
+    end
+    local high = GetDropdownChild(slider, "High")
+    if high then
+        SafeCall(high.SetText, high, highText or "")
+        SafeCall(high.SetFont, high, font, size, "")
+        SafeCall(high.Show, high)
+    end
+end
+
 local function RefreshFontWarning()
     if not Addon.fontWarning or not Addon.state then
         return
@@ -2213,6 +2235,7 @@ RefreshSettingsControls = function()
         Addon.updatingControls = true
         Addon.delaySlider:SetValue(settings.autoDelay)
         Addon.updatingControls = false
+        ConfigureSliderTemplateLabels(Addon.delaySlider, L("Low"), L("High"))
     end
     if Addon.delayValue then
         Addon.delayValue:SetText(settings.autoDelay .. "s")
@@ -2230,6 +2253,7 @@ RefreshSettingsControls = function()
         Addon.updatingControls = true
         Addon.fontSizeSlider:SetValue(settings.fontSize)
         Addon.updatingControls = false
+        ConfigureSliderTemplateLabels(Addon.fontSizeSlider, L("Low"), L("High"))
     end
     if Addon.fontSizeValue then
         Addon.fontSizeValue:SetText(settings.fontSize)
@@ -2249,6 +2273,19 @@ RefreshLocalization = function()
     end
     RefreshRows()
     RefreshSettingsControls()
+end
+
+local function ScheduleSettingsControlsRefresh()
+    local function refreshIfVisible()
+        if Addon.settingsFrame and (type(Addon.settingsFrame.IsShown) ~= "function" or Addon.settingsFrame:IsShown()) then
+            RefreshSettingsControls()
+        end
+    end
+    if C_Timer and type(C_Timer.After) == "function" then
+        C_Timer.After(0, refreshIfVisible)
+    else
+        refreshIfVisible()
+    end
 end
 
 local function SetFontSize(value)
@@ -2379,6 +2416,7 @@ local function EnsureDropdownPreviewHooks()
         DropDownList1:HookScript("OnHide", function()
             CancelLanguagePreview()
             CancelFontPreview()
+            ScheduleSettingsControlsRefresh()
         end)
         DropDownList1._dyniPreviewHooks = true
     end
@@ -2447,7 +2485,7 @@ CreateSettingsUI = function()
     RegisterFontString(frame.delayLabel, 12, nil, true)
     Addon.delayLabel = frame.delayLabel
 
-    frame.delaySlider = CreateFrame("Slider", nil, frame, "OptionsSliderTemplate")
+    frame.delaySlider = CreateFrame("Slider", "DoYouNeedItDelaySlider", frame, "OptionsSliderTemplate")
     frame.delaySlider:SetPoint("LEFT", frame.delayLabel, "RIGHT", 24, -2)
     frame.delaySlider:SetSize(170, 18)
     frame.delaySlider:SetMinMaxValues(3, 30)
@@ -2540,7 +2578,7 @@ CreateSettingsUI = function()
     RegisterFontString(frame.fontSizeLabel, 12, nil, true)
     Addon.fontSizeLabel = frame.fontSizeLabel
 
-    frame.fontSizeSlider = CreateFrame("Slider", nil, frame, "OptionsSliderTemplate")
+    frame.fontSizeSlider = CreateFrame("Slider", "DoYouNeedItFontSizeSlider", frame, "OptionsSliderTemplate")
     frame.fontSizeSlider:SetPoint("LEFT", frame.fontSizeLabel, "RIGHT", 26, -2)
     frame.fontSizeSlider:SetSize(170, 18)
     frame.fontSizeSlider:SetMinMaxValues(8, 24)

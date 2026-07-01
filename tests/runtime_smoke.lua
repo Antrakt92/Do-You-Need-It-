@@ -220,6 +220,49 @@ local function testFontHoverPreviewKeepsSettingsControlsReadable()
     assertTruthy(h.env.DoYouNeedItFontDropdown.Text:GetText() ~= "", "font caption survives font hover")
 end
 
+local function testFontDropdownCloseRepairsCaptionsAfterSharedListCleanup()
+    local brokenFontPath = "Interface\\AddOns\\Broken\\Unreadable.ttf"
+    local h = Harness.new({
+        blankSettingsDropdownCaptionsAfterListHide = true,
+        lsmFonts = {
+            { name = "Broken Font", path = brokenFontPath },
+        },
+    })
+    h:loadAddon()
+    h:slash("settings")
+
+    local fontDropdown = h.env.DoYouNeedItFontDropdown
+    fontDropdown.Button:FireScript("OnClick")
+    h:runTimers(0, 10)
+    h.dropdownAdds = {}
+    h.env.UIDROPDOWNMENU_OPEN_MENU = fontDropdown
+    fontDropdown.initialize()
+    h.env.DropDownList1:Show()
+
+    local brokenButton = h:findFrame(function(frame)
+        return frame.value == brokenFontPath
+    end, h.env.DropDownList1)
+    assertTruthy(brokenButton, "broken font option is present")
+    brokenButton:FireScript("OnEnter")
+    h.env.DropDownList1:Hide()
+    h:runTimers(0, 10)
+
+    assertTruthy(h.env.DoYouNeedItLanguageDropdown.Text:GetText() ~= "", "language caption is repaired after dropdown cleanup")
+    assertTruthy(h.env.DoYouNeedItFontDropdown.Text:GetText() ~= "", "font caption is repaired after dropdown cleanup")
+end
+
+local function testSettingsSliderTemplateTextDoesNotLeak()
+    local h = Harness.new()
+    h:loadAddon()
+    h:slash("settings")
+
+    local frame = h.env.DoYouNeedItSettingsFrame
+    assertTruthy(frame.delaySlider and frame.delaySlider.Text, "delay slider template text exists")
+    assertTruthy(frame.fontSizeSlider and frame.fontSizeSlider.Text, "font size slider template text exists")
+    assertEqual(frame.delaySlider.Text:GetText(), "", "delay slider hides unused template value text")
+    assertEqual(frame.fontSizeSlider.Text:GetText(), "", "font size slider hides unused template value text")
+end
+
 testLoadAndSettings()
 testSlashTestRowsAndManualWhisper()
 testInstanceChangeCompletesCurrentGroup()
@@ -228,5 +271,7 @@ testDebugPersistenceLoadState()
 testLegacySavedAllGearFallbackDisplays()
 testLegacyPlainItemTextDoesNotCreateDropHoverTarget()
 testFontHoverPreviewKeepsSettingsControlsReadable()
+testFontDropdownCloseRepairsCaptionsAfterSharedListCleanup()
+testSettingsSliderTemplateTextDoesNotLeak()
 
 print("runtime smoke ok")
