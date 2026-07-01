@@ -585,6 +585,7 @@ function Harness.new(options)
         clearInspectCalls = 0,
         inventoryReadCalls = {},
         dropdownAdds = {},
+        menuButtons = {},
         items = {},
         inventoryLinks = {},
         canInspect = {},
@@ -689,6 +690,22 @@ function Harness.new(options)
         env.UIDROPDOWNMENU_OPEN_MENU = nil
         env.DropDownList1:Hide()
     end
+    env.MenuUtil = {
+        CreateContextMenu = function(owner, builder)
+            local root = {
+                CreateButton = function(_, text, callback)
+                    local button = {
+                        owner = owner,
+                        text = text,
+                        callback = callback,
+                    }
+                    self.menuButtons[#self.menuButtons + 1] = button
+                    return button
+                end,
+            }
+            builder(owner, root)
+        end,
+    }
 
     env.C_Timer = {
         After = function(delay, callback)

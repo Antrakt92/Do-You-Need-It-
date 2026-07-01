@@ -879,6 +879,21 @@ local function IsCachedEquippedText(text)
     return type(text) == "string" and text:find(CACHED_EQUIPPED_PREFIX, 1, true) == 1
 end
 
+local function DisplayEquippedText(text)
+    text = type(text) == "string" and text or UNKNOWN_EQUIPPED
+    if text == UNKNOWN_EQUIPPED or text == EQUIPPED_PENDING or text == EQUIPPED_UNAVAILABLE then
+        return L(text)
+    end
+    if IsCachedEquippedText(text) then
+        return L(CACHED_EQUIPPED_PREFIX) .. text:sub(#CACHED_EQUIPPED_PREFIX + 1)
+    end
+    local equippedPrefix = "Equipped: "
+    if text:find(equippedPrefix, 1, true) == 1 then
+        return L(equippedPrefix) .. text:sub(#equippedPrefix + 1)
+    end
+    return text
+end
+
 local function CanInspectClean(unit)
     if InCombatLockdown and InCombatLockdown() then
         return false
@@ -1110,7 +1125,7 @@ local function RefreshRows()
             rowFrame.row = row
             rowFrame.looter:SetText(row.looter or "?")
             rowFrame.drop:SetText(row.itemLink or "")
-            rowFrame.equipped:SetText(row.equippedText or UNKNOWN_EQUIPPED)
+            rowFrame.equipped:SetText(DisplayEquippedText(row.equippedText))
             rowFrame.dropLink.itemLink = FirstItemLink(row.itemLink)
             rowFrame.equippedLink.itemLink = FirstItemLink(row.equippedText)
             rowFrame.dropLink:SetShown(rowFrame.dropLink.itemLink ~= nil)
@@ -1978,15 +1993,15 @@ end
 local function OpenHistoryMenu(owner)
     if MenuUtil and type(MenuUtil.CreateContextMenu) == "function" then
         MenuUtil.CreateContextMenu(owner, function(_, rootDescription)
-            rootDescription:CreateButton("Current", function()
+            rootDescription:CreateButton(L("Current"), function()
                 SelectView("current")
             end)
-            rootDescription:CreateButton("This Session", function()
+            rootDescription:CreateButton(L("This Session"), function()
                 SelectView("session")
             end)
             for index = 1, #Addon.state.history do
                 local group = Addon.state.history[index]
-                rootDescription:CreateButton(group.title or ("History " .. index), function()
+                rootDescription:CreateButton(group.title or (L("History") .. " " .. index), function()
                     SelectView("history", index)
                 end)
             end

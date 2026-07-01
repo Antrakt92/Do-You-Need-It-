@@ -224,6 +224,68 @@ local function testLegacyPlainItemTextDoesNotCreateDropHoverTarget()
     assertEqual(rows[1].dropLink.itemLink, nil, "plain item text is not treated as an item hyperlink")
 end
 
+local function testLocalizedEquippedDisplayKeepsSavedTextStable()
+    local h = Harness.new({
+        db = {
+            settings = { forceLocale = "ruRU", font = "Fonts\\ARIALN.TTF" },
+        },
+    })
+    h:loadAddon()
+    h:slash("test")
+
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "localized test row is visible")
+    assertTruthy(rows[1].equipped:GetText():find("Надето:", 1, true), "equipped display label is localized")
+    assertTruthy(rows[1].equipped:GetText():find("Worn Shortsword", 1, true), "localized equipped display keeps the item link text")
+    assertTruthy(rows[1].row.equippedText:find("Equipped:", 1, true), "stored equipped text remains migration-stable")
+
+    local cachedLink = "|cff1eff00|Hitem:25:::::::::::::|h[Cached Worn Shortsword]|h|r"
+    local cached = Harness.new({
+        db = {
+            settings = { forceLocale = "ruRU", font = "Fonts\\ARIALN.TTF" },
+            sessionRows = {
+                {
+                    id = "cached-display",
+                    looter = "Otherplayer-Ravencrest",
+                    itemLink = "|cff0070dd|Hitem:30001:::::::::::::|h[Cached Drop]|h|r",
+                    equippedText = "Cached: " .. cachedLink,
+                    askable = true,
+                },
+            },
+        },
+    })
+    cached:loadAddon()
+    cached:slash("history")
+
+    rows = cached:visibleRows()
+    assertEqual(#rows, 1, "cached session row is visible")
+    assertTruthy(rows[1].equipped:GetText():find("Кэш:", 1, true), "cached equipped display label is localized")
+    assertTruthy(rows[1].equipped:GetText():find("Cached Worn Shortsword", 1, true), "localized cached display keeps the item link text")
+    assertTruthy(rows[1].row.equippedText:find("Cached:", 1, true), "stored cached text remains migration-stable")
+end
+
+local function testHistoryMenuUsesLocalizedStaticLabels()
+    local h = Harness.new({
+        db = {
+            settings = { forceLocale = "ruRU", font = "Fonts\\ARIALN.TTF" },
+            history = {
+                {
+                    rows = {},
+                    allRows = {},
+                },
+            },
+        },
+    })
+    h:loadAddon()
+    h:slash("test")
+
+    h.env.DoYouNeedItFrame.historyButton:FireScript("OnClick")
+
+    assertEqual(h.menuButtons[1].text, "Текущий", "history menu localizes the current view entry")
+    assertEqual(h.menuButtons[2].text, "Эта сессия", "history menu localizes the session view entry")
+    assertEqual(h.menuButtons[3].text, "История 1", "history menu localizes fallback history entry titles")
+end
+
 local function testMissingSavedFontPathRepairsToAvailableFont()
     local staleFontPath = "Interface\\AddOns\\RemovedFontPack\\Gone.ttf"
     local h = Harness.new({
@@ -381,6 +443,8 @@ testDebugPersistenceIsOptIn()
 testDebugPersistenceLoadState()
 testLegacySavedAllGearFallbackDisplays()
 testLegacyPlainItemTextDoesNotCreateDropHoverTarget()
+testLocalizedEquippedDisplayKeepsSavedTextStable()
+testHistoryMenuUsesLocalizedStaticLabels()
 testMissingSavedFontPathRepairsToAvailableFont()
 testCustomFontPickerGridPreviewAndCommit()
 testLanguageDropdownCloseRepairsCaptionsAfterSharedListCleanup()
