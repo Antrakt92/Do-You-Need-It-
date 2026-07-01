@@ -224,6 +224,25 @@ local function testLegacyPlainItemTextDoesNotCreateDropHoverTarget()
     assertEqual(rows[1].dropLink.itemLink, nil, "plain item text is not treated as an item hyperlink")
 end
 
+local function testMissingSavedFontPathRepairsToAvailableFont()
+    local staleFontPath = "Interface\\AddOns\\RemovedFontPack\\Gone.ttf"
+    local h = Harness.new({
+        db = {
+            settings = { font = staleFontPath },
+        },
+        lsmFonts = {
+            { name = "Readable One", path = "Interface\\AddOns\\Readable\\One.ttf" },
+        },
+    })
+    h:loadAddon()
+
+    assertEqual(h.env.DoYouNeedItDB.settings.font, "Fonts\\FRIZQT__.TTF", "load repairs a saved font path that is no longer available")
+    assertEqual(h.env.DoYouNeedItFrame.title.font, "Fonts\\FRIZQT__.TTF", "main window uses the repaired font")
+
+    h:slash("settings")
+    assertEqual(h.env.DoYouNeedItFontDropdown.Text:GetText(), "Friz Quadrata TT", "font caption names the repaired font")
+end
+
 local function testCustomFontPickerGridPreviewAndCommit()
     local brokenFontPath = "Interface\\AddOns\\Broken\\Unreadable.ttf"
     local h = Harness.new({
@@ -362,6 +381,7 @@ testDebugPersistenceIsOptIn()
 testDebugPersistenceLoadState()
 testLegacySavedAllGearFallbackDisplays()
 testLegacyPlainItemTextDoesNotCreateDropHoverTarget()
+testMissingSavedFontPathRepairsToAvailableFont()
 testCustomFontPickerGridPreviewAndCommit()
 testLanguageDropdownCloseRepairsCaptionsAfterSharedListCleanup()
 testSettingsSliderTemplateTextDoesNotLeak()

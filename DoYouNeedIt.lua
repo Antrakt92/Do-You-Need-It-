@@ -353,6 +353,33 @@ local function StableSettingsFont()
     return Core.FindCompatibleFont(Core.GetDefaultFont(), requiredGlyph, BuildFontsList(), ClientLocale()) or Core.GetDefaultFont()
 end
 
+local function FindAvailableFontPath(path, fonts)
+    if type(path) ~= "string" or path == "" then
+        return nil
+    end
+    fonts = type(fonts) == "table" and fonts or BuildFontsList()
+    for index = 1, #fonts do
+        if Core.SameFontPath(fonts[index].path, path) then
+            return fonts[index].path
+        end
+    end
+    return nil
+end
+
+local function FindCompatibleAvailableFont(path, glyph, fonts, clientLocale)
+    fonts = type(fonts) == "table" and fonts or BuildFontsList()
+    local availablePath = FindAvailableFontPath(path, fonts)
+    if availablePath and Core.FontSupports(availablePath, glyph, clientLocale) then
+        return availablePath
+    end
+    for index = 1, #fonts do
+        if Core.FontSupports(fonts[index].path, glyph, clientLocale) then
+            return fonts[index].path
+        end
+    end
+    return Core.GetDefaultFont()
+end
+
 local function FindFontName(path)
     local fonts = BuildFontsList()
     for index = 1, #fonts do
@@ -390,24 +417,36 @@ MaybeAutoSwitchFont = function()
     local active = Core.ResolveActiveLocale(settings.forceLocale, ClientLocale())
     local requiredGlyph = Core.GetLocaleGlyphRequirement(active)
     local clientLocale = ClientLocale()
-    if settings.fontBeforeAutoSwitch and Core.FontSupports(settings.fontBeforeAutoSwitch, requiredGlyph, clientLocale) then
-        settings.font = settings.fontBeforeAutoSwitch
+    local fonts = BuildFontsList()
+    local changed = false
+    local previousFont = FindAvailableFontPath(settings.fontBeforeAutoSwitch, fonts)
+    if previousFont and Core.FontSupports(previousFont, requiredGlyph, clientLocale) then
+        settings.font = previousFont
         settings.fontBeforeAutoSwitch = nil
         return true
-    end
-    if Core.FontSupports(settings.font, requiredGlyph, clientLocale) then
-        return false
+    elseif settings.fontBeforeAutoSwitch and not previousFont then
+        settings.fontBeforeAutoSwitch = nil
+        changed = true
     end
 
-    local fallback = Core.FindCompatibleFont(settings.font, requiredGlyph, BuildFontsList(), clientLocale)
+    local currentFont = FindAvailableFontPath(settings.font, fonts)
+    if currentFont and Core.FontSupports(currentFont, requiredGlyph, clientLocale) then
+        if not Core.SameFontPath(currentFont, settings.font) then
+            settings.font = currentFont
+            return true
+        end
+        return changed
+    end
+
+    local fallback = FindCompatibleAvailableFont(settings.font, requiredGlyph, fonts, clientLocale)
     if fallback and not Core.SameFontPath(fallback, settings.font) then
-        if not settings.fontBeforeAutoSwitch then
+        if currentFont and not settings.fontBeforeAutoSwitch then
             settings.fontBeforeAutoSwitch = settings.font
         end
         settings.font = fallback
         return true
     end
-    return false
+    return changed
 end
 
 local function ExtractItemLink(message)
