@@ -334,6 +334,14 @@ local function snapshotRowsForSave(rows, limit)
     return saved
 end
 
+local function snapshotRowsForSaveWithFallback(rows, fallbackRows, limit)
+    local saved = snapshotRowsForSave(rows, limit)
+    if #saved == 0 then
+        saved = snapshotRowsForSave(fallbackRows, limit)
+    end
+    return saved
+end
+
 local function copyEquipmentSlots(slots)
     local copy = {}
     if type(slots) ~= "table" then
@@ -785,6 +793,10 @@ function Core.NormalizeSavedRows(rows, limit)
     return snapshotRowsForSave(rows, limit or DEFAULTS.maxSessionRows)
 end
 
+function Core.NormalizeSavedAllRows(rows, fallbackRows, limit)
+    return snapshotRowsForSaveWithFallback(rows, fallbackRows, limit or DEFAULTS.maxSessionRows)
+end
+
 function Core.SnapshotRowsForSave(rows, limit)
     return snapshotRowsForSave(rows, limit or DEFAULTS.maxSessionRows)
 end
@@ -797,7 +809,7 @@ function Core.SnapshotHistoryForSave(history, limit)
             if type(group) == "table" then
                 local savedGroup = copyPrimitiveFields(group, PERSISTED_GROUP_KEYS)
                 savedGroup.rows = snapshotRowsForSave(group.rows)
-                savedGroup.allRows = snapshotRowsForSave(group.allRows)
+                savedGroup.allRows = snapshotRowsForSaveWithFallback(group.allRows, group.rows)
                 saved[#saved + 1] = savedGroup
             end
         end
@@ -872,29 +884,6 @@ function Core.GetCachedEquippedText(cache, name, equipLoc)
         return text
     end
     return nil
-end
-
-function Core.RemovePendingRow(pending, key, row)
-    if type(pending) ~= "table" or key == nil or row == nil then
-        return 0
-    end
-
-    local rows = pending[key]
-    if type(rows) ~= "table" then
-        return 0
-    end
-
-    local removed = 0
-    for index = #rows, 1, -1 do
-        if rows[index] == row then
-            table.remove(rows, index)
-            removed = removed + 1
-        end
-    end
-    if #rows == 0 then
-        pending[key] = nil
-    end
-    return removed
 end
 
 function Core.AddPendingItemWaiter(pending, itemLink, waiter)

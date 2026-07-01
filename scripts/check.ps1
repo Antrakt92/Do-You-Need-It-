@@ -6,6 +6,14 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "lua5.1 tests\run.lua failed with exit code $LASTEXITCODE"
     }
+    & lua5.1 tests\runtime_smoke.lua
+    if ($LASTEXITCODE -ne 0) {
+        throw "lua5.1 tests\runtime_smoke.lua failed with exit code $LASTEXITCODE"
+    }
+    & lua5.1 tests\runtime_inspect.lua
+    if ($LASTEXITCODE -ne 0) {
+        throw "lua5.1 tests\runtime_inspect.lua failed with exit code $LASTEXITCODE"
+    }
     & luac5.1 -p `
         libs\LibStub\LibStub.lua `
         libs\CallbackHandler-1.0\CallbackHandler-1.0.lua `

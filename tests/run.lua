@@ -310,17 +310,6 @@ assertEqual(Core.ResolveRosterName("Alex", rosterIndex, "Player-Ravencrest"), ni
 assertEqual(Core.ResolveRosterName("Alex-RealmA", rosterIndex, "Player-Ravencrest"), "Alex-RealmA", "full cross-realm roster name resolves")
 assertEqual(Core.ResolveRosterName("UNKNOWNOBJECT", rosterIndex, "Player-Ravencrest"), nil, "placeholder roster name is rejected")
 
-local pendingRow = { id = "pending" }
-local otherPendingRow = { id = "other" }
-local pendingRows = {
-    inspectGuid = { pendingRow, otherPendingRow, pendingRow },
-}
-assertEqual(Core.RemovePendingRow(pendingRows, "inspectGuid", pendingRow), 2, "pending inspect cleanup removes duplicate row references")
-assertEqual(#pendingRows.inspectGuid, 1, "pending inspect cleanup keeps unrelated rows")
-assertEqual(pendingRows.inspectGuid[1], otherPendingRow, "pending inspect cleanup preserves row order")
-assertEqual(Core.RemovePendingRow(pendingRows, "inspectGuid", otherPendingRow), 1, "pending inspect cleanup removes the final row")
-assertEqual(pendingRows.inspectGuid, nil, "pending inspect cleanup drops empty guid buckets")
-assertEqual(Core.RemovePendingRow(pendingRows, "missingGuid", pendingRow), 0, "pending inspect cleanup tolerates missing buckets")
 local pendingItems = {}
 local pendingItemLink = "|cff0070dd|Hitem:500:::::::::::::|h[Pending Sword]|h|r"
 local bucket, created = Core.AddPendingItemWaiter(pendingItems, pendingItemLink, { looter = "One", generation = 1 })
@@ -363,6 +352,19 @@ local loadedSessionRows = Core.NormalizeSavedRows({
 assertEqual(#loadedSessionRows, 2, "loaded session rows prune to limit")
 assertEqual(loadedSessionRows[1].id, "middle", "loaded session rows keep retained order")
 assertEqual(loadedSessionRows[2].id, "new", "loaded session rows keep newest retained row")
+local loadedLegacyAllSessionRows = Core.NormalizeSavedAllRows(nil, {
+    { id = "legacy-askable" },
+    { id = "legacy-new" },
+}, 10)
+assertEqual(#loadedLegacyAllSessionRows, 2, "legacy session rows backfill missing all-gear session rows")
+assertEqual(loadedLegacyAllSessionRows[1].id, "legacy-askable", "legacy all-gear session fallback keeps row order")
+local loadedExplicitAllSessionRows = Core.NormalizeSavedAllRows({
+    { id = "explicit-all" },
+}, {
+    { id = "legacy-askable" },
+}, 10)
+assertEqual(#loadedExplicitAllSessionRows, 1, "explicit all-gear session rows do not merge legacy askable rows")
+assertEqual(loadedExplicitAllSessionRows[1].id, "explicit-all", "explicit all-gear session rows win over fallback")
 local persistedRows = Core.SnapshotRowsForSave({
     {
         id = "pending",
@@ -428,6 +430,33 @@ assertEqual(persistedHistory[1].rows[1].autoToken, nil, "history snapshot drops 
 assertEqual(#persistedHistory[1].allRows, 1, "history snapshot keeps all gear rows")
 assertEqual(persistedHistory[1].allRows[1].askable, false, "history snapshot keeps non-askable marker")
 assertEqual(persistedHistory[1].transient, nil, "history snapshot drops runtime group fields")
+local legacyPersistedHistory = Core.SnapshotHistoryForSave({
+    {
+        title = "Legacy Dungeon - Boss (1 drop)",
+        rows = {
+            {
+                id = "legacy-history-row",
+                looter = "Otherplayer",
+                itemLink = "|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r",
+            },
+        },
+    },
+    {
+        title = "Legacy Empty All Rows",
+        rows = {
+            {
+                id = "legacy-empty-all-row",
+                looter = "Otherplayer",
+                itemLink = "|cff0070dd|Hitem:19020:::::::::::::|h[Test Chest]|h|r",
+            },
+        },
+        allRows = {},
+    },
+}, 10)
+assertEqual(#legacyPersistedHistory[1].allRows, 1, "legacy history without allRows backfills all-gear rows")
+assertEqual(legacyPersistedHistory[1].allRows[1].id, "legacy-history-row", "legacy history fallback keeps row payload")
+assertEqual(#legacyPersistedHistory[2].allRows, 1, "legacy history with empty allRows still backfills all-gear rows")
+assertEqual(legacyPersistedHistory[2].allRows[1].id, "legacy-empty-all-row", "empty allRows fallback keeps row payload")
 
 local auto = Core.GetAutoWhisperDecision(
     Core.NormalizeSettings({ autoWhisper = true, autoDelay = 12 }),
