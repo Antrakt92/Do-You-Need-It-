@@ -21,6 +21,15 @@ local function newLoadedHarness()
     return h
 end
 
+local function newLoadedHarnessWithDB(db)
+    local h = Harness.new({ db = db })
+    h:loadAddon()
+    h:runNextTimer(0)
+    h.timers = {}
+    h:resetSideEffects()
+    return h
+end
+
 local function addWeapon(h, itemID, name)
     return h:addItem(itemID, {
         name = name,
@@ -98,6 +107,28 @@ local function testCachedFallbackSurvivesLiveInspectFailure()
     assertTruthy(rows[1].row.equippedText:find("Cached Worn Sword", 1, true), "cached equipped item is preserved")
     h:runNextTimer(0.8)
     assertTruthy(rows[1].row.equippedText:find("Cached Worn Sword", 1, true), "cached equipped fallback survives timeout")
+end
+
+local function testAutoPendingUsesStableStatusKey()
+    local h = newLoadedHarnessWithDB({
+        settings = {
+            autoWhisper = true,
+            autoDelay = 12,
+            font = "Fonts\\FRIZQT__.TTF",
+        },
+    })
+    local item = addWeapon(h, 21019, "Auto Pending Sword")
+
+    h:fireLoot("Otherplayer", item)
+
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "auto-pending loot row is visible")
+    assertEqual(rows[1].row.statusKey, "auto_pending", "auto whisper countdown stores a stable status key")
+    assertEqual(rows[1].row.statusText, nil, "auto whisper countdown does not store English display text")
+    assertEqual(rows[1].row.statusSeconds, 12, "auto whisper countdown stores the numeric delay separately")
+    assertEqual(rows[1].status:GetText(), "auto in 12s", "auto whisper countdown still renders in the UI")
+    assertEqual(h.env.DoYouNeedItDB.sessionRows[1].statusKey, "candidate", "saved auto-pending row falls back to stable candidate status")
+    assertEqual(h.env.DoYouNeedItDB.sessionRows[1].statusText, nil, "saved auto-pending row does not persist display text")
 end
 
 local function testExpiredCachedFallbackIsIgnored()
@@ -307,6 +338,7 @@ testDifferentGuidLootInspectsAreSerialized()
 testSameGuidLootInspectsCoalesce()
 testInspectTimeoutClearsOwnedInspectState()
 testCachedFallbackSurvivesLiveInspectFailure()
+testAutoPendingUsesStableStatusKey()
 testExpiredCachedFallbackIsIgnored()
 testRosterUpdateDoesNotReadReplacementUnitForActiveLootInspect()
 testClearCancelsInspectWorkAndUnblocksNewLoot()

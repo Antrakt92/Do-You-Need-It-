@@ -1052,7 +1052,7 @@ local function RefreshRows()
             rowFrame.equippedLink.itemLink = FirstItemLink(row.equippedText)
             rowFrame.dropLink:SetShown(rowFrame.dropLink.itemLink ~= nil)
             rowFrame.equippedLink:SetShown(rowFrame.equippedLink.itemLink ~= nil)
-            rowFrame.status:SetText(L(row.statusText or row.reason or "candidate"))
+            rowFrame.status:SetText(Core.GetRowStatusText(row, ActiveLocale()))
             local whisperState = Core.GetWhisperButtonState(Addon.selectedTab, Addon.selectedView, row)
             if whisperState.visible then
                 rowFrame.whisper:SetText(L(whisperState.text))
@@ -1113,7 +1113,9 @@ local function SendWhisper(row, isAuto)
     local token = {}
     row.whisperInFlight = true
     row.whisperToken = token
-    row.statusText = isAuto and "auto sending" or "sending"
+    row.statusKey = isAuto and "auto_sending" or "sending"
+    row.statusSeconds = nil
+    row.statusText = nil
     RefreshRows()
 
     C_Timer.After(0, function()
@@ -1136,13 +1138,13 @@ local function SendWhisper(row, isAuto)
         if ok then
             if isAuto then
                 row.autoWhispered = true
-                row.statusText = "auto sent"
+                row.statusKey = "auto_sent"
             else
                 row.manualWhispered = true
-                row.statusText = "sent"
+                row.statusKey = "sent"
             end
         else
-            row.statusText = "whisper failed"
+            row.statusKey = "whisper_failed"
             RecordDiagnostic("whisper_failed", {
                 looter = target,
                 itemLink = row.itemLink,
@@ -1158,8 +1160,10 @@ local function CancelPendingAuto(row)
     if row then
         row.pendingAutoWhisper = false
         row.autoToken = nil
-        if row.statusText and row.statusText:find("auto in", 1, true) then
-            row.statusText = "candidate"
+        if row.statusKey == "auto_pending" or (row.statusText and row.statusText:find("auto in", 1, true)) then
+            row.statusKey = "candidate"
+            row.statusSeconds = nil
+            row.statusText = nil
         end
     end
 end
@@ -1173,7 +1177,9 @@ local function ScheduleAutoWhisper(row)
     local token = {}
     row.pendingAutoWhisper = true
     row.autoToken = token
-    row.statusText = "auto in " .. tostring(decision.delay) .. "s"
+    row.statusKey = "auto_pending"
+    row.statusSeconds = decision.delay
+    row.statusText = nil
     RefreshRows()
 
     C_Timer.After(decision.delay, function()
@@ -1646,7 +1652,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
         encounterName = context.encounterName,
         timestamp = context.timestamp or Now(),
         reason = askable and "trade candidate" or classification.reason,
-        statusText = askable and "candidate" or (classification.reason or "not askable"),
+        statusKey = askable and "candidate" or (classification.reason or "not_askable"),
         equippedText = cachedEquippedText or UNKNOWN_EQUIPPED,
         unsafe = context.unsafe == true,
     }, askable)
@@ -1695,7 +1701,7 @@ local function AddTestRow()
         encounterName = Addon.currentEncounterName,
         timestamp = Now(),
         reason = "test row",
-        statusText = "test row",
+        statusKey = "test_row",
         equippedText = "Equipped: |cff1eff00|Hitem:25:::::::::::::|h[Worn Shortsword]|h|r",
         unsafe = false,
     }, true)
@@ -1708,7 +1714,7 @@ local function AddTestRow()
         encounterName = Addon.currentEncounterName,
         timestamp = Now(),
         reason = "bind_on_pickup",
-        statusText = "bind_on_pickup",
+        statusKey = "bind_on_pickup",
         equippedText = UNKNOWN_EQUIPPED,
         unsafe = false,
     }, false)

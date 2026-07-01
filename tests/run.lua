@@ -453,13 +453,17 @@ local persistedRows = Core.SnapshotRowsForSave({
     },
 }, 10)
 assertEqual(#persistedRows, 3, "save snapshot keeps persistable rows")
-assertEqual(persistedRows[1].statusText, "candidate", "save snapshot clears stale pending auto status")
+assertEqual(persistedRows[1].statusKey, "candidate", "save snapshot clears stale pending auto status key")
+assertEqual(persistedRows[1].statusText, nil, "save snapshot drops migrated pending auto status text")
 assertEqual(persistedRows[1].equippedText, "Equipped: unknown", "save snapshot clears stale pending inspect status")
 assertEqual(persistedRows[1].pendingAutoWhisper, nil, "save snapshot drops pending auto flag")
 assertEqual(persistedRows[1].autoToken, nil, "save snapshot drops runtime auto token")
 assertEqual(persistedRows[1].runtimeOnly, nil, "save snapshot drops non-primitive runtime fields")
+assertEqual(persistedRows[2].statusKey, "sent", "save snapshot migrates stable sent status key")
+assertEqual(persistedRows[2].statusText, nil, "save snapshot drops migrated sent status text")
 assertEqual(persistedRows[2].manualWhispered, true, "save snapshot keeps sent whisper state")
-assertEqual(persistedRows[3].statusText, "candidate", "save snapshot clears transient whisper sending status")
+assertEqual(persistedRows[3].statusKey, "candidate", "save snapshot clears transient whisper sending status key")
+assertEqual(persistedRows[3].statusText, nil, "save snapshot drops migrated transient whisper status text")
 assertEqual(persistedRows[3].whisperInFlight, nil, "save snapshot drops transient whisper in-flight flag")
 local malformedSavedRows = Core.NormalizeSavedRows({
     {
@@ -475,6 +479,7 @@ local malformedSavedRows = Core.NormalizeSavedRows({
 }, 10)
 assertEqual(#malformedSavedRows, 1, "malformed saved rows do not abort normalization")
 assertEqual(malformedSavedRows[1].statusText, nil, "malformed status text is dropped during row normalization")
+assertEqual(malformedSavedRows[1].statusKey, nil, "malformed status key is dropped during row normalization")
 assertEqual(malformedSavedRows[1].itemLink, nil, "malformed item link is dropped during row normalization")
 assertEqual(malformedSavedRows[1].askable, nil, "malformed askable flag is dropped during row normalization")
 local persistedHistory = Core.SnapshotHistoryForSave({
@@ -502,7 +507,8 @@ local persistedHistory = Core.SnapshotHistoryForSave({
     },
 }, 10)
 assertEqual(#persistedHistory, 1, "history save snapshot keeps group")
-assertEqual(persistedHistory[1].rows[1].statusText, "candidate", "history snapshot clears stale pending auto status")
+assertEqual(persistedHistory[1].rows[1].statusKey, "candidate", "history snapshot clears stale pending auto status key")
+assertEqual(persistedHistory[1].rows[1].statusText, nil, "history snapshot drops migrated pending auto status text")
 assertEqual(persistedHistory[1].rows[1].autoToken, nil, "history snapshot drops runtime auto token")
 assertEqual(#persistedHistory[1].allRows, 1, "history snapshot keeps all gear rows")
 assertEqual(persistedHistory[1].allRows[1].askable, false, "history snapshot keeps non-askable marker")
@@ -568,6 +574,10 @@ local sessionButton = Core.GetWhisperButtonState("askable", "session", { askable
 assertEqual(sessionButton.visible, false, "session rows do not show Ask button")
 assertEqual(Core.GetLocaleLabel("sent", "ruRU"), "отправлено", "manual whisper success status is localized")
 assertEqual(Core.GetLocaleLabel("auto sent", "ruRU"), "авто отправлено", "auto whisper success status is localized")
+assertEqual(Core.GetRowStatusText({ statusKey = "auto_pending", statusSeconds = 12 }, "enUS"), "auto in 12s", "status key formats auto countdown in English")
+assertEqual(Core.GetRowStatusText({ statusKey = "auto_pending", statusSeconds = 12 }, "ruRU"), "авто через 12с", "status key formats auto countdown in Russian")
+assertEqual(Core.GetRowStatusText({ statusText = "auto in 7s" }, "enUS"), "auto in 7s", "legacy auto status text still renders")
+assertEqual(Core.GetRowStatusText({ statusText = "auto sent" }, "ruRU"), "авто отправлено", "legacy auto sent status text migrates for display")
 assertEqual(Core.ShouldAutoShowWindow({ itemLink = "|cff0070dd|Hitem:1:::::::::::::|h[Test]|h|r" }), true, "new loot rows auto-show the window")
 assertEqual(Core.ShouldAutoShowWindow(nil), false, "missing rows do not auto-show the window")
 

@@ -109,12 +109,19 @@ local LABELS_BY_LOCALE = {
         ["candidate"] = "candidate",
         ["sent"] = "sent",
         ["auto sent"] = "auto sent",
+        ["auto_sent"] = "auto sent",
         ["sending"] = "sending",
         ["auto sending"] = "auto sending",
+        ["auto_sending"] = "auto sending",
+        ["auto_pending"] = "auto in %ds",
         ["whisper failed"] = "whisper failed",
+        ["whisper_failed"] = "whisper failed",
         ["test row"] = "test row",
+        ["test_row"] = "test row",
         ["bind_on_pickup"] = "bind on pickup",
         ["bind_unknown"] = "trade status unknown",
+        ["not_askable"] = "not askable",
+        ["quest_bound"] = "quest bound",
         ["player_cannot_equip"] = "cannot equip",
         ["player_equip_unknown"] = "equip unknown",
         ["self_loot"] = "own loot",
@@ -148,12 +155,19 @@ local LABELS_BY_LOCALE = {
         ["candidate"] = "кандидат",
         ["sent"] = "отправлено",
         ["auto sent"] = "авто отправлено",
+        ["auto_sent"] = "авто отправлено",
         ["sending"] = "отправка",
         ["auto sending"] = "авто-отправка",
+        ["auto_sending"] = "авто-отправка",
+        ["auto_pending"] = "авто через %dс",
         ["whisper failed"] = "виспер не отправлен",
+        ["whisper_failed"] = "виспер не отправлен",
         ["test row"] = "тест",
+        ["test_row"] = "тест",
         ["bind_on_pickup"] = "персональный",
         ["bind_unknown"] = "статус передачи неизвестен",
+        ["not_askable"] = "не спрашивать",
+        ["quest_bound"] = "квестовый предмет",
         ["player_cannot_equip"] = "не надеть",
         ["player_equip_unknown"] = "неизвестно, можно ли надеть",
         ["self_loot"] = "свой лут",
@@ -232,6 +246,7 @@ local PERSISTED_ROW_KEYS = {
     encounterName = "string",
     timestamp = "number",
     reason = "string",
+    statusKey = "string",
     statusText = "string",
     equippedText = "string",
     unsafe = "boolean",
@@ -309,17 +324,59 @@ local function copyPrimitiveFields(source, allowedKeys)
     return copy
 end
 
+local LEGACY_STATUS_TEXT_TO_KEY = {
+    ["candidate"] = "candidate",
+    ["sent"] = "sent",
+    ["auto sent"] = "auto_sent",
+    ["sending"] = "sending",
+    ["auto sending"] = "auto_sending",
+    ["whisper failed"] = "whisper_failed",
+    ["test row"] = "test_row",
+}
+
+local TRANSIENT_STATUS_KEYS = {
+    auto_pending = true,
+    sending = true,
+    auto_sending = true,
+}
+
+local function resolveRowStatus(row, useFallback)
+    if type(row) ~= "table" then
+        return useFallback ~= false and "candidate" or nil, nil
+    end
+
+    if type(row.statusKey) == "string" and row.statusKey ~= "" then
+        return row.statusKey, tonumber(row.statusSeconds)
+    end
+
+    local text = type(row.statusText) == "string" and row.statusText or nil
+    if text and text ~= "" then
+        local seconds = text:match("^auto in (%d+)s$")
+        if seconds then
+            return "auto_pending", tonumber(seconds)
+        end
+        return LEGACY_STATUS_TEXT_TO_KEY[text] or text, nil
+    end
+
+    if type(row.reason) == "string" and row.reason ~= "" then
+        return row.reason, nil
+    end
+    if useFallback ~= false then
+        return "candidate", nil
+    end
+    return nil, nil
+end
+
 local function snapshotRowForSave(row)
     local saved = copyPrimitiveFields(row, PERSISTED_ROW_KEYS)
-    if saved.statusText
-        and (
-            saved.statusText:find("auto in", 1, true) == 1
-            or saved.statusText == "sending"
-            or saved.statusText == "auto sending"
-        )
-    then
-        saved.statusText = "candidate"
+    local statusKey = resolveRowStatus(row, false)
+    if statusKey then
+        if TRANSIENT_STATUS_KEYS[statusKey] then
+            statusKey = "candidate"
+        end
+        saved.statusKey = statusKey
     end
+    saved.statusText = nil
     if saved.equippedText == "Equipped: checking..." then
         saved.equippedText = "Equipped: unknown"
     end
@@ -687,6 +744,18 @@ end
 function Core.GetLocaleLabel(key, locale)
     local labels = LABELS_BY_LOCALE[locale] or LABELS_BY_LOCALE.enUS
     return labels[key] or LABELS_BY_LOCALE.enUS[key] or key
+end
+
+function Core.GetRowStatusText(row, locale)
+    local key, seconds = resolveRowStatus(row, true)
+    local label = Core.GetLocaleLabel(key, locale)
+    if key == "auto_pending" then
+        local ok, formatted = pcall(string.format, label, math.max(0, math.floor(tonumber(seconds) or 0)))
+        if ok then
+            return formatted
+        end
+    end
+    return label
 end
 
 function Core.GetBlizzardFonts(clientLocale)
