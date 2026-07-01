@@ -1,6 +1,6 @@
 local Core = {}
 
-Core.VERSION = "0.1.20"
+Core.VERSION = "0.1.21"
 
 local GLYPH_LATIN = "LATIN"
 local GLYPH_CYR = "CYR"
@@ -106,6 +106,7 @@ local LABELS_BY_LOCALE = {
         ["candidate"] = "candidate",
         ["test row"] = "test row",
         ["bind_on_pickup"] = "bind on pickup",
+        ["bind_unknown"] = "trade status unknown",
         ["player_cannot_equip"] = "cannot equip",
         ["self_loot"] = "own loot",
         ["not_tradeable"] = "not tradeable",
@@ -134,6 +135,7 @@ local LABELS_BY_LOCALE = {
         ["candidate"] = "кандидат",
         ["test row"] = "тест",
         ["bind_on_pickup"] = "персональный",
+        ["bind_unknown"] = "статус передачи неизвестен",
         ["player_cannot_equip"] = "не надеть",
         ["self_loot"] = "свой лут",
         ["not_tradeable"] = "не передать",
@@ -994,10 +996,14 @@ function Core.ClassifyTradeCandidate(item, looter, playerName, settings)
     if item.canTrade == false then
         return { visible = false, reason = "not_tradeable" }
     end
-    if item.bindType == 1 and item.tradeTimeRemaining ~= true then
+    local bindType = tonumber(item.bindType)
+    if bindType == nil and item.tradeTimeRemaining ~= true and item.canTrade ~= true then
+        return { visible = false, reason = "bind_unknown" }
+    end
+    if bindType == 1 and item.tradeTimeRemaining ~= true then
         return { visible = false, reason = "bind_on_pickup" }
     end
-    if item.bindType == 4 then
+    if bindType == 4 then
         return { visible = false, reason = "quest_bound" }
     end
 

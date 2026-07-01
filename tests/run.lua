@@ -101,6 +101,17 @@ local tradeWarningGear = {
 local tradeWarningAskable = Core.ClassifyTradeCandidate(tradeWarningGear, "Otherplayer", "Player")
 assertEqual(tradeWarningAskable.visible, true, "bind-on-pickup gear with trade warning is askable")
 
+local unknownBindGear = {
+    link = "|cffa335ee|Hitem:19023:::::::::::::|h[Unknown Bind Chest]|h|r",
+    quality = 4,
+    classID = 4,
+    equipLoc = "INVTYPE_CHEST",
+    playerCanEquip = true,
+}
+local unknownBindAskable = Core.ClassifyTradeCandidate(unknownBindGear, "Otherplayer", "Player")
+assertEqual(unknownBindAskable.visible, false, "gear without bind/trade evidence is not askable")
+assertEqual(unknownBindAskable.reason, "bind_unknown", "unknown bind rejection is explicit")
+
 local unusableForPlayer = {
     link = "|cffa335ee|Hitem:19022:::::::::::::|h[Other Class Chest]|h|r",
     quality = 4,
@@ -136,6 +147,7 @@ local sameBaseDifferentRealm = Core.ClassifyTradeCandidate({
     quality = 3,
     classID = 2,
     equipLoc = "INVTYPE_WEAPON",
+    bindType = 2,
 }, "Player-OtherRealm", "Player-Ravencrest")
 assertEqual(sameBaseDifferentRealm.visible, true, "same short name on a different realm is not self loot")
 local sameBaseDifferentRealmWithShortPlayerName = Core.ClassifyTradeCandidate({
@@ -143,6 +155,7 @@ local sameBaseDifferentRealmWithShortPlayerName = Core.ClassifyTradeCandidate({
     quality = 3,
     classID = 2,
     equipLoc = "INVTYPE_WEAPON",
+    bindType = 2,
 }, "Player-OtherRealm", "Player")
 assertEqual(sameBaseDifferentRealmWithShortPlayerName.visible, true, "same short name on another realm is not self loot when player realm is unavailable")
 
@@ -498,7 +511,7 @@ assertEqual(#diagnostics, 10, "diagnostics prune to limit")
 assertEqual(diagnostics[1].stage, "stage12", "newest diagnostic first")
 assertEqual(diagnostics[10].stage, "stage3", "oldest retained diagnostic kept at limit")
 
-assertEqual(Core.VERSION, "0.1.20", "core exposes current version")
+assertEqual(Core.VERSION, "0.1.21", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -509,7 +522,7 @@ end
 
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
-assertTruthy(toc:find("## Version: 0.1.20", 1, true), "toc version present")
+assertTruthy(toc:find("## Version: 0.1.21", 1, true), "toc version present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")
 assertTruthy(toc:find("DoYouNeedIt.lua", 1, true), "toc loads runtime")
