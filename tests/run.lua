@@ -53,6 +53,10 @@ assertEqual(Core.SameFontPath("Fonts/ARIALN.TTF", "fonts\\arialn.ttf"), true, "f
 assertEqual(Core.FontSupports("Fonts\\ARIALN.TTF", "CYR", "enUS"), true, "Arial Narrow supports Cyrillic on western clients")
 assertEqual(Core.FontSupports("Fonts\\FRIZQT__.TTF", "CYR", "enUS"), false, "Friz does not guarantee Cyrillic on western clients")
 assertEqual(Core.FontSupports("Fonts\\FRIZQT__.TTF", "CYR", "ruRU"), true, "Friz supports Cyrillic on ruRU clients")
+assertEqual(Core.ResolveFontSize(11, 14), 13, "font size slider scales body text relative to default")
+assertEqual(Core.ResolveFontSize(16, 14), 18, "font size slider scales title text relative to default")
+assertEqual(Core.ResolveFontSize(10, 8), 8, "font size slider clamps tiny derived text")
+assertEqual(Core.ResolveFontSize(nil, 15), 15, "font size slider uses selected size when no base size exists")
 assertEqual(
     Core.FindCompatibleFont("Fonts\\FRIZQT__.TTF", "CYR", {
         { name = "Friz", path = "Fonts\\FRIZQT__.TTF" },
@@ -494,7 +498,7 @@ assertEqual(#diagnostics, 10, "diagnostics prune to limit")
 assertEqual(diagnostics[1].stage, "stage12", "newest diagnostic first")
 assertEqual(diagnostics[10].stage, "stage3", "oldest retained diagnostic kept at limit")
 
-assertEqual(Core.VERSION, "0.1.18", "core exposes current version")
+assertEqual(Core.VERSION, "0.1.19", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -505,7 +509,7 @@ end
 
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
-assertTruthy(toc:find("## Version: 0.1.18", 1, true), "toc version present")
+assertTruthy(toc:find("## Version: 0.1.19", 1, true), "toc version present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")
 assertTruthy(toc:find("DoYouNeedIt.lua", 1, true), "toc loads runtime")
@@ -542,6 +546,7 @@ assertTruthy(runtime:find("DropDownList1:HookScript(\"OnHide\"", 1, true), "runt
 assertTruthy(runtime:find("Core.GetLocaleLabel", 1, true), "runtime localizes visible UI strings")
 assertTruthy(runtime:find("RegisterFontString", 1, true), "runtime tracks owned font strings")
 assertTruthy(runtime:find("ApplyCurrentFont", 1, true), "runtime applies chosen or previewed font")
+assertTruthy(runtime:find("Core.ResolveFontSize", 1, true), "runtime applies font-size slider to registered font strings")
 assertTruthy(runtime:find("local WINDOW_WIDTH = 540", 1, true), "runtime uses compact non-overlapping window width")
 assertTruthy(runtime:find("local WINDOW_HEIGHT = 300", 1, true), "runtime uses compact settings-enabled window height")
 assertTruthy(runtime:find("local ROW_START_Y = -82", 1, true), "runtime leaves a compact header area above rows")

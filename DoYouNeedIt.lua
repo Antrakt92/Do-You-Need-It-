@@ -326,11 +326,11 @@ end
 ApplyCurrentFont = function()
     local settings = Addon.state and Addon.state.settings or Core.NormalizeSettings({})
     local font = Addon.previewFont or settings.font or Core.GetDefaultFont()
-    local size = tonumber(settings.fontSize) or 12
+    local selectedSize = tonumber(settings.fontSize) or 12
     for index = 1, #Addon.fontStrings do
         local entry = Addon.fontStrings[index]
         if entry and entry.fontString and type(entry.fontString.SetFont) == "function" then
-            SafeCall(entry.fontString.SetFont, entry.fontString, font, entry.size or size, entry.flags)
+            SafeCall(entry.fontString.SetFont, entry.fontString, font, Core.ResolveFontSize(entry.size, selectedSize), entry.flags)
         end
     end
 end

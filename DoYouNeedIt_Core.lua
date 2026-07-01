@@ -1,6 +1,6 @@
 local Core = {}
 
-Core.VERSION = "0.1.18"
+Core.VERSION = "0.1.19"
 
 local GLYPH_LATIN = "LATIN"
 local GLYPH_CYR = "CYR"
@@ -645,6 +645,13 @@ function Core.NormalizeSettings(saved)
     settings.fontSize = math.floor(clamp(asNumber(saved.fontSize, DEFAULTS.fontSize), DEFAULTS.minFontSize, DEFAULTS.maxFontSize) + 0.5)
     settings.fontBeforeAutoSwitch = type(saved.fontBeforeAutoSwitch) == "string" and saved.fontBeforeAutoSwitch ~= "" and saved.fontBeforeAutoSwitch or nil
     return settings
+end
+
+function Core.ResolveFontSize(baseSize, selectedSize)
+    local base = asNumber(baseSize, DEFAULTS.fontSize)
+    local selected = math.floor(clamp(asNumber(selectedSize, DEFAULTS.fontSize), DEFAULTS.minFontSize, DEFAULTS.maxFontSize) + 0.5)
+    local resolved = selected + (base - DEFAULTS.fontSize)
+    return math.floor(clamp(resolved, DEFAULTS.minFontSize, DEFAULTS.maxFontSize) + 0.5)
 end
 
 function Core.NormalizeSavedRows(rows, limit)
