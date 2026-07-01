@@ -320,6 +320,32 @@ local function testLegacySavedAllGearFallbackDisplays()
     assertEqual(rows[1].row.id, "legacy-history", "legacy history fallback keeps row identity")
 end
 
+local function testLegacySavedRowBackfillsLooterClassColor()
+    local h = Harness.new({
+        db = {
+            settings = { font = "Fonts\\FRIZQT__.TTF" },
+            sessionRows = {
+                {
+                    id = "legacy-class-row",
+                    looter = "Otherplayer-Ravencrest",
+                    itemLink = "|cff0070dd|Hitem:30003:::::::::::::|h[Legacy Class Sword]|h|r",
+                    equippedText = "Equipped: unknown",
+                    askable = true,
+                },
+            },
+        },
+    })
+    h:loadAddon()
+    h:slash("history")
+
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "legacy class-color row is visible")
+    assertEqual(rows[1].row.classToken, "PALADIN", "legacy row backfills the looter class token from the current roster")
+    assertEqual(rows[1].looter.textColor[1], 0.96, "legacy paladin looter color red channel")
+    assertEqual(rows[1].looter.textColor[2], 0.55, "legacy paladin looter color green channel")
+    assertEqual(rows[1].looter.textColor[3], 0.73, "legacy paladin looter color blue channel")
+end
+
 local function testLegacyPlainItemTextDoesNotCreateDropHoverTarget()
     local h = Harness.new({
         db = {
@@ -650,6 +676,7 @@ testInstanceChangeHistoryTitleUsesActiveLocale()
 testDebugPersistenceIsOptIn()
 testDebugPersistenceLoadState()
 testLegacySavedAllGearFallbackDisplays()
+testLegacySavedRowBackfillsLooterClassColor()
 testLegacyPlainItemTextDoesNotCreateDropHoverTarget()
 testLocalizedEquippedDisplayKeepsSavedTextStable()
 testHistoryMenuUsesLocalizedStaticLabels()

@@ -624,6 +624,21 @@ local function ApplyLooterClassColor(fontString, classToken)
     SafeCall(fontString.SetTextColor, fontString, r, g, b)
 end
 
+local function EnsureRowClassToken(row)
+    if type(row) ~= "table" then
+        return nil
+    end
+    if type(row.classToken) == "string" and row.classToken ~= "" then
+        return row.classToken
+    end
+
+    local classToken = ResolveClassTokenForName(row.looter)
+    if classToken then
+        row.classToken = classToken
+    end
+    return row.classToken
+end
+
 local function UnitMatchesGuid(unit, guid)
     return type(unit) == "string"
         and type(guid) == "string"
@@ -1219,7 +1234,7 @@ local function RefreshRows()
         if row then
             rowFrame.row = row
             rowFrame.looter:SetText(row.looter or "?")
-            ApplyLooterClassColor(rowFrame.looter, row.classToken)
+            ApplyLooterClassColor(rowFrame.looter, EnsureRowClassToken(row))
             rowFrame.drop:SetText(row.itemLink or "")
             rowFrame.equipped:SetText(DisplayEquippedText(row.equippedText))
             rowFrame.dropLink.itemLink = FirstItemLink(row.itemLink)
