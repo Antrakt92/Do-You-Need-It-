@@ -18,7 +18,6 @@ local slotIDs = {
     BackSlot = 15,
     MainHandSlot = 16,
     SecondaryHandSlot = 17,
-    RangedSlot = 18,
 }
 
 local slotNamesByID = {}
@@ -665,7 +664,11 @@ function Harness.new(options)
     end
 
     env.GetInventorySlotInfo = function(slotName)
-        return slotIDs[slotName]
+        local slotID = slotIDs[slotName]
+        if not slotID then
+            error("Invalid inventory slot in GetInventorySlotInfo")
+        end
+        return slotID
     end
     env.GetInventoryItemLink = function(unit, slotID)
         local slotName = slotNamesByID[slotID] or slotID

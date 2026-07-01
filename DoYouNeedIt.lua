@@ -84,8 +84,8 @@ local EQUIP_LOC_SLOTS = {
     INVTYPE_WEAPONMAINHAND = { "MainHandSlot" },
     INVTYPE_WEAPONOFFHAND = { "SecondaryHandSlot" },
     INVTYPE_HOLDABLE = { "SecondaryHandSlot" },
-    INVTYPE_RANGED = { "RangedSlot" },
-    INVTYPE_RANGEDRIGHT = { "RangedSlot" },
+    INVTYPE_RANGED = { "MainHandSlot" },
+    INVTYPE_RANGEDRIGHT = { "MainHandSlot" },
 }
 
 local PREFERRED_ARMOR_SUBCLASS_BY_CLASS = {
@@ -769,7 +769,7 @@ local function ReadEquippedLinks(unit, equipLoc)
 
     local links = {}
     for index = 1, #slotNames do
-        local slotID = GetInventorySlotInfo(slotNames[index])
+        local slotID = SafeCall(GetInventorySlotInfo, slotNames[index])
         if slotID then
             local link = SafeCall(GetInventoryItemLink, unit, slotID)
             link = CleanString(link)

@@ -727,6 +727,7 @@ assertTruthy(runtime:find("GetAutoShowTabForRow", 1, true), "runtime selects all
 assertEqual(runtime:find("if askable and DoYouNeedItCore.ShouldAutoShowWindow", 1, true), nil, "runtime does not limit auto-show to askable rows")
 assertTruthy(runtime:find("QueueEquipmentScan", 1, true), "runtime queues equipment pre-scans")
 assertTruthy(runtime:find("StartEquipmentScan", 1, true), "runtime processes equipment scans one unit at a time")
+assertEqual(runtime:find("RangedSlot", 1, true), nil, "runtime does not use removed ranged inventory slot")
 assertTruthy(runtime:find("Core.GetCachedEquippedText", 1, true), "runtime applies cached equipped fallback to loot rows")
 assertTruthy(runtime:find("command == \"scan\"", 1, true), "runtime wires /dyni scan")
 assertTruthy(runtime:find("Cached:", 1, true), "runtime labels cached equipped data distinctly")
