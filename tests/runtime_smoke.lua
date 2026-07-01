@@ -160,6 +160,34 @@ local function testCyrillicLootTextUsesGlyphCapableFont()
     assertEqual(h.env.DoYouNeedItFrame.title.font, "Fonts\\FRIZQT__.TTF", "main title keeps the selected Friz font")
 end
 
+local function testLootLooterNameUsesClassColor()
+    local h = Harness.new()
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    local item = h:addItem(22002, {
+        name = "Class Color Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fireLoot("Otherplayer", item)
+
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "class-color loot row is visible")
+    assertEqual(rows[1].row.classToken, "PALADIN", "loot row stores the looter class token")
+    assertEqual(h.env.DoYouNeedItDB.sessionRows[1].classToken, "PALADIN", "saved loot row keeps the looter class token")
+    assertEqual(rows[1].looter.textColor[1], 0.96, "paladin looter color red channel")
+    assertEqual(rows[1].looter.textColor[2], 0.55, "paladin looter color green channel")
+    assertEqual(rows[1].looter.textColor[3], 0.73, "paladin looter color blue channel")
+end
+
 local function testInstanceChangeCompletesCurrentGroup()
     local h = Harness.new()
     h:loadAddon()
@@ -616,6 +644,7 @@ testCustomWhisperTemplateIsUsedForManualAsk()
 testManualWhisperFailureLeavesRowRetryable()
 testMainWindowLayoutBoundsLongText()
 testCyrillicLootTextUsesGlyphCapableFont()
+testLootLooterNameUsesClassColor()
 testInstanceChangeCompletesCurrentGroup()
 testInstanceChangeHistoryTitleUsesActiveLocale()
 testDebugPersistenceIsOptIn()

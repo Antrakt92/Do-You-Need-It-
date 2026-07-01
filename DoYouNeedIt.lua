@@ -79,6 +79,23 @@ local EQUIPPED_PENDING = "Equipped: checking..."
 local EQUIPPED_UNAVAILABLE = "Equipped: unavailable"
 local CACHED_EQUIPPED_PREFIX = "Cached: "
 
+local DEFAULT_LOOTER_COLOR = { r = 1, g = 0.82, b = 0 }
+local FALLBACK_CLASS_COLORS = {
+    DEATHKNIGHT = { r = 0.77, g = 0.12, b = 0.23 },
+    DEMONHUNTER = { r = 0.64, g = 0.19, b = 0.79 },
+    DRUID = { r = 1.00, g = 0.49, b = 0.04 },
+    EVOKER = { r = 0.20, g = 0.58, b = 0.50 },
+    HUNTER = { r = 0.67, g = 0.83, b = 0.45 },
+    MAGE = { r = 0.25, g = 0.78, b = 0.92 },
+    MONK = { r = 0.00, g = 1.00, b = 0.60 },
+    PALADIN = { r = 0.96, g = 0.55, b = 0.73 },
+    PRIEST = { r = 1.00, g = 1.00, b = 1.00 },
+    ROGUE = { r = 1.00, g = 0.96, b = 0.41 },
+    SHAMAN = { r = 0.00, g = 0.44, b = 0.87 },
+    WARLOCK = { r = 0.53, g = 0.53, b = 0.93 },
+    WARRIOR = { r = 0.78, g = 0.61, b = 0.43 },
+}
+
 local EQUIP_LOC_SLOTS = {
     INVTYPE_HEAD = { "HeadSlot" },
     INVTYPE_NECK = { "NeckSlot" },
@@ -251,6 +268,21 @@ end
 local function SafeUnitGUID(unit)
     local guid = SafeCall(UnitGUID, unit)
     return CleanString(guid)
+end
+
+local function SafeUnitClassToken(unit)
+    if type(unit) ~= "string" or unit == "" then
+        return nil
+    end
+    if type(UnitClassBase) == "function" then
+        local classToken = CleanString(SafeCall(UnitClassBase, unit))
+        if classToken then
+            return classToken
+        end
+    end
+
+    local _, classToken = SafeCall(UnitClass, unit)
+    return CleanString(classToken)
 end
 
 local function SafePlayerName()
@@ -552,6 +584,44 @@ local function ResolveUnitForName(name)
         BuildRoster()
     end
     return Core.GetRosterUnit(Addon.roster, name)
+end
+
+local function ResolveClassTokenForName(name)
+    local unit = ResolveUnitForName(name)
+    return SafeUnitClassToken(unit)
+end
+
+local function GetClassColor(classToken)
+    classToken = CleanString(classToken)
+    if not classToken then
+        return nil
+    end
+
+    local colors = type(RAID_CLASS_COLORS) == "table" and RAID_CLASS_COLORS or nil
+    local color = colors and colors[classToken] or FALLBACK_CLASS_COLORS[classToken]
+    if type(color) ~= "table" then
+        return nil
+    end
+
+    local r = tonumber(color.r)
+    local g = tonumber(color.g)
+    local b = tonumber(color.b)
+    if r == nil or g == nil or b == nil then
+        return nil
+    end
+    return r, g, b
+end
+
+local function ApplyLooterClassColor(fontString, classToken)
+    if not fontString or type(fontString.SetTextColor) ~= "function" then
+        return
+    end
+
+    local r, g, b = GetClassColor(classToken)
+    if r == nil then
+        r, g, b = DEFAULT_LOOTER_COLOR.r, DEFAULT_LOOTER_COLOR.g, DEFAULT_LOOTER_COLOR.b
+    end
+    SafeCall(fontString.SetTextColor, fontString, r, g, b)
 end
 
 local function UnitMatchesGuid(unit, guid)
@@ -1149,6 +1219,7 @@ local function RefreshRows()
         if row then
             rowFrame.row = row
             rowFrame.looter:SetText(row.looter or "?")
+            ApplyLooterClassColor(rowFrame.looter, row.classToken)
             rowFrame.drop:SetText(row.itemLink or "")
             rowFrame.equipped:SetText(DisplayEquippedText(row.equippedText))
             rowFrame.dropLink.itemLink = FirstItemLink(row.itemLink)
@@ -1750,6 +1821,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
     local cachedEquippedText = Core.GetCachedEquippedText(Addon.equipmentCache, looter, metadata.equipLoc, Now(), EQUIPMENT_CACHE_MAX_AGE)
     local row = Core.AddVisibleRow(Addon.state, {
         looter = looter,
+        classToken = ResolveClassTokenForName(looter),
         itemLink = metadata.link or itemLink,
         equipLoc = metadata.equipLoc,
         itemID = metadata.itemID,

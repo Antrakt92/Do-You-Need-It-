@@ -271,6 +271,7 @@ local VALID_EQUIP_LOCS = {
 local PERSISTED_ROW_KEYS = {
     id = "string",
     looter = "string",
+    classToken = "string",
     itemLink = "string",
     equipLoc = "string",
     itemID = "number",
