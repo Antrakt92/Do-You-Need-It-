@@ -601,7 +601,10 @@ function Harness.new(options)
         items = {},
         inventoryLinks = {},
         canInspect = {},
-        instanceName = "Ruby Life Pools",
+        instanceName = options and options.instanceName or "Ruby Life Pools",
+        instanceType = options and options.instanceType or "party",
+        inGroup = options == nil or options.inGroup ~= false,
+        inRaid = options and options.inRaid == true or false,
         now = 1000,
     }, { __index = Harness })
 
@@ -739,7 +742,13 @@ function Harness.new(options)
         return "enUS"
     end
     env.GetInstanceInfo = function()
-        return self.instanceName
+        return self.instanceName, self.instanceType
+    end
+    env.IsInGroup = function()
+        return self.inGroup == true or self.inRaid == true
+    end
+    env.IsInRaid = function()
+        return self.inRaid == true
     end
     env.InCombatLockdown = function()
         return false

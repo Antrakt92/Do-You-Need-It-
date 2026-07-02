@@ -743,8 +743,22 @@ assertEqual(Core.GetRowStatusText({ statusKey = "auto_pending", statusSeconds = 
 assertEqual(Core.GetRowStatusText({ statusKey = "auto_pending", statusSeconds = 12 }, "ruRU"), "авто через 12с", "status key formats auto countdown in Russian")
 assertEqual(Core.GetRowStatusText({ statusText = "auto in 7s" }, "enUS"), "auto in 7s", "legacy auto status text still renders")
 assertEqual(Core.GetRowStatusText({ statusText = "auto sent" }, "ruRU"), "авто отправлено", "legacy auto sent status text migrates for display")
-assertEqual(Core.ShouldAutoShowWindow({ itemLink = "|cff0070dd|Hitem:1:::::::::::::|h[Test]|h|r" }), true, "new loot rows auto-show the window")
-assertEqual(Core.ShouldAutoShowWindow(nil), false, "missing rows do not auto-show the window")
+assertEqual(
+    Core.ShouldAutoShowWindow({ itemLink = "|cff0070dd|Hitem:1:::::::::::::|h[Test]|h|r" }, { isGroupInstance = true }),
+    true,
+    "group dungeon or raid loot rows auto-show the window"
+)
+assertEqual(
+    Core.ShouldAutoShowWindow({ itemLink = "|cff0070dd|Hitem:1:::::::::::::|h[Test]|h|r" }, { isGroupInstance = false }),
+    false,
+    "open-world loot rows do not auto-show the window"
+)
+assertEqual(
+    Core.ShouldAutoShowWindow({ itemLink = "|cff0070dd|Hitem:1:::::::::::::|h[Test]|h|r" }, { forceAutoShow = true }),
+    true,
+    "manual test rows can force the window open"
+)
+assertEqual(Core.ShouldAutoShowWindow(nil, { isGroupInstance = true }), false, "missing rows do not auto-show the window")
 
 local roster = {
     ["Player-Ravencrest"] = "player",

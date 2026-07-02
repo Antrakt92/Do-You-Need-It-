@@ -1816,8 +1816,14 @@ function Core.GetWhisperButtonState(_selectedTab, selectedView, row)
     return state
 end
 
-function Core.ShouldAutoShowWindow(row)
-    return type(row) == "table" and row.itemLink ~= nil and row.itemLink ~= ""
+function Core.ShouldAutoShowWindow(row, context)
+    if type(row) ~= "table" or row.itemLink == nil or row.itemLink == "" then
+        return false
+    end
+    if type(context) == "table" and context.forceAutoShow == true then
+        return true
+    end
+    return type(context) == "table" and context.isGroupInstance == true
 end
 
 _G.DoYouNeedItCore = Core

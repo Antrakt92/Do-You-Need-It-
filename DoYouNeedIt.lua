@@ -298,6 +298,19 @@ local function SafeInstanceName()
     return CleanString(name) or "Unknown Instance"
 end
 
+function Addon.IsGroupInstanceContext()
+    local _, instanceType = SafeCall(GetInstanceInfo)
+    instanceType = CleanString(instanceType)
+    if instanceType ~= "party" and instanceType ~= "raid" then
+        return false
+    end
+
+    if CleanBoolean(SafeCall(IsInRaid)) == true then
+        return true
+    end
+    return CleanBoolean(SafeCall(IsInGroup)) == true
+end
+
 local function ClientLocale()
     return CleanString(SafeCall(GetLocale)) or "enUS"
 end
@@ -847,6 +860,7 @@ local function BuildDropContext(unsafe, unsafeReason)
         ),
         timestamp = now,
         generation = Addon.lootGeneration or 0,
+        isGroupInstance = Addon.IsGroupInstanceContext(),
         unsafe = unsafe == true,
         unsafeReason = unsafeReason,
     }
@@ -1890,7 +1904,7 @@ function Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
     if not Addon.ScheduleChallengeHistoryFinalizeIfRecent(context.source or source or "bonus_loot_upgrade") then
         Addon.ScheduleRecentEncounterHistoryFinalizeIfRecent(context.source or source or "bonus_loot_upgrade")
     end
-    if DoYouNeedItCore.ShouldAutoShowWindow(row) then
+    if DoYouNeedItCore.ShouldAutoShowWindow(row, context) then
         CreateUI()
         Addon.frame:Show()
     end
@@ -2448,7 +2462,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
     if not row.unsafe and context.isSelfLoot ~= true then
         RequestInspectForRow(row)
     end
-    if askable then
+    if askable and context.isGroupInstance == true then
         ScheduleAutoWhisper(row)
     end
     Addon.selectedView = "current"
@@ -2459,7 +2473,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
     if not Addon.ScheduleChallengeHistoryFinalizeIfRecent(context.source or "post_challenge_loot") then
         Addon.ScheduleRecentEncounterHistoryFinalizeIfRecent(context.source or "post_encounter_loot")
     end
-    if DoYouNeedItCore.ShouldAutoShowWindow(row) then
+    if DoYouNeedItCore.ShouldAutoShowWindow(row, context) then
         CreateUI()
         Addon.frame:Show()
     end
@@ -2497,7 +2511,7 @@ local function AddTestRow()
     Addon.selectedHistoryIndex = nil
     Addon.EnterLootMode()
     RefreshRows()
-    if DoYouNeedItCore.ShouldAutoShowWindow(row) then
+    if DoYouNeedItCore.ShouldAutoShowWindow(row, { forceAutoShow = true }) then
         CreateUI()
         Addon.frame:Show()
     end
@@ -2710,6 +2724,14 @@ function Addon.HandleResolvedLoot(looter, itemLink, context, source)
         and (Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
             or Addon.UpgradePendingLootToBonus(looter, itemLink, context, source))
     then
+        return
+    end
+    if context.isGroupInstance ~= true then
+        RecordDiagnostic("ignored_loot_context", {
+            itemLink = itemLink,
+            looter = looter,
+            source = source or "unknown",
+        })
         return
     end
 

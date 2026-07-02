@@ -4,7 +4,7 @@ Do You Need It? is a Retail World of Warcraft addon for Midnight 12.x, currently
 
 The addon focuses on quiet signal:
 
-- Shows every visible gear drop in one compact list, including own loot and bonus loot.
+- Shows every visible grouped dungeon/raid gear drop in one compact list, including own loot and bonus loot.
 - Shows the `Ask` action only on rows that look worth asking for and usable by your current character.
 - Hides currency, reagents, recipes, consumables, quest items, and other non-gear loot.
 - Shows the dropped item next to the looter's currently equipped item when inspection data is safely available, retrying briefly when inspection data is delayed.

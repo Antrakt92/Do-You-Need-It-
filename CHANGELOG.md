@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 - 02-Jul-2026 — Askable filters, bonus loot, and history reliability
+## 0.3.0 - 03-Jul-2026 — Askable filters, bonus loot, and history reliability
 
 ### Added
 
@@ -23,6 +23,7 @@
 ### Fixed
 
 - **Duplicate rows are filtered when Blizzard reports the same drop through different loot paths** — encounter loot and loot-event text with different item-link variants now resolve to one row for the same player and item.
+- **Open-world loot no longer opens or pollutes the loot window** — Do You Need It? now tracks drops only in a grouped dungeon or raid context, so outdoor greens and solo farming loot stay out of the current list and history.
 - **Slow item-cache duplicate drops are merged correctly** — if encounter and chat loot events for the same player/item arrive with different item-link variants after the short live dedupe window, the pending drop resolves to one row and keeps the later link/source.
 - **Late boss and chest loot merges into the correct history group** — delayed drops from the same dungeon/boss no longer create duplicate history entries.
 - **Mythic+ end-chest loot is preserved more reliably** — drops that arrive around challenge completion stay attached to the completed run instead of being lost or split.

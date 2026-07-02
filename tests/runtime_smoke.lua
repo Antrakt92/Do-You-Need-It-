@@ -161,6 +161,35 @@ local function testOwnLootShowsInAllGearWhenPlayerNameIsUnavailable()
     assertEqual(rows[1].whisper:IsShown(), false, "own loot does not show an Ask button")
 end
 
+local function testOpenWorldLootDoesNotAutoShowWindow()
+    local h = Harness.new({
+        inGroup = false,
+        instanceName = "Dornogal",
+        instanceType = "none",
+    })
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    local item = h:addItem(22102, {
+        name = "Open World Green Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 2,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fire("CHAT_MSG_LOOT", "You receive loot: " .. item .. ".")
+
+    assertEqual(h.env.DoYouNeedItFrame:IsShown(), false, "solo open-world loot does not auto-show the main frame")
+    assertEqual(#(h.env.DoYouNeedItDB.sessionRows or {}), 0, "solo open-world loot is not saved as askable")
+    assertEqual(#(h.env.DoYouNeedItDB.sessionAllRows or {}), 0, "solo open-world loot does not pollute the unified loot list")
+    assertEqual(#h:visibleRows(), 0, "solo open-world loot does not render hidden current rows")
+end
+
 local function testLeavingSettingsClosesSharedDropdown()
     local h = Harness.new()
     h:loadAddon()
@@ -1705,6 +1734,7 @@ testSlashTestRowsAndManualWhisper()
 testLootSlashCommandsLeaveEmbeddedSettingsMode()
 testLootDropLeavesEmbeddedSettingsMode()
 testOwnLootShowsInAllGearWhenPlayerNameIsUnavailable()
+testOpenWorldLootDoesNotAutoShowWindow()
 testLeavingSettingsClosesSharedDropdown()
 testClosingMainWindowCleansSettingsPopups()
 testCustomWhisperTemplateIsUsedForManualAsk()
