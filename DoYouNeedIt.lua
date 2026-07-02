@@ -1571,6 +1571,80 @@ local function StateHasDropRows()
         or #(Addon.state.history or {}) > 0
 end
 
+function Addon.RowMergeKey(row)
+    if type(row) ~= "table" then
+        return nil
+    end
+    return tostring(row.id or "")
+        .. "\031" .. tostring(row.looter or "")
+        .. "\031" .. tostring(row.itemLink or "")
+        .. "\031" .. tostring(row.timestamp or "")
+end
+
+function Addon.AppendUniqueRows(target, seen, rows)
+    if type(rows) ~= "table" then
+        return
+    end
+    for index = 1, #rows do
+        local row = rows[index]
+        local key = Addon.RowMergeKey(row)
+        if key and not seen[key] then
+            seen[key] = true
+            target[#target + 1] = row
+        end
+    end
+end
+
+function Addon.MergeSavedRowsBeforeLive(savedRows, liveRows, limit)
+    local merged = {}
+    local seen = {}
+    Addon.AppendUniqueRows(merged, seen, savedRows)
+    Addon.AppendUniqueRows(merged, seen, liveRows)
+    limit = math.max(1, math.floor(tonumber(limit) or 50))
+    while #merged > limit do
+        table.remove(merged, 1)
+    end
+    return merged
+end
+
+function Addon.HistoryGroupMergeKey(group)
+    if type(group) ~= "table" then
+        return nil
+    end
+    local firstRows = type(group.allRows) == "table" and group.allRows or group.rows
+    local firstRow = type(firstRows) == "table" and firstRows[1] or nil
+    return tostring(group.title or "")
+        .. "\031" .. tostring(group.startedAt or "")
+        .. "\031" .. tostring(group.endedAt or "")
+        .. "\031" .. tostring(Addon.RowMergeKey(firstRow) or "")
+end
+
+function Addon.AppendUniqueHistoryGroups(target, seen, history)
+    if type(history) ~= "table" then
+        return
+    end
+    for index = 1, #history do
+        local group = history[index]
+        local key = Addon.HistoryGroupMergeKey(group)
+        if key and not seen[key] then
+            seen[key] = true
+            target[#target + 1] = group
+        end
+    end
+end
+
+function Addon.MergeSavedHistoryAfterLive(liveHistory, savedHistory, limit)
+    local merged = {}
+    local seen = {}
+    Addon.AppendUniqueHistoryGroups(merged, seen, liveHistory)
+    Addon.AppendUniqueHistoryGroups(merged, seen, savedHistory)
+    limit = math.max(1, math.floor(tonumber(limit) or 10))
+    while #merged > limit do
+        table.remove(merged)
+    end
+    return merged
+end
+
 local function RefreshCharacterStorageFromPlayerIdentity()
     local oldKey = Addon.characterKey
     local newKey = SafePlayerStorageKey()
@@ -1583,15 +1657,24 @@ local function RefreshCharacterStorageFromPlayerIdentity()
 
     Addon.characterKey = newKey
     local characterDB = GetCharacterDropsDB(true)
-    if Addon.state and not StateHasDropRows() then
+    if Addon.state then
         local settings = Addon.state.settings or Core.NormalizeSettings({})
-        Addon.state.history = Core.SnapshotHistoryForSave(characterDB.history, settings.maxHistoryGroups, settings.maxSessionRows)
-        Addon.state.sessionRows = Core.NormalizeSavedRows(characterDB.sessionRows, settings.maxSessionRows)
-        Addon.state.sessionAllRows = Core.NormalizeSavedAllRows(
+        local savedHistory = Core.SnapshotHistoryForSave(characterDB.history, settings.maxHistoryGroups, settings.maxSessionRows)
+        local savedSessionRows = Core.NormalizeSavedRows(characterDB.sessionRows, settings.maxSessionRows)
+        local savedSessionAllRows = Core.NormalizeSavedAllRows(
             characterDB.sessionAllRows,
             characterDB.sessionRows,
             settings.maxSessionRows
         )
+        if StateHasDropRows() then
+            Addon.state.history = Addon.MergeSavedHistoryAfterLive(Addon.state.history, savedHistory, settings.maxHistoryGroups)
+            Addon.state.sessionRows = Addon.MergeSavedRowsBeforeLive(savedSessionRows, Addon.state.sessionRows, settings.maxSessionRows)
+            Addon.state.sessionAllRows = Addon.MergeSavedRowsBeforeLive(savedSessionAllRows, Addon.state.sessionAllRows, settings.maxSessionRows)
+        else
+            Addon.state.history = savedHistory
+            Addon.state.sessionRows = savedSessionRows
+            Addon.state.sessionAllRows = savedSessionAllRows
+        end
     end
     SaveDB()
     RefreshRows()
@@ -3679,11 +3762,37 @@ OpenSettings = function()
 end
 
 local function CancelAllPendingAuto()
-    for index = 1, #Addon.state.currentRows do
-        CancelPendingAuto(Addon.state.currentRows[index])
+    if type(Addon.state) ~= "table" then
+        return
     end
-    for index = 1, #Addon.state.sessionRows do
-        CancelPendingAuto(Addon.state.sessionRows[index])
+
+    local seen = {}
+    local function cancelList(list)
+        if type(list) ~= "table" then
+            return
+        end
+        for index = 1, #list do
+            local row = list[index]
+            if type(row) == "table" and not seen[row] then
+                seen[row] = true
+                CancelPendingAuto(row)
+            end
+        end
+    end
+
+    cancelList(Addon.state.currentRows)
+    cancelList(Addon.state.allRows)
+    cancelList(Addon.state.sessionRows)
+    cancelList(Addon.state.sessionAllRows)
+    local history = Addon.state.history
+    if type(history) == "table" then
+        for index = 1, #history do
+            local group = history[index]
+            if type(group) == "table" then
+                cancelList(group.rows)
+                cancelList(group.allRows)
+            end
+        end
     end
 end
 

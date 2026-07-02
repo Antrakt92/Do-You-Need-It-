@@ -608,6 +608,55 @@ local function testBonusLootUpgradeCancelsInFlightAutoWhisper()
     assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].statusKey, "bonus_roll", "bonus loot upgrade still saves the row as bonus all gear")
 end
 
+local function testClearCancelsHistoryOnlyPendingAutoWhisper()
+    local h = Harness.new({
+        db = {
+            settings = {
+                autoWhisper = true,
+                autoDelay = 5,
+                maxSessionRows = 1,
+                font = "Fonts\\FRIZQT__.TTF",
+            },
+        },
+    })
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    local first = h:addItem(22016, {
+        name = "History Only Auto Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+    local second = h:addItem(22017, {
+        name = "Pruning Auto Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fireLoot("Otherplayer", first)
+    h:fire("ENCOUNTER_END", 123, "History Auto Boss")
+    h:fireLoot("Secondplayer", second)
+
+    assertEqual(#h.env.DoYouNeedItDB.sessionRows, 1, "precondition: session rows are pruned to the newest row")
+    assertEqual(h.env.DoYouNeedItDB.history[1].rows[1].itemID, 22016, "precondition: older pending-auto row remains in history")
+
+    h:slash("clear")
+    h:runTimers(5, 20)
+
+    assertEqual(#h.sentMessages, 0, "clear cancels pending auto whispers even for history-only rows")
+end
+
 local function testBonusLootChatUpgradesPendingEncounterRowBeforeItemLoads()
     local h = Harness.new()
     h:loadAddon()
@@ -903,6 +952,59 @@ local function testDelayedPlayerIdentityLoadsCharacterDrops()
     assertEqual(h.env.DoYouNeedItDB.currentCharacter, "Player-Ravencrest", "entering world repairs the saved character key")
     assertEqual(#h:visibleRows(), 1, "entering world loads the real character's saved session rows")
     assertEqual(h:visibleRows()[1].row.id, "delayed-identity-session", "delayed identity keeps the real character row payload")
+end
+
+local function testDelayedPlayerIdentityDoesNotEraseExistingCharacterHistory()
+    local savedItem = "|cff0070dd|Hitem:30015:::::::::::::|h[Existing History Sword]|h|r"
+    local liveItem = "|cffa335ee|Hitem:30016:::::::::::::|h[Live Before Identity Sword]|h|r"
+    local h = Harness.new({
+        db = {
+            settings = { font = "Fonts\\FRIZQT__.TTF" },
+            characters = {
+                ["Player-Ravencrest"] = {
+                    history = {
+                        {
+                            title = "Existing Dungeon - Existing Boss (1 drop)",
+                            rows = {
+                                {
+                                    id = "existing-history-row",
+                                    looter = "Otherplayer-Ravencrest",
+                                    itemLink = savedItem,
+                                    equippedText = "Equipped: unknown",
+                                    askable = true,
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    })
+    h:addItem(30016, {
+        name = "Live Before Identity Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+        link = liveItem,
+    })
+    h.units.player = nil
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    h:fireLoot("Otherplayer", liveItem)
+    assertEqual(#h.env.DoYouNeedItDB.characters["__unknown"].sessionRows, 1, "precondition: live loot before identity saves under the fallback key")
+
+    h:setUnit("player", { name = "Player", realm = "Ravencrest", guid = "PlayerGUID", classToken = "WARRIOR" })
+    h:fire("PLAYER_ENTERING_WORLD")
+
+    assertEqual(#h.env.DoYouNeedItDB.characters["Player-Ravencrest"].history, 1, "identity rebind preserves existing real character history")
+    assertEqual(h.env.DoYouNeedItDB.characters["Player-Ravencrest"].history[1].rows[1].id, "existing-history-row", "identity rebind keeps the saved history payload")
+    assertEqual(#h.env.DoYouNeedItDB.characters["Player-Ravencrest"].sessionRows, 1, "identity rebind also saves the live pre-identity row")
 end
 
 local function testLegacySavedRowBackfillsLooterClassColor()
@@ -1288,6 +1390,7 @@ testBonusLootChatIsAllGearOnlyWithSourceIcon()
 testBonusLootChatUpgradesEarlierEncounterRow()
 testLateBonusLootChatUpgradesOutsideDedupeWindow()
 testBonusLootUpgradeCancelsInFlightAutoWhisper()
+testClearCancelsHistoryOnlyPendingAutoWhisper()
 testBonusLootChatUpgradesPendingEncounterRowBeforeItemLoads()
 testBonusLootChatUpgradesEarlierCompletedHistoryRow()
 testBonusLootChatUpgradesHistoryRowAfterSessionPrune()
@@ -1296,6 +1399,7 @@ testDebugPersistenceLoadState()
 testLegacySavedAllGearFallbackDisplays()
 testAccountWideSavedDropsDoNotLeakIntoCharacterHistory()
 testDelayedPlayerIdentityLoadsCharacterDrops()
+testDelayedPlayerIdentityDoesNotEraseExistingCharacterHistory()
 testLegacySavedRowBackfillsLooterClassColor()
 testLegacyPlainItemTextDoesNotCreateDropHoverTarget()
 testLocalizedEquippedDisplayKeepsSavedTextStable()
