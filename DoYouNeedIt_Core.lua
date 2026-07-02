@@ -298,10 +298,14 @@ local PERSISTED_GROUP_KEYS = {
 
 local function asNumber(value, fallback)
     local number = tonumber(value)
-    if number == nil then
+    if number == nil or number ~= number or number == math.huge or number == -math.huge then
         return fallback
     end
     return number
+end
+
+local function isFiniteNumber(value)
+    return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
 end
 
 local function clamp(number, minimum, maximum)
@@ -425,9 +429,13 @@ local function copyPrimitiveFields(source, allowedKeys)
         local valueType = type(value)
         local allowedType = allowedKeys[key]
         if allowedType == true and (valueType == "string" or valueType == "number" or valueType == "boolean") then
-            copy[key] = value
+            if valueType ~= "number" or isFiniteNumber(value) then
+                copy[key] = value
+            end
         elseif allowedType == valueType then
-            copy[key] = value
+            if valueType ~= "number" or isFiniteNumber(value) then
+                copy[key] = value
+            end
         end
     end
     return copy
@@ -1186,7 +1194,7 @@ function Core.RecordDiagnostic(log, entry, limit)
     local saved = {}
     for key, value in pairs(entry) do
         local valueType = type(value)
-        if valueType == "string" or valueType == "number" or valueType == "boolean" then
+        if valueType == "string" or valueType == "boolean" or (valueType == "number" and isFiniteNumber(value)) then
             saved[key] = value
         end
     end

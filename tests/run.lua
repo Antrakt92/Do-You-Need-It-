@@ -37,6 +37,22 @@ assertEqual(Core.NormalizeSettings({ whisperTemplate = "" }).whisperTemplate, se
 assertEqual(Core.NormalizeSettings({ whisperTemplate = string.rep("x", 200) }).whisperTemplate, string.rep("x", 160), "whisper template clamps to chat-safe length")
 assertEqual(Core.NormalizeSettings({ whisperTemplate = string.rep("€", 54) }).whisperTemplate, string.rep("€", 53), "whisper template clamp preserves UTF-8 characters")
 assertEqual(Core.NormalizeSettings({ whisperTemplate = string.rep("x", 157) .. "{item}" }).whisperTemplate, string.rep("x", 157), "whisper template clamp drops a partial item placeholder")
+local badNumericSettings = Core.NormalizeSettings({
+    autoDelay = 0 / 0,
+    minDelay = 0 / 0,
+    maxDelay = 1 / 0,
+    maxHistoryGroups = 1 / 0,
+    maxSessionRows = 0 / 0,
+    minQuality = 1 / 0,
+    fontSize = 0 / 0,
+})
+assertEqual(badNumericSettings.minDelay, 3, "NaN min delay resets to default")
+assertEqual(badNumericSettings.maxDelay, 30, "infinite max delay resets to default")
+assertEqual(badNumericSettings.autoDelay, 10, "NaN auto delay resets to default")
+assertEqual(badNumericSettings.maxHistoryGroups, 10, "infinite history limit resets to default")
+assertEqual(badNumericSettings.maxSessionRows, 50, "NaN session row limit resets to default")
+assertEqual(badNumericSettings.minQuality, 2, "infinite minimum quality resets to default")
+assertEqual(badNumericSettings.fontSize, 12, "NaN font size resets to default")
 assertEqual(Core.FormatWhisperMessage("Need {item}?", "|cffa335ee|Hitem:123::::::::|h[Test Item]|h|r"), "Need |cffa335ee|Hitem:123::::::::|h[Test Item]|h|r?", "whisper formatter replaces item placeholder")
 assertEqual(Core.FormatWhisperMessage("Need?", "|cffa335ee|Hitem:123::::::::|h[Test Item]|h|r"), "Need? |cffa335ee|Hitem:123::::::::|h[Test Item]|h|r", "whisper formatter appends item link when placeholder is missing")
 assertEqual(Core.FormatWhisperMessage(string.rep("x", 157) .. "{item}", "|cffa335ee|Hitem:123::::::::|h[Test Item]|h|r"), string.rep("x", 157) .. " |cffa335ee|Hitem:123::::::::|h[Test Item]|h|r", "whisper formatter avoids sending a partial item placeholder")
@@ -520,12 +536,19 @@ local malformedSavedRows = Core.NormalizeSavedRows({
         equippedText = true,
         askable = "yes",
     },
+    {
+        id = "bad-numbers",
+        itemID = 1 / 0,
+        timestamp = 0 / 0,
+    },
 }, 10)
-assertEqual(#malformedSavedRows, 1, "malformed saved rows do not abort normalization")
+assertEqual(#malformedSavedRows, 2, "malformed saved rows do not abort normalization")
 assertEqual(malformedSavedRows[1].statusText, nil, "malformed status text is dropped during row normalization")
 assertEqual(malformedSavedRows[1].statusKey, nil, "malformed status key is dropped during row normalization")
 assertEqual(malformedSavedRows[1].itemLink, nil, "malformed item link is dropped during row normalization")
 assertEqual(malformedSavedRows[1].askable, nil, "malformed askable flag is dropped during row normalization")
+assertEqual(malformedSavedRows[2].itemID, nil, "infinite saved row item id is dropped during row normalization")
+assertEqual(malformedSavedRows[2].timestamp, nil, "NaN saved row timestamp is dropped during row normalization")
 local persistedHistory = Core.SnapshotHistoryForSave({
     {
         title = "Dungeon - Boss (1 drop)",
@@ -778,6 +801,15 @@ end
 assertEqual(#diagnostics, 10, "diagnostics prune to limit")
 assertEqual(diagnostics[1].stage, "stage12", "newest diagnostic first")
 assertEqual(diagnostics[10].stage, "stage3", "oldest retained diagnostic kept at limit")
+local badNumericDiagnostic = Core.RecordDiagnostic({}, {
+    stage = "bad_numeric",
+    at = 0 / 0,
+    attempt = 1 / 0,
+    itemLink = "|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r",
+}, 10)
+assertEqual(badNumericDiagnostic.stage, "bad_numeric", "diagnostics keep safe string fields")
+assertEqual(badNumericDiagnostic.at, nil, "diagnostics drop NaN timestamps")
+assertEqual(badNumericDiagnostic.attempt, nil, "diagnostics drop infinite counters")
 
 assertEqual(Core.VERSION, "0.2.2", "core exposes current version")
 
