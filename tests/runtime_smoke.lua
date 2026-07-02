@@ -32,9 +32,19 @@ local function testLoadAndSettings()
 
     h:slash("settings")
     assertTruthy(h.env.DoYouNeedItSettingsFrame, "settings frame created")
+    assertEqual(h.env.DoYouNeedItFrame:IsShown(), true, "settings opens inside the main frame")
+    assertEqual(h.env.DoYouNeedItSettingsFrame:GetParent(), h.env.DoYouNeedItFrame, "settings panel is embedded in the main window")
     assertEqual(h.env.DoYouNeedItSettingsFrame:IsShown(), true, "settings frame opens")
+    assertEqual(h.env.DoYouNeedItFrame.tabAskable:IsShown(), false, "settings mode hides loot tabs")
+    assertEqual(h.env.DoYouNeedItFrame.historyButton:IsShown(), false, "settings mode hides the history selector")
+    assertTruthy(h.env.DoYouNeedItSettingsFrame.back, "settings panel has a back button")
     assertTruthy(h.env.DoYouNeedItLanguageDropdown.Text:GetText() ~= "", "language dropdown has visible text")
     assertTruthy(h.env.DoYouNeedItFontDropdown.Text:GetText() ~= "", "font dropdown has visible text")
+
+    h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
+    assertEqual(h.env.DoYouNeedItSettingsFrame:IsShown(), false, "back closes the embedded settings panel")
+    assertEqual(h.env.DoYouNeedItFrame.tabAskable:IsShown(), true, "back restores loot tabs")
+    assertEqual(h.env.DoYouNeedItFrame.historyButton:IsShown(), true, "back restores the history selector")
 end
 
 local function testSlashTestRowsAndManualWhisper()

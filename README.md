@@ -23,7 +23,7 @@ The addon focuses on quiet signal:
 | Command | Action |
 |---|---|
 | `/dyni` | Toggle the loot window. |
-| `/dyni settings` | Open the settings window. |
+| `/dyni settings` | Open the settings view inside the loot window. |
 | `/dyni auto on` | Enable delayed auto-whisper. |
 | `/dyni auto off` | Disable auto-whisper. |
 | `/dyni delay <seconds>` | Set auto-whisper delay, clamped to 3-30 seconds. |
@@ -37,7 +37,7 @@ The addon focuses on quiet signal:
 
 Auto-whisper is off by default. When enabled, it waits 10 seconds by default before sending, and pending sends are cancelled if you manually ask first, clear current rows, or turn auto-whisper off.
 
-The loot window opens on the `Askable` tab by default. `Askable` only shows drops that the addon currently considers worth asking about and usable by your current character; `All Gear` shows every visible gear drop for review and hides the Ask button. If a drop has visible gear but no askable rows, the window opens directly on `All Gear` so the drop is not silent. Use the gear button or `/dyni settings` for auto-whisper, delay, whisper text, language, font, and font-size controls.
+The loot window opens on the `Askable` tab by default. `Askable` only shows drops that the addon currently considers worth asking about and usable by your current character; `All Gear` shows every visible gear drop for review and hides the Ask button. If a drop has visible gear but no askable rows, the window opens directly on `All Gear` so the drop is not silent. Use the gear button or `/dyni settings` to switch the same window into settings for auto-whisper, delay, whisper text, language, font, and font-size controls.
 
 ## Language and Fonts
 

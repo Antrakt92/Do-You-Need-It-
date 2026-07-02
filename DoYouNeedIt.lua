@@ -15,6 +15,7 @@ local Addon = {
     selectedHistoryIndex = nil,
     selectedView = "current",
     selectedTab = "askable",
+    contentMode = "loot",
     pendingItems = {},
     lootGeneration = 0,
     recentLootKeys = {},
@@ -67,9 +68,9 @@ local ROW_EQUIPPED_HOVER_WIDTH = 158
 local ROW_STATUS_WIDTH = 420
 local SETTINGS_LABEL_WIDTH = 92
 local SETTINGS_CONTROL_X = 126
-local SETTINGS_DROPDOWN_WIDTH = 150
-local SETTINGS_EDITBOX_WIDTH = 174
-local SETTINGS_SLIDER_WIDTH = 170
+local SETTINGS_DROPDOWN_WIDTH = 210
+local SETTINGS_EDITBOX_WIDTH = 250
+local SETTINGS_SLIDER_WIDTH = 210
 local MAX_VISIBLE_ROWS = 6
 local MAX_ITEM_RETRIES = 5
 local ITEM_RETRY_DELAY = 0.7
@@ -1401,9 +1402,52 @@ local function RowsForSelectedView()
     return useAllGear and (Addon.state.allRows or {}) or Addon.state.currentRows
 end
 
+function Addon.SetLootChromeShown(shown)
+    local function setShown(frame)
+        if not frame then
+            return
+        end
+        if shown then
+            frame:Show()
+        else
+            frame:Hide()
+        end
+    end
+
+    setShown(Addon.tabAskable)
+    setShown(Addon.tabAllGear)
+    setShown(Addon.historyButton)
+    setShown(Addon.settingsButton)
+end
+
+function Addon.HideLootRows()
+    for index = 1, MAX_VISIBLE_ROWS do
+        if Addon.rowFrames[index] then
+            Addon.rowFrames[index]:Hide()
+        end
+    end
+    if Addon.emptyText then
+        Addon.emptyText:Hide()
+    end
+end
+
 local function RefreshRows()
     if not Addon.frame then
         return
+    end
+
+    if Addon.contentMode == "settings" then
+        Addon.SetLootChromeShown(false)
+        Addon.HideLootRows()
+        if Addon.settingsFrame then
+            Addon.settingsFrame:Show()
+        end
+        return
+    end
+
+    Addon.SetLootChromeShown(true)
+    if Addon.settingsFrame and Addon.settingsFrame:IsShown() then
+        Addon.settingsFrame:Hide()
     end
 
     local rows = RowsForSelectedView()
@@ -2643,6 +2687,12 @@ CreateUI = function()
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    frame:SetScript("OnHide", function()
+        Addon.contentMode = "loot"
+        if Addon.settingsFrame then
+            Addon.settingsFrame:Hide()
+        end
+    end)
     frame:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
@@ -2849,6 +2899,9 @@ RefreshSettingsControls = function()
     local settings = Addon.state.settings
     if Addon.settingsTitle then
         Addon.settingsTitle:SetText(L("Settings"))
+    end
+    if Addon.settingsBackButton then
+        Addon.settingsBackButton:SetText(L("Back"))
     end
     if Addon.autoCheck then
         Addon.autoCheck:SetChecked(settings.autoWhisper == true)
@@ -3277,53 +3330,73 @@ local function ArmDropdownPreviewHooks()
     end
 end
 
+function Addon.CommitFocusedWhisperTemplate()
+    if Addon.whisperEditBox and Addon.whisperTemplateFocused and not Addon.committingWhisperTemplate then
+        Addon.committingWhisperTemplate = true
+        Addon.whisperTemplateFocused = false
+        SetWhisperTemplate(Addon.whisperEditBox:GetText())
+        Addon.committingWhisperTemplate = false
+    end
+end
+
+function Addon.CloseSettings()
+    Addon.CommitFocusedWhisperTemplate()
+    HideFontPicker()
+    CancelSettingsPreview()
+    Addon.contentMode = "loot"
+    if Addon.settingsFrame then
+        Addon.settingsFrame:Hide()
+    end
+    RefreshRows()
+end
+
 CreateSettingsUI = function()
     if Addon.settingsFrame then
         return
     end
 
-    local frame = CreateFrame("Frame", "DoYouNeedItSettingsFrame", UIParent, "BackdropTemplate")
-    frame:SetSize(390, 342)
-    frame:SetPoint("CENTER")
-    frame:SetFrameStrata("DIALOG")
+    if not Addon.frame then
+        CreateUI()
+    end
+
+    local frame = CreateFrame("Frame", "DoYouNeedItSettingsFrame", Addon.frame)
+    frame:SetSize(508, 232)
+    frame:SetPoint("TOPLEFT", Addon.frame, "TOPLEFT", 16, -50)
+    frame:SetFrameLevel((Addon.frame and Addon.frame:GetFrameLevel() or 0) + 5)
     frame:EnableMouse(true)
-    frame:SetMovable(true)
-    frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
     frame:SetScript("OnHide", function()
-        if Addon.whisperEditBox and Addon.whisperTemplateFocused and not Addon.committingWhisperTemplate then
-            Addon.committingWhisperTemplate = true
-            Addon.whisperTemplateFocused = false
-            SetWhisperTemplate(Addon.whisperEditBox:GetText())
-            Addon.committingWhisperTemplate = false
-        end
+        Addon.CommitFocusedWhisperTemplate()
         HideFontPicker()
         CancelSettingsPreview()
     end)
-    frame:SetBackdrop({
-        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true,
-        tileSize = 16,
-        edgeSize = 16,
-        insets = { left = 4, right = 4, top = 4, bottom = 4 },
-    })
+
+    frame.back = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.back:SetSize(70, 22)
+    frame.back:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 2)
+    frame.back:SetScript("OnClick", function()
+        Addon.CloseSettings()
+    end)
+    RegisterButtonFont(frame.back, 11, nil, true)
+    Addon.settingsBackButton = frame.back
 
     frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -16)
+    frame.title:SetPoint("LEFT", frame.back, "RIGHT", 12, 0)
+    frame.title:SetWidth(240)
     KeepOneLine(frame.title)
     frame.title:SetText(L("Settings"))
     RegisterFontString(frame.title, 16, "OUTLINE", true)
     Addon.settingsTitle = frame.title
 
-    frame.close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    frame.close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
+    frame.headerRule = frame:CreateTexture(nil, "BACKGROUND")
+    frame.headerRule:SetColorTexture(1, 0.82, 0, 0.20)
+    frame.headerRule:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -28)
+    frame.headerRule:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, -28)
+    frame.headerRule:SetHeight(1)
 
-    local y = -54
+    local y = -44
     frame.autoCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
     frame.autoCheck:SetSize(24, 24)
-    frame.autoCheck:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, y)
+    frame.autoCheck:SetPoint("TOPLEFT", frame, "TOPLEFT", 4, y)
     frame.autoCheck:SetScript("OnClick", function(check)
         SetAutoWhisper(check:GetChecked() == true)
     end)
@@ -3331,14 +3404,14 @@ CreateSettingsUI = function()
 
     frame.autoCheckLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     frame.autoCheckLabel:SetPoint("LEFT", frame.autoCheck, "RIGHT", 4, 0)
-    frame.autoCheckLabel:SetWidth(260)
+    frame.autoCheckLabel:SetWidth(360)
     KeepOneLine(frame.autoCheckLabel)
     RegisterFontString(frame.autoCheckLabel, 12, nil, true)
     Addon.autoCheckLabel = frame.autoCheckLabel
 
-    y = y - 36
+    y = y - 34
     frame.delayLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    frame.delayLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, y)
+    frame.delayLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, y)
     frame.delayLabel:SetWidth(SETTINGS_LABEL_WIDTH)
     KeepOneLine(frame.delayLabel)
     RegisterFontString(frame.delayLabel, 12, nil, true)
@@ -3367,9 +3440,9 @@ CreateSettingsUI = function()
     RegisterFontString(frame.delayValue, 12, nil, true)
     Addon.delayValue = frame.delayValue
 
-    y = y - 42
+    y = y - 39
     frame.whisperLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    frame.whisperLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, y)
+    frame.whisperLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, y)
     frame.whisperLabel:SetWidth(SETTINGS_LABEL_WIDTH)
     KeepOneLine(frame.whisperLabel)
     RegisterFontString(frame.whisperLabel, 12, nil, true)
@@ -3425,9 +3498,9 @@ CreateSettingsUI = function()
     RegisterButtonFont(frame.whisperResetButton, 11, nil, true)
     Addon.whisperResetButton = frame.whisperResetButton
 
-    y = y - 42
+    y = y - 39
     frame.languageLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    frame.languageLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, y)
+    frame.languageLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, y)
     frame.languageLabel:SetWidth(SETTINGS_LABEL_WIDTH)
     KeepOneLine(frame.languageLabel)
     RegisterFontString(frame.languageLabel, 12, nil, true)
@@ -3462,9 +3535,9 @@ CreateSettingsUI = function()
         end)
     end
 
-    y = y - 42
+    y = y - 39
     frame.fontLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    frame.fontLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, y)
+    frame.fontLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, y)
     frame.fontLabel:SetWidth(SETTINGS_LABEL_WIDTH)
     KeepOneLine(frame.fontLabel)
     RegisterFontString(frame.fontLabel, 12, nil, true)
@@ -3480,9 +3553,9 @@ CreateSettingsUI = function()
         fontButton:SetScript("OnClick", ToggleFontPicker)
     end
 
-    y = y - 42
+    y = y - 39
     frame.fontSizeLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    frame.fontSizeLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, y)
+    frame.fontSizeLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, y)
     frame.fontSizeLabel:SetWidth(SETTINGS_LABEL_WIDTH)
     KeepOneLine(frame.fontSizeLabel)
     RegisterFontString(frame.fontSizeLabel, 12, nil, true)
@@ -3512,8 +3585,8 @@ CreateSettingsUI = function()
     Addon.fontSizeValue = frame.fontSizeValue
 
     frame.fontWarning = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    frame.fontWarning:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, -290)
-    frame.fontWarning:SetWidth(346)
+    frame.fontWarning:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -248)
+    frame.fontWarning:SetWidth(460)
     frame.fontWarning:SetJustifyH("LEFT")
     KeepOneLine(frame.fontWarning)
     frame.fontWarning:SetTextColor(1, 0.6, 0.2)
@@ -3528,8 +3601,12 @@ CreateSettingsUI = function()
 end
 
 OpenSettings = function()
+    CreateUI()
     CreateSettingsUI()
+    Addon.contentMode = "settings"
+    Addon.frame:Show()
     Addon.settingsFrame:Show()
+    RefreshRows()
     RefreshSettingsControls()
 end
 
