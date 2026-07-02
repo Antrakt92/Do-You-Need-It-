@@ -1,70 +1,73 @@
 # Changelog
 
-## 0.3.0 - 02-Jul-2026 - Bonus Loot and History Reliability
+## 0.3.0 - 02-Jul-2026 — Bonus loot, history, and release hardening
 
 ### Added
 
-- Mark bonus-roll loot reported by Blizzard loot events with a small roll icon and save that source in history.
-- Detect bonus loot for both your character and other group members when WoW exposes it through loot events.
-- Added the addon icon to WoW's in-game AddOn List.
+- **Bonus-roll loot is now marked in the loot window and history** — when WoW exposes bonus loot for you or another group member, Do You Need It? shows a small roll icon and saves that source with the drop.
+- **The addon now has its own WoW AddOn List icon** — the in-game AddOn List shows the Do You Need It? icon instead of the default question-mark placeholder.
 
 ### Improved
 
-- Saved loot history is now scoped per character, so alts do not share the same recent drops.
-- `Current` now falls back to the latest finalized drop group after boss or dungeon completion instead of showing an empty view.
-- `All Gear` now includes your own gear drops for review while `Askable` stays focused on items worth asking other players about.
-- Settings now open inside the main addon window, avoiding overlapping settings and loot windows.
-- Public docs now list supported language choices and current Retail/Midnight compatibility.
+- **Saved loot history is now per character** — alts no longer share the same recent dungeon and boss drop history.
+- **`Current` stays useful after boss or dungeon completion** — if live loot has already been finalized into history, the Current view falls back to the latest completed drop group instead of showing an empty panel.
+- **`All Gear` now includes your own drops for review** — your loot appears in All Gear, while Askable remains focused on items worth asking other players about.
+- **Settings now open inside the main addon window** — the settings panel replaces the loot view instead of overlapping it, and returning from settings restores the loot view cleanly.
+- **Release packaging now includes and validates the addon icon** — local checks confirm the icon metadata and packaged zip contents before release.
+- **Release recovery is easier** — a manual CurseForge upload retry workflow is available for transient marketplace/API failures after the normal checks pass.
+- **Public documentation is clearer** — README copy now lists supported language options and the current Retail `12.0.7` plus Midnight `12.1.0` compatibility targets.
 
 ### Fixed
 
-- Prevented duplicate loot rows when Blizzard reports encounter loot and loot-event text with different item-link variants for the same player and item.
-- Merged late boss/chest loot into the matching recent history group instead of creating duplicate dungeon entries.
-- Preserved Mythic+ end-chest loot and delayed loot while player identity or item links are still resolving.
-- Kept delayed bonus-loot source updates attached to the existing row instead of splitting or losing the source marker.
-- Stopped stale item-load callbacks from re-adding loot after the relevant loot context has changed.
-- Hardened saved numeric data so invalid `NaN` or infinite values do not survive normalization.
+- **Duplicate rows are filtered when Blizzard reports the same drop through different loot paths** — encounter loot and loot-event text with different item-link variants now resolve to one row for the same player and item.
+- **Late boss and chest loot merges into the correct history group** — delayed drops from the same dungeon/boss no longer create duplicate history entries.
+- **Mythic+ end-chest loot is preserved more reliably** — drops that arrive around challenge completion stay attached to the completed run instead of being lost or split.
+- **Delayed identity and item-link resolution no longer drops loot state** — rows survive while player names, realms, item links, and item metadata finish loading.
+- **Bonus-loot source upgrades stay attached to existing rows** — late bonus-roll detection updates the current or pending row instead of duplicating it or losing the source marker.
+- **Encounter loot handling is more defensive** — malformed or partial encounter loot payloads are ignored safely instead of corrupting the visible drop state.
+- **Stale item-load callbacks can no longer re-add cleared loot** — callbacks from older loot contexts are cancelled before they can resurrect outdated rows.
+- **Saved numeric data is hardened** — invalid `NaN` or infinite values are stripped during normalization instead of surviving into SavedVariables.
 
-### Compatibility
+### Updated
 
-- Packaged for Retail `12.0.7` and Midnight `12.1.0`.
+- **Packaged for Retail `12.0.7` and Midnight `12.1.0`.**
 
-## 0.2.2 - 02-Jul-2026 - Compatibility Hotfix
+## 0.2.2 - 02-Jul-2026 — Compatibility hotfix
 
 ### Fixed
 
-- Restored current Retail 12.0.7 interface metadata while keeping Midnight 12.1.0 file metadata, so the addon no longer appears as incompatible on the current client.
+- **The addon no longer appears incompatible on the current Retail client** — Retail `12.0.7` metadata was restored while keeping Midnight `12.1.0` compatibility metadata.
 
-## 0.2.1 - 02-Jul-2026 - Midnight 12.1.0 Compatibility
+## 0.2.1 - 02-Jul-2026 — Midnight 12.1.0 compatibility
 
 ### Changed
 
-- Retargeted Retail compatibility metadata and CurseForge upload metadata to Midnight 12.1.0.
+- **Retail compatibility metadata was retargeted for Midnight `12.1.0`** — CurseForge upload metadata now follows the updated game-version target.
 
-## 0.2.0 - 02-Jul-2026 - First Public Release
+## 0.2.0 - 02-Jul-2026 — First public release
 
 ### Added
 
-- Compact loot window for likely-tradeable group gear drops.
-- Separate `Askable` and `All Gear` tabs so usable trade candidates stay focused while other visible gear drops remain reviewable.
-- Session and boss/run history for recent drops.
-- Dropped-vs-equipped item display with live inspect retries and cached equipment fallback.
-- `/dyni scan` pre-scan command for group equipment cache refresh.
-- `/dyni test`, `/dyni status`, `/dyni debug on`, and `/dyni diag` support for local verification and loot diagnostics.
-- Optional delayed auto-whisper, disabled by default.
-- Custom whisper text in settings.
-- Language, font, and font-size settings with hover previews.
-- Class-colored looter names when roster class data is available.
+- **Compact loot window for likely-tradeable group gear drops** — usable candidates appear in a focused in-game panel as loot is detected.
+- **Separate `Askable` and `All Gear` tabs** — items worth asking about stay focused while other visible gear drops remain reviewable.
+- **Session and boss/run history for recent drops** — recent loot can be reviewed after the immediate drop moment passes.
+- **Dropped-vs-equipped item display** — live inspect retries and cached equipment fallback help compare the drop with the looter's current gear.
+- **`/dyni scan` equipment pre-scan** — refreshes the group equipment cache before a dungeon or raid pull.
+- **`/dyni test`, `/dyni status`, `/dyni debug on`, and `/dyni diag` support** — local verification and loot diagnostics are available without extra tools.
+- **Optional delayed auto-whisper** — disabled by default, with user-adjustable timing.
+- **Custom whisper text in settings** — players can rewrite the Ask message to match their own tone.
+- **Language, font, and font-size settings with hover previews** — visual choices can be previewed before committing.
+- **Class-colored looter names** — roster class data is used when available.
 
 ### Fixed
 
-- Kept Cyrillic player names readable when the selected UI font lacks Cyrillic glyphs.
-- Prevented stale inspect and item-load callbacks from re-adding cleared loot.
-- Avoided invalid deprecated ranged-slot inspection reads.
-- Hid non-gear loot, unusable askable gear, and non-tradeable bind-on-pickup drops from `Askable`.
-- Kept manual Ask retryable when a protected whisper send fails.
-- Preserved unsaved whisper-template drafts while adjusting settings.
+- **Cyrillic player names stay readable when the selected UI font lacks Cyrillic glyphs** — addon rows can fall back to a safer font for affected names.
+- **Stale inspect and item-load callbacks no longer re-add cleared loot** — older asynchronous work is ignored after the relevant loot state changes.
+- **Deprecated ranged-slot inspection reads are avoided** — invalid inventory-slot lookups no longer raise Lua errors on modern Retail clients.
+- **`Askable` hides loot that is not useful to ask for** — non-gear loot, unusable askable gear, and non-tradeable bind-on-pickup drops are filtered out.
+- **Manual Ask remains retryable after protected whisper failures** — a failed protected send does not permanently consume the row action.
+- **Unsaved whisper-template drafts are preserved while adjusting settings** — editing the message is safer while browsing other controls.
 
 ### Known Limitations
 
-- Non-English/non-Russian locale tables intentionally fall back to English for some addon-specific labels.
+- **Non-English/non-Russian locale tables intentionally fall back to English for some addon-specific labels.**
