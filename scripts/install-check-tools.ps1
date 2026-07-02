@@ -4,6 +4,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$script:PublishedToolDirs = @{}
 
 function Resolve-Tool {
     param([string[]]$Names)
@@ -72,6 +73,31 @@ function Assert-Lua51Version {
     Write-Host "${Label} version: $text"
 }
 
+function Add-ToolDirectoryToPath {
+    param([string]$ToolPath)
+
+    $directory = Split-Path -Parent $ToolPath
+    $pathParts = @($env:Path -split ';')
+    $alreadyInPath = $false
+    foreach ($part in $pathParts) {
+        if ([System.StringComparer]::OrdinalIgnoreCase.Equals($part, $directory)) {
+            $alreadyInPath = $true
+            break
+        }
+    }
+
+    if (-not $alreadyInPath) {
+        $env:Path = "$directory;$env:Path"
+        Write-Host "Added $directory to PATH for this process."
+    }
+
+    if ($env:GITHUB_PATH -and -not $script:PublishedToolDirs.ContainsKey($directory)) {
+        Add-Content -LiteralPath $env:GITHUB_PATH -Value $directory -Encoding utf8
+        $script:PublishedToolDirs[$directory] = $true
+        Write-Host "Published $directory to GITHUB_PATH for later workflow steps."
+    }
+}
+
 $lua = Require-Tool `
     -Label "lua5.1" `
     -Names @("lua5.1", "C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe")
@@ -79,6 +105,9 @@ $lua = Require-Tool `
 $luac = Require-Tool `
     -Label "luac5.1" `
     -Names @("luac5.1", "C:\ProgramData\chocolatey\lib\lua51\tools\luac5.1.exe")
+
+Add-ToolDirectoryToPath -ToolPath $lua
+Add-ToolDirectoryToPath -ToolPath $luac
 
 Assert-Lua51Version -Label "lua5.1" -Path $lua
 Assert-Lua51Version -Label "luac5.1" -Path $luac
