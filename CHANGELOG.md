@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.0 - 02-Jul-2026 - Bonus Loot and History Reliability
+
+### Added
+
+- Mark bonus-roll loot reported by Blizzard loot events with a small roll icon and save that source in history.
+- Detect bonus loot for both your character and other group members when WoW exposes it through loot events.
+
+### Improved
+
+- Saved loot history is now scoped per character, so alts do not share the same recent drops.
+- `Current` now falls back to the latest finalized drop group after boss or dungeon completion instead of showing an empty view.
+- `All Gear` now includes your own gear drops for review while `Askable` stays focused on items worth asking other players about.
+- Settings now open inside the main addon window, avoiding overlapping settings and loot windows.
+- Public docs now list supported language choices and current Retail/Midnight compatibility.
+
+### Fixed
+
+- Prevented duplicate loot rows when Blizzard reports encounter loot and loot-event text with different item-link variants for the same player and item.
+- Merged late boss/chest loot into the matching recent history group instead of creating duplicate dungeon entries.
+- Preserved Mythic+ end-chest loot and delayed loot while player identity or item links are still resolving.
+- Kept delayed bonus-loot source updates attached to the existing row instead of splitting or losing the source marker.
+- Stopped stale item-load callbacks from re-adding loot after the relevant loot context has changed.
+- Hardened saved numeric data so invalid `NaN` or infinite values do not survive normalization.
+
+### Compatibility
+
+- Packaged for Retail `12.0.7` and Midnight `12.1.0`.
+
 ## 0.2.2 - 02-Jul-2026 - Compatibility Hotfix
 
 ### Fixed
