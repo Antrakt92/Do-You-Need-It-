@@ -1567,6 +1567,27 @@ function Addon.FindTrackedLootRow(looter, itemLink)
             end
         end
     end
+
+    local history = state.history
+    if type(history) == "table" then
+        for groupIndex = 1, #history do
+            local group = history[groupIndex]
+            if type(group) == "table" then
+                local historyLists = { group.allRows, group.rows }
+                for listIndex = 1, #historyLists do
+                    local list = historyLists[listIndex]
+                    if type(list) == "table" then
+                        for rowIndex = #list, 1, -1 do
+                            local row = list[rowIndex]
+                            if type(row) == "table" and row.looter == looter and row.itemLink == itemLink then
+                                return row
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
     return nil
 end
 
@@ -1582,6 +1603,8 @@ function Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
     end
 
     CancelPendingAuto(row)
+    row.whisperInFlight = false
+    row.whisperToken = nil
     row.lootSource = "bonus_roll"
     row.askable = false
     row.reason = "bonus_roll"
@@ -2348,6 +2371,13 @@ function Addon.HandleResolvedLoot(looter, itemLink, context, source)
 
     context = type(context) == "table" and context or BuildDropContext(false)
     context.source = source or context.source
+    if context.lootSource == "bonus_roll"
+        and (Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
+            or Addon.UpgradePendingLootToBonus(looter, itemLink, context, source))
+    then
+        return
+    end
+
     if Addon.ShouldSkipDuplicateLoot(looter, itemLink) then
         if Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
             or Addon.UpgradePendingLootToBonus(looter, itemLink, context, source)

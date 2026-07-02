@@ -363,6 +363,84 @@ local function testBonusLootChatUpgradesEarlierEncounterRow()
     assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].statusKey, "bonus_roll", "later bonus loot chat updates the existing row status")
 end
 
+local function testLateBonusLootChatUpgradesOutsideDedupeWindow()
+    local h = Harness.new()
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    local item = h:addItem(22013, {
+        name = "Late Bonus Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 22013, item, 1, "Otherplayer", "PALADIN")
+    assertEqual(#h.env.DoYouNeedItDB.sessionRows, 1, "encounter loot starts as askable before late source is known")
+    h.now = h.now + 20
+
+    h:fireBonusLoot("Otherplayer", item)
+
+    assertEqual(#h.env.DoYouNeedItDB.sessionRows, 0, "late bonus loot outside dedupe removes the askable row")
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 1, "late bonus loot outside dedupe does not duplicate all gear")
+    assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].lootSource, "bonus_roll", "late bonus loot outside dedupe source-tags the existing row")
+end
+
+local function testBonusLootUpgradeCancelsInFlightAutoWhisper()
+    local h = Harness.new({
+        db = {
+            settings = {
+                autoWhisper = true,
+                autoDelay = 5,
+                font = "Fonts\\FRIZQT__.TTF",
+            },
+        },
+    })
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    local item = h:addItem(22010, {
+        name = "In Flight Bonus Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fireLoot("Otherplayer", item)
+    assertEqual(h.env.DoYouNeedItDB.sessionRows[1].statusKey, "candidate", "saved auto-pending row stays persistently candidate")
+
+    local autoTimerIndex
+    for index = 1, #h.timers do
+        if h.timers[index].delay == 5 then
+            autoTimerIndex = index
+            break
+        end
+    end
+    assertTruthy(autoTimerIndex, "auto whisper delay timer is queued")
+    local autoTimer = table.remove(h.timers, autoTimerIndex)
+    autoTimer.callback()
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "auto whisper row is still tracked before the deferred send")
+    assertEqual(rows[1].row.whisperInFlight, true, "auto whisper is in flight before the zero-delay send")
+
+    h:fireBonusLoot("Otherplayer", item)
+    h:runTimers(0, 10)
+
+    assertEqual(#h.sentMessages, 0, "bonus loot upgrade cancels the deferred auto whisper send")
+    assertEqual(h.env.DoYouNeedItDB.sessionRows[1], nil, "bonus loot upgrade removes the row from askable session")
+    assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].statusKey, "bonus_roll", "bonus loot upgrade still saves the row as bonus all gear")
+end
+
 local function testBonusLootChatUpgradesPendingEncounterRowBeforeItemLoads()
     local h = Harness.new()
     h:loadAddon()
@@ -420,6 +498,54 @@ local function testBonusLootChatUpgradesEarlierCompletedHistoryRow()
     assertEqual(#h.env.DoYouNeedItDB.history[1].rows, 0, "late bonus loot chat removes the completed row from history askable")
     assertEqual(#h.env.DoYouNeedItDB.history[1].allRows, 1, "late bonus loot chat keeps the completed row in history all gear")
     assertEqual(h.env.DoYouNeedItDB.history[1].allRows[1].lootSource, "bonus_roll", "late bonus loot chat source-tags the completed history row")
+end
+
+local function testBonusLootChatUpgradesHistoryRowAfterSessionPrune()
+    local h = Harness.new({
+        db = {
+            settings = {
+                maxSessionRows = 1,
+                font = "Fonts\\FRIZQT__.TTF",
+            },
+        },
+    })
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    local firstItem = h:addItem(22011, {
+        name = "Pruned History Bonus Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+    local secondItem = h:addItem(22012, {
+        name = "Later Normal Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 22011, firstItem, 1, "Otherplayer", "PALADIN")
+    h:fire("ENCOUNTER_END", 123, "Pruned Bonus Boss")
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 124, 22012, secondItem, 1, "Otherplayer", "PALADIN")
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 1, "session all gear prunes to the configured limit")
+    assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].itemID, 22012, "session all gear pruned away the earlier row")
+    assertEqual(#h.env.DoYouNeedItDB.history[1].rows, 1, "history still has the earlier row as askable")
+
+    h:fireBonusLoot("Otherplayer", firstItem)
+
+    assertEqual(#h.env.DoYouNeedItDB.history[1].rows, 0, "late bonus loot upgrades history-only askable rows")
+    assertEqual(#h.env.DoYouNeedItDB.history[1].allRows, 1, "late bonus loot keeps the history-only row in all gear")
+    assertEqual(h.env.DoYouNeedItDB.history[1].allRows[1].lootSource, "bonus_roll", "late bonus loot source-tags the history-only row")
 end
 
 local function testDebugPersistenceIsOptIn()
@@ -953,8 +1079,11 @@ testEncounterLootReceivedCreatesLootRow()
 testEncounterAndChatLootDeduplicateSameDrop()
 testBonusLootChatIsAllGearOnlyWithSourceIcon()
 testBonusLootChatUpgradesEarlierEncounterRow()
+testLateBonusLootChatUpgradesOutsideDedupeWindow()
+testBonusLootUpgradeCancelsInFlightAutoWhisper()
 testBonusLootChatUpgradesPendingEncounterRowBeforeItemLoads()
 testBonusLootChatUpgradesEarlierCompletedHistoryRow()
+testBonusLootChatUpgradesHistoryRowAfterSessionPrune()
 testDebugPersistenceIsOptIn()
 testDebugPersistenceLoadState()
 testLegacySavedAllGearFallbackDisplays()
