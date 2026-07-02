@@ -345,6 +345,18 @@ local function L(key)
     return Core.GetLocaleLabel(key, ActiveLocale())
 end
 
+local function SafeSelfLootLooterName()
+    local playerName = SafePlayerName()
+    if playerName then
+        return playerName
+    end
+    local storageKey = SafePlayerStorageKey()
+    if storageKey and storageKey ~= "__unknown" then
+        return storageKey
+    end
+    return L("You")
+end
+
 local function RegisterFontString(fontString, size, flags, stable, dynamic)
     if not fontString then
         return
@@ -811,11 +823,12 @@ local function FindLooterFromMessage(message, ...)
     end
 
     local playerName = SafePlayerName()
+    local selfLootName = SafeSelfLootLooterName()
     local cleanMessage = CleanString(message)
-    local resolved = Core.ResolveLootMessageLooter(cleanMessage, Addon.lootPatterns, playerName)
+    local resolved = Core.ResolveLootMessageLooter(cleanMessage, Addon.lootPatterns, playerName or selfLootName)
     if resolved and resolved.name then
         if resolved.isSelf then
-            return resolved.name, false, nil, resolved.lootSource
+            return resolved.name or selfLootName, false, nil, resolved.lootSource, true
         end
         local canonical = Core.FindRosterNameInMessage(resolved.name, Addon.roster, playerName)
             or Core.ResolveRosterName(resolved.name, Addon.roster)
@@ -2402,9 +2415,14 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
         return false, gearClassification.reason
     end
 
-    local classification = context.unsafe == true
-        and { visible = false, reason = context.unsafeReason or "looter_unresolved" }
-        or DoYouNeedItCore.ClassifyTradeCandidate(metadata, looter, playerName, Addon.state.settings)
+    local classification
+    if context.unsafe == true then
+        classification = { visible = false, reason = context.unsafeReason or "looter_unresolved" }
+    elseif context.isSelfLoot == true then
+        classification = { visible = false, reason = "self_loot" }
+    else
+        classification = DoYouNeedItCore.ClassifyTradeCandidate(metadata, looter, playerName, Addon.state.settings)
+    end
     local askable = classification.visible == true
     if not askable then
         RecordDiagnostic("all_gear_only", {
@@ -2454,7 +2472,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
         playerCanEquip = metadata.playerCanEquip,
         lootSource = context.lootSource,
     })
-    if not row.unsafe then
+    if not row.unsafe and context.isSelfLoot ~= true then
         RequestInspectForRow(row)
     end
     if askable then
@@ -2699,9 +2717,10 @@ local function HandleLootMessage(message, ...)
     })
 
     local itemLink = ExtractItemLink(message)
-    local looter, unsafe, unsafeReason, lootSource = FindLooterFromMessage(message, ...)
+    local looter, unsafe, unsafeReason, lootSource, isSelfLoot = FindLooterFromMessage(message, ...)
     local context = BuildDropContext(unsafe, unsafeReason)
     context.lootSource = lootSource
+    context.isSelfLoot = isSelfLoot == true
     Addon.HandleResolvedLoot(looter, itemLink, context, "chat")
 end
 

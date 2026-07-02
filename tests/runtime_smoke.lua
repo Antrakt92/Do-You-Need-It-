@@ -111,6 +111,36 @@ local function testLootDropLeavesEmbeddedSettingsMode()
     assertEqual(#h:visibleRows(), 1, "loot drop shows the visible loot row")
 end
 
+local function testOwnLootShowsInAllGearWhenPlayerNameIsUnavailable()
+    local h = Harness.new()
+    h.units.player = nil
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    local item = h:addItem(22101, {
+        name = "Own Hidden Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fire("CHAT_MSG_LOOT", "You receive loot: " .. item .. ".")
+
+    assertEqual(#(h.env.DoYouNeedItDB.sessionRows or {}), 0, "own loot is not askable when player identity is unavailable")
+    assertEqual(#(h.env.DoYouNeedItDB.sessionAllRows or {}), 1, "own loot is still saved in all gear when player identity is unavailable")
+    assertEqual((h.env.DoYouNeedItDB.sessionAllRows or {})[1].reason, "self_loot", "own loot keeps an explicit all-gear reason")
+
+    h.env.DoYouNeedItFrame.tabAllGear:FireScript("OnClick")
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "own loot is visible on all gear when player identity is unavailable")
+    assertEqual(rows[1].whisper:IsShown(), false, "own loot does not show an Ask button")
+end
+
 local function testLeavingSettingsClosesSharedDropdown()
     local h = Harness.new()
     h:loadAddon()
@@ -1399,6 +1429,7 @@ testLoadAndSettings()
 testSlashTestRowsAndManualWhisper()
 testLootSlashCommandsLeaveEmbeddedSettingsMode()
 testLootDropLeavesEmbeddedSettingsMode()
+testOwnLootShowsInAllGearWhenPlayerNameIsUnavailable()
 testLeavingSettingsClosesSharedDropdown()
 testClosingMainWindowCleansSettingsPopups()
 testCustomWhisperTemplateIsUsedForManualAsk()
