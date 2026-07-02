@@ -454,6 +454,25 @@ local function testStaleScanReadyDoesNotCacheReplacementUnit()
     assertEqual(rows[1].row.equippedText:find("Stale Scan Replacement Sword", 1, true), nil, "stale scan ready does not cache replacement unit gear")
 end
 
+local function testInstanceChangeCancelsPendingInspectBeforeHistory()
+    local h = newLoadedHarness()
+    local item = addWeapon(h, 21019, "Instance Change Sword")
+
+    h:fireLoot("Otherplayer", item)
+    assertEqual(#h.notifyInspectCalls, 1, "instance-change test starts a live inspect")
+    local liveRows = h:visibleRows()
+    assertEqual(liveRows[1].row.equippedText, "Equipped: checking...", "precondition: loot row is waiting for inspect")
+
+    h.instanceName = "Next Dungeon"
+    h:fire("PLAYER_ENTERING_WORLD")
+
+    assertEqual(h.clearInspectCalls, 1, "instance change releases the stale inspect request")
+    local historyRows = h:visibleRows()
+    assertEqual(#historyRows, 1, "instance change moves the pending loot row into history")
+    assertEqual(historyRows[1].row.equippedText, "Equipped: unknown", "history row does not keep a stale inspect-pending label")
+    assertEqual(h.env.DoYouNeedItDB.history[1].allRows[1].equippedText, "Equipped: unknown", "saved history also clears stale inspect-pending text")
+end
+
 testDifferentGuidLootInspectsAreSerialized()
 testSameGuidLootInspectsCoalesce()
 testInspectTimeoutClearsOwnedInspectState()
@@ -472,5 +491,6 @@ testSameGuidRosterMoveStillCompletes()
 testClearDropsCachedFallbackForFutureLoot()
 testRosterUpdateDropsCachedFallbackForChangedIdentity()
 testStaleScanReadyDoesNotCacheReplacementUnit()
+testInstanceChangeCancelsPendingInspectBeforeHistory()
 
 print("runtime inspect ok")

@@ -190,6 +190,22 @@ local function testManualWhisperFailureLeavesRowRetryable()
     assertEqual(rows[1].whisper:IsEnabled(), true, "failed manual whisper leaves Ask retry enabled")
 end
 
+local function testClearCancelsDeferredManualWhisper()
+    local h = Harness.new()
+    h:loadAddon()
+    h:slash("test")
+
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "clear-deferred manual whisper test starts with one askable row")
+    rows[1].whisper:FireScript("OnClick")
+    h:slash("clear")
+    h:runTimers(0)
+
+    assertEqual(#h.sentMessages, 0, "clear cancels a deferred manual whisper before it reaches chat")
+    assertEqual(#h.env.DoYouNeedItDB.sessionRows, 0, "clear keeps askable session rows empty")
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 0, "clear keeps all-gear session rows empty")
+end
+
 local function testMainWindowLayoutBoundsLongText()
     local h = Harness.new()
     h:loadAddon()
@@ -1257,6 +1273,7 @@ testLeavingSettingsClosesSharedDropdown()
 testClosingMainWindowCleansSettingsPopups()
 testCustomWhisperTemplateIsUsedForManualAsk()
 testManualWhisperFailureLeavesRowRetryable()
+testClearCancelsDeferredManualWhisper()
 testMainWindowLayoutBoundsLongText()
 testCyrillicLootTextUsesGlyphCapableFont()
 testLootLooterNameUsesClassColor()

@@ -1622,6 +1622,11 @@ local function SendWhisper(row, isAuto)
         if row.whisperToken ~= token or row.whisperInFlight ~= true then
             return
         end
+        if not IsRowStillTracked(row) then
+            row.whisperInFlight = false
+            row.whisperToken = nil
+            return
+        end
 
         local sendFn = SendChatMessage
         if C_ChatInfo and type(C_ChatInfo.SendChatMessage) == "function" then
@@ -3902,6 +3907,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         local instanceName = SafeInstanceName()
         local instanceChanged = Addon.currentInstanceName and Addon.currentInstanceName ~= instanceName
         if instanceChanged then
+            CancelAllInspectWork()
             if Addon.state and (#Addon.state.currentRows > 0 or #(Addon.state.allRows or {}) > 0) then
                 Addon.CompleteCurrentGroup(Addon.currentEncounterName)
             end
