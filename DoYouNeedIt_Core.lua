@@ -1186,6 +1186,28 @@ function Core.GetCachedEquippedText(cache, name, equipLoc, now, maxAge)
     return nil
 end
 
+function Core.MergePendingWaiterContext(waiter, context)
+    if type(waiter) ~= "table" or type(context) ~= "table" then
+        return
+    end
+
+    waiter.context = type(waiter.context) == "table" and waiter.context or {}
+    if context.lootSource == "bonus_roll" then
+        waiter.context.lootSource = "bonus_roll"
+        waiter.context.source = waiter.context.source or context.source
+    end
+    if waiter.context.classToken == nil and context.classToken ~= nil then
+        waiter.context.classToken = context.classToken
+    end
+    if context.isSelfLoot == true then
+        waiter.context.isSelfLoot = true
+    end
+    if context.unsafe == true then
+        waiter.context.unsafe = true
+        waiter.context.unsafeReason = waiter.context.unsafeReason or context.unsafeReason
+    end
+end
+
 function Core.AddPendingItemWaiter(pending, itemLink, waiter)
     if type(pending) ~= "table" or type(itemLink) ~= "string" or itemLink == "" or type(waiter) ~= "table" then
         return nil, false
@@ -1205,6 +1227,13 @@ function Core.AddPendingItemWaiter(pending, itemLink, waiter)
         created = true
     end
     bucket.waiters = type(bucket.waiters) == "table" and bucket.waiters or {}
+    for index = 1, #bucket.waiters do
+        local existing = bucket.waiters[index]
+        if type(existing) == "table" and existing.looter == waiter.looter and existing.generation == waiter.generation then
+            Core.MergePendingWaiterContext(existing, waiter.context)
+            return bucket, false
+        end
+    end
     bucket.waiters[#bucket.waiters + 1] = waiter
     return bucket, created
 end

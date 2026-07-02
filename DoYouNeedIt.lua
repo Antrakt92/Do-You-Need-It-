@@ -2620,6 +2620,78 @@ local function RetryItemLater(looter, itemLink, context)
     end
 end
 
+local function PendingBucketHasLooter(bucket, looter, generation)
+    local waiters = type(bucket) == "table" and type(bucket.waiters) == "table" and bucket.waiters or {}
+    for index = 1, #waiters do
+        local waiter = waiters[index]
+        if type(waiter) == "table" and waiter.looter == looter and (generation == nil or waiter.generation == generation) then
+            return true
+        end
+    end
+    return false
+end
+
+local function UpdatePendingWaiterContext(bucket, looter, context)
+    if type(context) ~= "table" then
+        return
+    end
+    local waiters = type(bucket) == "table" and type(bucket.waiters) == "table" and bucket.waiters or {}
+    for index = 1, #waiters do
+        local waiter = waiters[index]
+        if type(waiter) == "table" and waiter.looter == looter then
+            Core.MergePendingWaiterContext(waiter, context)
+        end
+    end
+end
+
+local function MergeDuplicatePendingLoot(looter, itemLink, context, source)
+    if type(Addon.pendingItems) ~= "table" then
+        return false
+    end
+    local itemID = Core.ExtractItemID(itemLink)
+    if not itemID then
+        return false
+    end
+
+    local generation = type(context) == "table" and context.generation or nil
+    for pendingLink, bucket in pairs(Addon.pendingItems) do
+        if pendingLink ~= itemLink
+            and type(bucket) == "table"
+            and (generation == nil or bucket.generation == generation)
+            and Core.ExtractItemID(bucket.itemLink or pendingLink) == itemID
+            and PendingBucketHasLooter(bucket, looter, generation)
+        then
+            local existing = Addon.pendingItems[itemLink]
+            if type(existing) == "table" and existing ~= bucket then
+                local waiters = type(bucket.waiters) == "table" and bucket.waiters or {}
+                for index = 1, #waiters do
+                    Core.AddPendingItemWaiter(Addon.pendingItems, itemLink, waiters[index])
+                end
+                Addon.pendingItems[pendingLink] = nil
+                bucket = existing
+            else
+                Addon.pendingItems[pendingLink] = nil
+                bucket.itemLink = itemLink
+                Addon.pendingItems[itemLink] = bucket
+            end
+
+            bucket.retryToken = nil
+            UpdatePendingWaiterContext(bucket, looter, context)
+            RecordDiagnostic("pending_duplicate_loot", {
+                looter = looter,
+                itemLink = itemLink,
+                itemID = itemID,
+                source = source or "unknown",
+            })
+            if not ProcessPendingItem(itemLink, bucket) then
+                SchedulePendingItemRetry(itemLink, bucket, 0)
+            end
+            return true
+        end
+    end
+    return false
+end
+
 local function InvalidatePendingLoot()
     Addon.lootGeneration = (Addon.lootGeneration or 0) + 1
     Addon.pendingItems = {}
@@ -2675,6 +2747,10 @@ function Addon.HandleResolvedLoot(looter, itemLink, context, source)
             itemLink = itemLink,
             source = source or "unknown",
         })
+        return
+    end
+
+    if MergeDuplicatePendingLoot(looter, itemLink, context, source) then
         return
     end
 

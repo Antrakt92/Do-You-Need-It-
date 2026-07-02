@@ -21,6 +21,7 @@
 ### Fixed
 
 - **Duplicate rows are filtered when Blizzard reports the same drop through different loot paths** — encounter loot and loot-event text with different item-link variants now resolve to one row for the same player and item.
+- **Slow item-cache duplicate drops are merged correctly** — if encounter and chat loot events for the same player/item arrive with different item-link variants after the short live dedupe window, the pending drop resolves to one row and keeps the later link/source.
 - **Late boss and chest loot merges into the correct history group** — delayed drops from the same dungeon/boss no longer create duplicate history entries.
 - **Mythic+ end-chest loot is preserved more reliably** — drops that arrive around challenge completion stay attached to the completed run instead of being lost or split.
 - **Delayed identity and item-link resolution no longer drops loot state** — rows survive while player names, realms, item links, and item metadata finish loading.

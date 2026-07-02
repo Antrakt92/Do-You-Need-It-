@@ -599,6 +599,37 @@ local function testEncounterAndChatLootDeduplicateSameItemWithDifferentLinks()
     assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].itemLink, chatLink, "chat item link replaces the earlier encounter link")
 end
 
+local function testSlowEncounterAndChatLootDeduplicateSameItemAfterWindow()
+    local h = Harness.new()
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    local encounterLink = "|cff0070dd|Hitem:22022:::::::::::::|h[Slow Variant Spaulders]|h|r"
+    local chatLink = "|cffa335ee|Hitem:22022:::::::::::::|h[Slow Variant Spaulders]|h|r"
+    h:addItem(22022, {
+        name = "Slow Variant Spaulders",
+        equipLoc = "INVTYPE_SHOULDER",
+        classID = 4,
+        subclassID = 4,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+        cacheLoaded = false,
+    })
+
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 22022, encounterLink, 1, "Otherplayer", "PALADIN")
+    h.now = h.now + 20
+    h:fireLoot("Otherplayer", chatLink)
+    h:runTimers(0, 10)
+
+    assertEqual(#h.env.DoYouNeedItDB.sessionRows, 1, "same slow item id from encounter/chat is saved once in askable session")
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 1, "same slow item id from encounter/chat is saved once in all-gear session")
+    assertEqual(#h:visibleRows(), 1, "same slow item id from encounter/chat is visible once")
+    assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].itemLink, chatLink, "late chat item link replaces the earlier pending encounter link")
+end
+
 local function testBonusLootChatIsAllGearOnlyWithSourceIcon()
     local h = Harness.new()
     h:loadAddon()
@@ -816,6 +847,37 @@ local function testBonusLootChatUpgradesPendingEncounterRowBeforeItemLoads()
     assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 1, "bonus loot source on a pending row still saves all gear")
     assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].lootSource, "bonus_roll", "bonus loot source survives pending item load")
     assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].statusKey, "bonus_roll", "pending bonus loot row renders with bonus status")
+end
+
+local function testSlowBonusLootVariantUpgradesPendingEncounterRow()
+    local h = Harness.new()
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    local encounterLink = "|cff0070dd|Hitem:22023:::::::::::::|h[Slow Bonus Variant Sword]|h|r"
+    local bonusLink = "|cffa335ee|Hitem:22023:::::::::::::|h[Slow Bonus Variant Sword]|h|r"
+    h:addItem(22023, {
+        name = "Slow Bonus Variant Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+        cacheLoaded = false,
+    })
+
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 22023, encounterLink, 1, "Otherplayer", "PALADIN")
+    h.now = h.now + 20
+    h:fireBonusLoot("Otherplayer", bonusLink)
+    h:runTimers(0, 10)
+
+    assertEqual(#h.env.DoYouNeedItDB.sessionRows, 0, "slow bonus variant pending row stays out of askable")
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 1, "slow bonus variant pending row is saved once in all gear")
+    assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].lootSource, "bonus_roll", "slow bonus variant pending row keeps bonus source")
+    assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].itemLink, bonusLink, "slow bonus variant keeps the later bonus item link")
 end
 
 local function testBonusLootChatUpgradesEarlierCompletedHistoryRow()
@@ -1573,12 +1635,14 @@ testEncounterLootReceivedCreatesLootRow()
 testEncounterLootUsesEventClassTokenWhenRosterClassMissing()
 testEncounterAndChatLootDeduplicateSameDrop()
 testEncounterAndChatLootDeduplicateSameItemWithDifferentLinks()
+testSlowEncounterAndChatLootDeduplicateSameItemAfterWindow()
 testBonusLootChatIsAllGearOnlyWithSourceIcon()
 testBonusLootChatUpgradesEarlierEncounterRow()
 testLateBonusLootChatUpgradesOutsideDedupeWindow()
 testBonusLootUpgradeCancelsInFlightAutoWhisper()
 testClearCancelsHistoryOnlyPendingAutoWhisper()
 testBonusLootChatUpgradesPendingEncounterRowBeforeItemLoads()
+testSlowBonusLootVariantUpgradesPendingEncounterRow()
 testBonusLootChatUpgradesEarlierCompletedHistoryRow()
 testBonusLootChatUpgradesHistoryRowAfterSessionPrune()
 testDebugPersistenceIsOptIn()
