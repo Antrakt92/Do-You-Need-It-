@@ -62,7 +62,11 @@ Run from the repository root:
 .\scripts\check.ps1
 ```
 
-The check script runs the Lua regression tests, Lua 5.1 syntax checks, and a public-source leakage guard.
+The check script runs the Lua regression tests, Lua 5.1 syntax checks, package-shape validation, CurseForge upload dry-run metadata validation, and a public-source leakage guard. If `lua5.1` or `luac5.1` are missing on a Windows machine, run:
+
+```powershell
+.\scripts\install-check-tools.ps1 -Install
+```
 
 Build a local addon zip with:
 
