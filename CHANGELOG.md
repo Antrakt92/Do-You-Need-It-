@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1 - 02-Jul-2026 - Midnight 12.1.0 Compatibility
+
+### Changed
+
+- Retargeted Retail compatibility metadata and CurseForge upload metadata to Midnight 12.1.0.
+
 ## 0.2.0 - 02-Jul-2026 - First Public Release
 
 ### Added
