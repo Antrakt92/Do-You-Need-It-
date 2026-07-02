@@ -29,7 +29,8 @@ function Install-Lua51 {
     }
 
     Write-Host "Installing lua51 $LuaPackageVersion with Chocolatey..."
-    & $choco install lua51 --version $LuaPackageVersion -y --no-progress --allow-empty-checksums
+    & $choco install lua51 --version $LuaPackageVersion -y --no-progress --allow-empty-checksums 2>&1 |
+        ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) {
         throw "choco install lua51 $LuaPackageVersion exited with code $LASTEXITCODE"
     }
