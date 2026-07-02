@@ -1,12 +1,11 @@
 # Do You Need It?
 
-Do You Need It? is a Retail World of Warcraft addon for Midnight 12.x. It tracks likely-tradeable Mythic+ and raid gear drops, compares the drop with the looter's equipped item, and helps you ask with optional delayed whispers.
+Do You Need It? is a Retail World of Warcraft addon for Midnight 12.x, currently packaged for Retail 12.0.7 and 12.1.0. It tracks likely-tradeable Mythic+ and raid gear drops, compares the drop with the looter's equipped item, and helps you ask with optional delayed whispers.
 
 The addon focuses on quiet signal:
 
-- Shows likely-tradeable equipment drops only.
-- Separates the default askable loot list from an `All Gear` tab that records every visible gear drop.
-- Keeps `Askable` focused on gear your current character can use or wear.
+- Keeps the default `Askable` view focused on likely-tradeable equipment your current character can use or wear.
+- Separates `Askable` from an `All Gear` tab that records every visible gear drop without pointless Ask buttons.
 - Hides currency, reagents, recipes, consumables, quest items, and other non-gear loot.
 - Shows the dropped item next to the looter's currently equipped item when inspection data is safely available, retrying briefly when inspection data is delayed.
 - Pre-scans group equipment into a session cache, then shows `Cached:` equipped items if live inspection is blocked or delayed.
@@ -40,11 +39,37 @@ Auto-whisper is off by default. When enabled, it waits 10 seconds by default bef
 
 The loot window opens on the `Askable` tab by default. `Askable` only shows drops that the addon currently considers worth asking about and usable by your current character; `All Gear` shows every visible gear drop for review and hides the Ask button. If a drop has visible gear but no askable rows, the window opens directly on `All Gear` so the drop is not silent. Use the gear button or `/dyni settings` for auto-whisper, delay, whisper text, language, font, and font-size controls.
 
-Language defaults to `Auto`, which follows your WoW client locale. You can also force English (`enUS`), German (`deDE`), Spanish (`esES`/`esMX`), French (`frFR`), Italian (`itIT`), Brazilian Portuguese (`ptBR`), Russian (`ruRU`), Korean (`koKR`), Simplified Chinese (`zhCN`), or Traditional Chinese (`zhTW`). English and Russian currently have the most complete addon-specific text; other locales cover the core settings labels and fall back to English for unreviewed addon labels.
+## Language and Fonts
+
+Language defaults to `Auto`, which follows your WoW client locale. You can also force a locale from settings:
+
+| Language | Locale |
+|---|---|
+| Auto | Current WoW client locale |
+| English | `enUS` |
+| Deutsch | `deDE` |
+| Español | `esES`, `esMX` |
+| Français | `frFR` |
+| Italiano | `itIT` |
+| Português do Brasil | `ptBR` |
+| Русский | `ruRU` |
+| 한국어 | `koKR` |
+| 中文 简体 | `zhCN` |
+| 中文 繁體 | `zhTW` |
+
+English and Russian currently have the most complete addon-specific text. Other locales cover the core settings labels and fall back to English for unreviewed addon labels.
 
 Font choices use bundled LibSharedMedia support plus Blizzard fallbacks. Hovering a language or font previews it live, closing the picker without selecting restores the saved setting, and loot-row names can temporarily fall back to glyph-capable fonts such as Arial Narrow for Cyrillic names.
 
-If you are checking whether the latest addon code loaded, run `/dyni status` and confirm it reports `build=0.2.2`, `session drops=...`, `all gear=...`, `cache=...`, and `layout=540x300`, then run `/dyni scan` before a dungeon to pre-cache group equipment. `/dyni test` forces a compact auto-show test row without a chat confirmation. Hover the dropped item or equipped item text to confirm the normal item tooltip appears, then switch to `All Gear` to confirm the bound test item appears without an Ask button. For live loot debugging, run `/dyni debug on` before a boss or dungeon chest and `/dyni diag` afterward; inspect/cache problems are reported as `inspect_retry`, `inspect_failed`, `scan_retry`, or `scan_failed`.
+## Quick In-Game Check
+
+After installing a new build:
+
+1. Run `/reload`.
+2. Run `/dyni status` and confirm it reports `build=0.2.2`, `session drops=...`, `all gear=...`, `cache=...`, and `layout=540x300`.
+3. Run `/dyni scan` before a dungeon to pre-cache group equipment.
+4. Run `/dyni test`, hover the dropped and equipped item text, then switch to `All Gear` to confirm the bound test item appears without an Ask button.
+5. For live loot debugging, run `/dyni debug on` before a boss or dungeon chest and `/dyni diag` afterward. Inspect/cache problems appear as `inspect_retry`, `inspect_failed`, `scan_retry`, or `scan_failed`.
 
 ## Install
 
