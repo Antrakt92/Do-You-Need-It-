@@ -125,6 +125,35 @@ local function testLeavingSettingsClosesSharedDropdown()
     assertEqual(h.env.UIDROPDOWNMENU_OPEN_MENU, nil, "leaving settings clears the shared dropdown owner")
 end
 
+local function testClosingMainWindowCleansSettingsPopups()
+    local h = Harness.new()
+    h:loadAddon()
+    h:slash("settings")
+
+    h.env.UIDROPDOWNMENU_OPEN_MENU = h.env.DoYouNeedItLanguageDropdown
+    h.env.DropDownList1:Show()
+
+    assertEqual(h.env.DropDownList1:IsShown(), true, "precondition: shared Blizzard dropdown is open")
+
+    h.env.DoYouNeedItFrame:Hide()
+
+    assertEqual(h.env.DoYouNeedItSettingsFrame:IsShown(), false, "main close hides embedded settings")
+    assertEqual(h.env.DropDownList1:IsShown(), false, "main close closes the shared Blizzard dropdown")
+    assertEqual(h.env.UIDROPDOWNMENU_OPEN_MENU, nil, "main close clears the shared dropdown owner")
+
+    local pickerHarness = Harness.new()
+    pickerHarness:loadAddon()
+    pickerHarness:slash("settings")
+    pickerHarness.env.DoYouNeedItFontDropdown.Button:FireScript("OnClick")
+
+    assertEqual(pickerHarness.env.DoYouNeedItFontPicker:IsShown(), true, "precondition: custom font picker is open")
+
+    pickerHarness.env.DoYouNeedItFrame:Hide()
+
+    assertEqual(pickerHarness.env.DoYouNeedItSettingsFrame:IsShown(), false, "main close hides embedded settings with the font picker open")
+    assertEqual(pickerHarness.env.DoYouNeedItFontPicker:IsShown(), false, "main close closes the custom font picker")
+end
+
 local function testCustomWhisperTemplateIsUsedForManualAsk()
     local h = Harness.new({
         db = {
@@ -1192,6 +1221,7 @@ testSlashTestRowsAndManualWhisper()
 testLootSlashCommandsLeaveEmbeddedSettingsMode()
 testLootDropLeavesEmbeddedSettingsMode()
 testLeavingSettingsClosesSharedDropdown()
+testClosingMainWindowCleansSettingsPopups()
 testCustomWhisperTemplateIsUsedForManualAsk()
 testManualWhisperFailureLeavesRowRetryable()
 testMainWindowLayoutBoundsLongText()

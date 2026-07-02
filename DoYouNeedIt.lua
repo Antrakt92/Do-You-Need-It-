@@ -2694,9 +2694,10 @@ CreateUI = function()
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
     frame:SetScript("OnHide", function()
-        Addon.contentMode = "loot"
-        if Addon.settingsFrame then
-            Addon.settingsFrame:Hide()
+        if type(Addon.EnterLootMode) == "function" then
+            Addon.EnterLootMode()
+        else
+            Addon.contentMode = "loot"
         end
     end)
     frame:SetBackdrop({
