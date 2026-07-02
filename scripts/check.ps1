@@ -46,13 +46,32 @@ try {
         throw "version drift: TOC=$tocVersion Core=$coreVersion README=$readmeVersion"
     }
 
+    function Get-NormalizedTextFileSha256 {
+        param([string]$Path)
+
+        $resolvedPath = (Resolve-Path -LiteralPath $Path).Path
+        $bytes = [System.IO.File]::ReadAllBytes($resolvedPath)
+        $text = [System.Text.Encoding]::UTF8.GetString($bytes)
+        $text = $text -replace "`r`n", "`n" -replace "`r", "`n"
+        $normalizedBytes = [System.Text.Encoding]::UTF8.GetBytes($text)
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            return (($sha256.ComputeHash($normalizedBytes) | ForEach-Object { $_.ToString("X2") }) -join "")
+        }
+        finally {
+            $sha256.Dispose()
+        }
+    }
+
+    # WHY: this guard should catch vendored library edits, not CRLF/LF churn
+    # between older Windows checkouts and fresh CI checkouts.
     $expectedLibraryHashes = @{
-        'libs\LibStub\LibStub.lua' = '247B1B25646A47DD62C297AB59A9499F6E8200634A5EA5A8A171EED71416A753'
-        'libs\CallbackHandler-1.0\CallbackHandler-1.0.lua' = '699C3C7C14DD4794A105A49F6DC727F9B82E5918A50C2E14735C9DD2849F9AC6'
-        'libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua' = 'C0D81C14450C379C19134530F7D9F8DC462CFE78A20D36F84CEA3D653FF3E985'
+        'libs\LibStub\LibStub.lua' = 'C6D9599EFE3D24B90BC175629AD5464981B10DDB7E74A18274658E5C56875B85'
+        'libs\CallbackHandler-1.0\CallbackHandler-1.0.lua' = '7A0BD63D0DCB126359A60204862D21A7AC2C9FF18D61480D4F5C554751553F5D'
+        'libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua' = '39445CC0486FB0FDBA7367AAE9979CAA342D2AB194CDBC5ED1C6FED72FDD8D6E'
     }
     foreach ($path in $expectedLibraryHashes.Keys) {
-        $actualHash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToUpperInvariant()
+        $actualHash = (Get-NormalizedTextFileSha256 -Path $path).ToUpperInvariant()
         $expectedHash = $expectedLibraryHashes[$path].ToUpperInvariant()
         if ($actualHash -ne $expectedHash) {
             throw "vendored library hash drift for ${path}: expected $expectedHash, got $actualHash"
