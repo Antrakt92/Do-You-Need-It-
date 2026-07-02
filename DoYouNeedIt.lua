@@ -22,6 +22,8 @@ local Addon = {
     challengeCompletedAt = nil,
     challengeFinalizeToken = nil,
     challengeLootFinalizeDelay = 3,
+    recentEncounterFinalizeToken = nil,
+    encounterLootFinalizeDelay = 3,
     fontStrings = {},
 }
 
@@ -937,7 +939,50 @@ end
 function Addon.ScheduleChallengeHistoryFinalizeIfRecent(reason)
     if Addon.IsRecentChallengeCompletion() then
         Addon.ScheduleChallengeHistoryFinalize(reason)
+        return true
     end
+    return false
+end
+
+function Addon.IsRecentEncounterEnd()
+    local endedAt = Addon.recentEncounterEndedAt
+    local now = Now()
+    return type(Addon.currentEncounterName) ~= "string"
+        and type(Addon.recentEncounterName) == "string"
+        and Addon.recentEncounterName ~= ""
+        and type(endedAt) == "number"
+        and now >= endedAt
+        and now - endedAt <= ENCOUNTER_LOOT_GRACE
+end
+
+function Addon.ScheduleRecentEncounterHistoryFinalize(reason)
+    if not Addon.state then
+        return
+    end
+
+    local token = {}
+    Addon.recentEncounterFinalizeToken = token
+    C_Timer.After(Addon.encounterLootFinalizeDelay or Addon.challengeLootFinalizeDelay, function()
+        if Addon.recentEncounterFinalizeToken ~= token then
+            return
+        end
+        Addon.recentEncounterFinalizeToken = nil
+        if Addon.HasCurrentLootRows() then
+            RecordDiagnostic("encounter_history_complete", {
+                reason = reason or "post_encounter_loot",
+                encounterName = Addon.recentEncounterName,
+            })
+            Addon.CompleteCurrentGroup(Addon.recentEncounterName)
+        end
+    end)
+end
+
+function Addon.ScheduleRecentEncounterHistoryFinalizeIfRecent(reason)
+    if Addon.IsRecentEncounterEnd() then
+        Addon.ScheduleRecentEncounterHistoryFinalize(reason)
+        return true
+    end
+    return false
 end
 
 local function RequestItemLoad(itemLink, callback)
@@ -1633,7 +1678,9 @@ function Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
     Addon.selectedHistoryIndex = nil
     SaveDB()
     RefreshRows()
-    Addon.ScheduleChallengeHistoryFinalizeIfRecent(context.source or source or "bonus_loot_upgrade")
+    if not Addon.ScheduleChallengeHistoryFinalizeIfRecent(context.source or source or "bonus_loot_upgrade") then
+        Addon.ScheduleRecentEncounterHistoryFinalizeIfRecent(context.source or source or "bonus_loot_upgrade")
+    end
     if DoYouNeedItCore.ShouldAutoShowWindow(row) then
         CreateUI()
         Addon.frame:Show()
@@ -2153,7 +2200,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
     local cachedEquippedText = Core.GetCachedEquippedText(Addon.equipmentCache, looter, metadata.equipLoc, Now(), EQUIPMENT_CACHE_MAX_AGE)
     local row = Core.AddVisibleRow(Addon.state, {
         looter = looter,
-        classToken = ResolveClassTokenForName(looter),
+        classToken = context.classToken or ResolveClassTokenForName(looter),
         itemLink = metadata.link or itemLink,
         equipLoc = metadata.equipLoc,
         itemID = metadata.itemID,
@@ -2195,7 +2242,9 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
     Addon.selectedHistoryIndex = nil
     SaveDB()
     RefreshRows()
-    Addon.ScheduleChallengeHistoryFinalizeIfRecent(context.source or "post_challenge_loot")
+    if not Addon.ScheduleChallengeHistoryFinalizeIfRecent(context.source or "post_challenge_loot") then
+        Addon.ScheduleRecentEncounterHistoryFinalizeIfRecent(context.source or "post_encounter_loot")
+    end
     if DoYouNeedItCore.ShouldAutoShowWindow(row) then
         CreateUI()
         Addon.frame:Show()
@@ -2429,6 +2478,7 @@ function Addon.HandleEncounterLootReceived(encounterID, itemID, itemLink, quanti
 
     local looter = Addon.ResolveEncounterLootLooter(playerName)
     local context = BuildDropContext(false)
+    context.classToken = CleanString(classFileName)
     Addon.HandleResolvedLoot(looter, itemLink, context, "encounter")
 end
 
@@ -2446,6 +2496,7 @@ function Addon.CompleteCurrentGroup(encounterName)
     Addon.selectedView = "history"
     Addon.selectedHistoryIndex = 1
     Addon.challengeFinalizeToken = nil
+    Addon.recentEncounterFinalizeToken = nil
     SaveDB()
     RefreshRows()
 end
@@ -3652,6 +3703,7 @@ local function Initialize()
     Addon.recentLootKeys = {}
     Addon.challengeCompletedAt = nil
     Addon.challengeFinalizeToken = nil
+    Addon.recentEncounterFinalizeToken = nil
     Addon.equipmentScanQueue = {}
     Addon.equipmentScanScheduled = false
     Addon.lootPatterns = Core.CreateLootMessagePatterns({
@@ -3718,6 +3770,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             Addon.currentEncounterStartedAt = nil
             Addon.challengeCompletedAt = nil
             Addon.challengeFinalizeToken = nil
+            Addon.recentEncounterFinalizeToken = nil
             InvalidatePendingLoot()
         end
         Addon.currentInstanceName = instanceName
@@ -3728,6 +3781,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "CHALLENGE_MODE_START" then
         Addon.challengeCompletedAt = nil
         Addon.challengeFinalizeToken = nil
+        Addon.recentEncounterFinalizeToken = nil
         QueueEquipmentScan("challenge_start", true)
     elseif event == "CHALLENGE_MODE_COMPLETED" then
         Addon.challengeCompletedAt = Now()
@@ -3735,6 +3789,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "CHALLENGE_MODE_RESET" then
         Addon.challengeCompletedAt = nil
         Addon.challengeFinalizeToken = nil
+        Addon.recentEncounterFinalizeToken = nil
     elseif event == "GROUP_ROSTER_UPDATE" then
         BuildRoster()
         Addon.equipmentCache = {}
@@ -3746,6 +3801,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         end
         Addon.recentEncounterName = nil
         Addon.recentEncounterEndedAt = nil
+        Addon.recentEncounterFinalizeToken = nil
         Addon.currentEncounterID = encounterID
         Addon.currentEncounterName = CleanString(encounterName)
         Addon.currentEncounterStartedAt = Now()

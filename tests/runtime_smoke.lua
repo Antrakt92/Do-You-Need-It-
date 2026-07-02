@@ -250,6 +250,35 @@ local function testChallengeCompletionKeepsEndLootInHistory()
     assertTruthy(h.menuButtons[3] and h.menuButtons[3].text:find("Ruby Life Pools", 1, true), "history menu lists the completed challenge group")
 end
 
+local function testPostEncounterLootMovesToHistoryAfterGrace()
+    local h = Harness.new()
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    h:fire("ENCOUNTER_END", 777, "After End Boss")
+    local item = h:addItem(22014, {
+        name = "After End Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 777, 22014, item, 1, "Otherplayer", "PALADIN")
+
+    assertEqual(#h.env.DoYouNeedItDB.history, 0, "post-encounter loot waits briefly for more loot rows")
+    assertEqual(#h.env.DoYouNeedItDB.sessionRows, 1, "post-encounter loot is visible before the history finalize timer")
+    h:runTimers(3)
+
+    assertEqual(#h.env.DoYouNeedItDB.history, 1, "post-encounter loot moves into history after the grace timer")
+    assertTruthy(h.env.DoYouNeedItDB.history[1].title:find("After End Boss", 1, true), "post-encounter history keeps the ended boss name")
+    assertEqual(#h.env.DoYouNeedItDB.history[1].allRows, 1, "post-encounter history keeps all-gear loot")
+end
+
 local function testEncounterLootReceivedCreatesLootRow()
     local h = Harness.new()
     h:loadAddon()
@@ -273,6 +302,31 @@ local function testEncounterLootReceivedCreatesLootRow()
     assertEqual(#rows, 1, "encounter loot event creates a visible row")
     assertTruthy(rows[1].drop:GetText():find("Encounter Event Sword", 1, true), "encounter loot row shows the item link")
     assertEqual(h.env.DoYouNeedItDB.sessionRows[1].itemID, 22004, "encounter loot persists to session rows")
+end
+
+local function testEncounterLootUsesEventClassTokenWhenRosterClassMissing()
+    local h = Harness.new()
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+    h.units.party1.classToken = nil
+
+    local item = h:addItem(22015, {
+        name = "Event Class Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 22015, item, 1, "Otherplayer", "DEATHKNIGHT")
+
+    assertEqual(h.env.DoYouNeedItDB.sessionRows[1].classToken, "DEATHKNIGHT", "encounter loot keeps the event class token")
+    local rows = h:visibleRows()
+    assertEqual(rows[1].looter.textColor[1], 0.77, "encounter event class colors the looter name")
 end
 
 local function testEncounterAndChatLootDeduplicateSameDrop()
@@ -1075,7 +1129,9 @@ testLootLooterNameUsesClassColor()
 testInstanceChangeCompletesCurrentGroup()
 testInstanceChangeHistoryTitleUsesActiveLocale()
 testChallengeCompletionKeepsEndLootInHistory()
+testPostEncounterLootMovesToHistoryAfterGrace()
 testEncounterLootReceivedCreatesLootRow()
+testEncounterLootUsesEventClassTokenWhenRosterClassMissing()
 testEncounterAndChatLootDeduplicateSameDrop()
 testBonusLootChatIsAllGearOnlyWithSourceIcon()
 testBonusLootChatUpgradesEarlierEncounterRow()
