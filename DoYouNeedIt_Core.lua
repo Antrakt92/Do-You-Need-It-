@@ -274,6 +274,41 @@ local VALID_EQUIP_LOCS = {
     INVTYPE_RANGEDRIGHT = true,
 }
 
+local PLAYER_ARMOR_SUBCLASS_BY_CLASS = {
+    DEATHKNIGHT = 4,
+    DEMONHUNTER = 2,
+    DRUID = 2,
+    EVOKER = 3,
+    HUNTER = 3,
+    MAGE = 1,
+    MONK = 2,
+    PALADIN = 4,
+    PRIEST = 1,
+    ROGUE = 2,
+    SHAMAN = 3,
+    WARLOCK = 1,
+    WARRIOR = 4,
+}
+
+local ARMOR_SPECIALIZATION_EQUIP_LOCS = {
+    INVTYPE_HEAD = true,
+    INVTYPE_SHOULDER = true,
+    INVTYPE_CHEST = true,
+    INVTYPE_ROBE = true,
+    INVTYPE_WAIST = true,
+    INVTYPE_LEGS = true,
+    INVTYPE_FEET = true,
+    INVTYPE_WRIST = true,
+    INVTYPE_HAND = true,
+}
+
+local UNIVERSAL_EQUIP_LOCS = {
+    INVTYPE_NECK = true,
+    INVTYPE_FINGER = true,
+    INVTYPE_TRINKET = true,
+    INVTYPE_CLOAK = true,
+}
+
 local PERSISTED_ROW_KEYS = {
     id = "string",
     looter = "string",
@@ -1434,6 +1469,32 @@ function Core.ClassifyGearLoot(item, looter, settings)
         visible = true,
         reason = "gear_drop",
     }
+end
+
+function Core.ResolvePlayerCanEquip(item, playerClassToken, apiCanEquip)
+    if type(item) ~= "table" then
+        return nil
+    end
+
+    local equipLoc = item.equipLoc or ""
+    if UNIVERSAL_EQUIP_LOCS[equipLoc] == true then
+        return apiCanEquip == false and false or true
+    end
+
+    local classID = tonumber(item.classID or item.itemClassID)
+    if classID == 4 and ARMOR_SPECIALIZATION_EQUIP_LOCS[equipLoc] == true then
+        local subclassID = tonumber(item.subclassID or item.itemSubclassID)
+        local preferredSubclassID = PLAYER_ARMOR_SUBCLASS_BY_CLASS[playerClassToken or ""]
+        if subclassID == nil or preferredSubclassID == nil then
+            return nil
+        end
+        return subclassID == preferredSubclassID
+    end
+
+    if type(apiCanEquip) == "boolean" then
+        return apiCanEquip
+    end
+    return nil
 end
 
 function Core.ClassifyTradeCandidate(item, looter, playerName, settings)

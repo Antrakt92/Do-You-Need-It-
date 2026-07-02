@@ -109,6 +109,67 @@ assertEqual(
     "Traditional Chinese font fallback chooses a Han-capable Blizzard font"
 )
 
+assertEqual(type(Core.ResolvePlayerCanEquip), "function", "core exposes player equip eligibility")
+assertEqual(Core.ResolvePlayerCanEquip({
+    classID = 4,
+    subclassID = 4,
+    equipLoc = "INVTYPE_CHEST",
+}, "PALADIN", true), true, "plate armor slot is askable for plate classes")
+assertEqual(Core.ResolvePlayerCanEquip({
+    classID = 4,
+    subclassID = 2,
+    equipLoc = "INVTYPE_CHEST",
+}, "PALADIN", true), false, "leather armor slot is not askable for plate classes")
+assertEqual(Core.ResolvePlayerCanEquip({
+    classID = 4,
+    subclassID = 2,
+    equipLoc = "INVTYPE_HAND",
+}, "ROGUE", true), true, "leather armor slot is askable for leather classes")
+assertEqual(Core.ResolvePlayerCanEquip({
+    classID = 4,
+    subclassID = 3,
+    equipLoc = "INVTYPE_HEAD",
+}, "HUNTER", true), true, "mail armor slot is askable for mail classes")
+assertEqual(Core.ResolvePlayerCanEquip({
+    classID = 4,
+    subclassID = 1,
+    equipLoc = "INVTYPE_ROBE",
+}, "MAGE", true), true, "cloth armor slot is askable for cloth classes")
+assertEqual(Core.ResolvePlayerCanEquip({
+    classID = 4,
+    equipLoc = "INVTYPE_SHOULDER",
+}, "WARRIOR", true), nil, "armor slot with missing subclass is not blindly askable")
+assertEqual(Core.ResolvePlayerCanEquip({
+    classID = 4,
+    subclassID = 1,
+    equipLoc = "INVTYPE_CLOAK",
+}, "DEATHKNIGHT", nil), true, "cloak is universally askable")
+assertEqual(Core.ResolvePlayerCanEquip({
+    classID = 4,
+    subclassID = 0,
+    equipLoc = "INVTYPE_FINGER",
+}, "PRIEST", nil), true, "ring is universally askable")
+assertEqual(Core.ResolvePlayerCanEquip({
+    classID = 4,
+    subclassID = 0,
+    equipLoc = "INVTYPE_TRINKET",
+}, "DRUID", nil), true, "trinket is universally askable")
+assertEqual(Core.ResolvePlayerCanEquip({
+    classID = 4,
+    subclassID = 0,
+    equipLoc = "INVTYPE_NECK",
+}, "SHAMAN", nil), true, "neck is universally askable")
+assertEqual(Core.ResolvePlayerCanEquip({
+    classID = 2,
+    subclassID = 7,
+    equipLoc = "INVTYPE_WEAPON",
+}, "WARRIOR", true), true, "weapon eligibility follows WoW equip usability")
+assertEqual(Core.ResolvePlayerCanEquip({
+    classID = 2,
+    subclassID = 7,
+    equipLoc = "INVTYPE_WEAPON",
+}, "MAGE", false), false, "unusable weapon is not askable")
+
 local accepted = Core.ClassifyTradeCandidate({
     link = "|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r",
     quality = 3,
@@ -993,7 +1054,7 @@ assertTruthy(runtime:find("tabAllGear", 1, true), "runtime creates all gear tab"
 assertTruthy(runtime:find("TooltipHasTradeTimer", 1, true), "runtime detects trade timer tooltip lines")
 assertTruthy(runtime:find("CanPlayerEquipItem", 1, true), "runtime detects whether the player can equip a drop")
 assertTruthy(runtime:find("C_Item.IsUsableItem", 1, true), "runtime asks WoW whether the player can use the item")
-assertTruthy(runtime:find("PREFERRED_ARMOR_SUBCLASS_BY_CLASS", 1, true), "runtime filters askable armor by player class armor type")
+assertTruthy(runtime:find("Core.ResolvePlayerCanEquip", 1, true), "runtime filters askable gear through core equip eligibility")
 assertTruthy(runtime:find("ClassifyGearLoot", 1, true), "runtime classifies all gear before askable filtering")
 assertTruthy(runtime:find("SnapshotRowsForSave", 1, true), "runtime sanitizes saved session rows")
 assertTruthy(runtime:find("SnapshotHistoryForSave", 1, true), "runtime sanitizes saved history")

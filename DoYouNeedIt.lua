@@ -128,34 +128,6 @@ local EQUIP_LOC_SLOTS = {
     INVTYPE_RANGEDRIGHT = { "MainHandSlot" },
 }
 
-local PREFERRED_ARMOR_SUBCLASS_BY_CLASS = {
-    DEATHKNIGHT = 4,
-    DEMONHUNTER = 2,
-    DRUID = 2,
-    EVOKER = 3,
-    HUNTER = 3,
-    MAGE = 1,
-    MONK = 2,
-    PALADIN = 4,
-    PRIEST = 1,
-    ROGUE = 2,
-    SHAMAN = 3,
-    WARLOCK = 1,
-    WARRIOR = 4,
-}
-
-local ARMOR_SPECIALIZATION_EQUIP_LOCS = {
-    INVTYPE_HEAD = true,
-    INVTYPE_SHOULDER = true,
-    INVTYPE_CHEST = true,
-    INVTYPE_ROBE = true,
-    INVTYPE_WAIST = true,
-    INVTYPE_LEGS = true,
-    INVTYPE_FEET = true,
-    INVTYPE_WRIST = true,
-    INVTYPE_HAND = true,
-}
-
 local function Print(message)
     DEFAULT_CHAT_FRAME:AddMessage("|cff7ccfffDo You Need It?|r " .. tostring(message))
 end
@@ -1056,27 +1028,12 @@ local function GetPlayerClassToken()
     return CleanString(classToken)
 end
 
-local function PlayerArmorSubclassAllows(equipLoc, classID, subclassID)
-    if ARMOR_SPECIALIZATION_EQUIP_LOCS[equipLoc or ""] ~= true then
-        return nil
-    end
-    if CleanNumber(classID) ~= 4 then
-        return nil
-    end
-
-    local subclass = CleanNumber(subclassID)
-    local preferred = PREFERRED_ARMOR_SUBCLASS_BY_CLASS[GetPlayerClassToken() or ""]
-    if not subclass or not preferred then
-        return nil
-    end
-    return subclass == preferred
-end
-
 local function CanPlayerEquipItem(itemLink, classID, subclassID, equipLoc)
     if type(itemLink) ~= "string" or itemLink == "" then
         return nil
     end
 
+    local apiCanEquip
     local isEquippable
     if C_Item and type(C_Item.IsEquippableItem) == "function" then
         isEquippable = CleanBoolean(SafeCall(C_Item.IsEquippableItem, itemLink))
@@ -1084,7 +1041,9 @@ local function CanPlayerEquipItem(itemLink, classID, subclassID, equipLoc)
         isEquippable = CleanBoolean(SafeCall(IsEquippableItem, itemLink))
     end
     if isEquippable == false then
-        return false
+        apiCanEquip = false
+    elseif isEquippable == true then
+        apiCanEquip = true
     end
 
     local isUsable
@@ -1094,18 +1053,16 @@ local function CanPlayerEquipItem(itemLink, classID, subclassID, equipLoc)
         isUsable = CleanBoolean(SafeCall(IsUsableItem, itemLink))
     end
     if isUsable == false then
-        return false
+        apiCanEquip = false
+    elseif isUsable == true and apiCanEquip ~= false then
+        apiCanEquip = true
     end
 
-    local armorAllowed = PlayerArmorSubclassAllows(equipLoc, classID, subclassID)
-    if armorAllowed == false then
-        return false
-    end
-
-    if isEquippable == true or isUsable == true or armorAllowed == true then
-        return true
-    end
-    return nil
+    return Core.ResolvePlayerCanEquip({
+        classID = CleanNumber(classID),
+        subclassID = CleanNumber(subclassID),
+        equipLoc = CleanString(equipLoc),
+    }, GetPlayerClassToken(), apiCanEquip)
 end
 
 local function TooltipHasTradeTimer(itemLink)

@@ -12,6 +12,7 @@
 - **Saved loot history is now per character** — alts no longer share the same recent dungeon and boss drop history.
 - **`Current` stays useful after boss or dungeon completion** — if live loot has already been finalized into history, the Current view falls back to the latest completed drop group instead of showing an empty panel.
 - **`All Gear` now includes your own drops for review** — your loot appears in All Gear, while Askable remains focused on items worth asking other players about.
+- **`Askable` now follows player equip eligibility more directly** — armor-slot drops must match your class armor type, while cloak, neck, ring, and trinket drops remain universal candidates.
 - **Settings now open inside the main addon window** — the settings panel replaces the loot view instead of overlapping it, and returning from settings restores the loot view cleanly.
 - **Release packaging now includes and validates the addon icon** — local checks confirm the icon metadata and packaged zip contents before release.
 - **Release recovery is easier** — a manual CurseForge upload retry workflow is available for transient marketplace/API failures after the normal checks pass.
