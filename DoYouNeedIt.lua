@@ -1550,6 +1550,54 @@ local function SaveDB()
     PersistDiagnostics()
 end
 
+local function IsIncompleteCharacterKey(key, newKey)
+    if type(key) ~= "string" or key == "" or key == "__unknown" then
+        return true
+    end
+    if type(newKey) == "string" and newKey:find("-", 1, true) and not key:find("-", 1, true) then
+        return newKey:find(key .. "-", 1, true) == 1
+    end
+    return false
+end
+
+local function StateHasDropRows()
+    if type(Addon.state) ~= "table" then
+        return false
+    end
+    return #(Addon.state.currentRows or {}) > 0
+        or #(Addon.state.allRows or {}) > 0
+        or #(Addon.state.sessionRows or {}) > 0
+        or #(Addon.state.sessionAllRows or {}) > 0
+        or #(Addon.state.history or {}) > 0
+end
+
+local function RefreshCharacterStorageFromPlayerIdentity()
+    local oldKey = Addon.characterKey
+    local newKey = SafePlayerStorageKey()
+    if type(newKey) ~= "string" or newKey == "" or newKey == "__unknown" or oldKey == newKey then
+        return false
+    end
+    if not IsIncompleteCharacterKey(oldKey, newKey) then
+        return false
+    end
+
+    Addon.characterKey = newKey
+    local characterDB = GetCharacterDropsDB(true)
+    if Addon.state and not StateHasDropRows() then
+        local settings = Addon.state.settings or Core.NormalizeSettings({})
+        Addon.state.history = Core.SnapshotHistoryForSave(characterDB.history, settings.maxHistoryGroups, settings.maxSessionRows)
+        Addon.state.sessionRows = Core.NormalizeSavedRows(characterDB.sessionRows, settings.maxSessionRows)
+        Addon.state.sessionAllRows = Core.NormalizeSavedAllRows(
+            characterDB.sessionAllRows,
+            characterDB.sessionRows,
+            settings.maxSessionRows
+        )
+    end
+    SaveDB()
+    RefreshRows()
+    return true
+end
+
 local function SendWhisper(row, isAuto)
     if not row or not row.looter or not row.itemLink then
         return
@@ -3850,6 +3898,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         end
         SaveDB()
     elseif event == "PLAYER_ENTERING_WORLD" then
+        RefreshCharacterStorageFromPlayerIdentity()
         local instanceName = SafeInstanceName()
         local instanceChanged = Addon.currentInstanceName and Addon.currentInstanceName ~= instanceName
         if instanceChanged then

@@ -856,6 +856,39 @@ local function testAccountWideSavedDropsDoNotLeakIntoCharacterHistory()
     assertEqual(#(h.env.DoYouNeedItDB.legacyAccountDrops.history or {}), 1, "legacy backup keeps old history groups")
 end
 
+local function testDelayedPlayerIdentityLoadsCharacterDrops()
+    local savedItem = "|cff0070dd|Hitem:30014:::::::::::::|h[Delayed Identity Sword]|h|r"
+    local h = Harness.new({
+        db = {
+            settings = { font = "Fonts\\FRIZQT__.TTF" },
+            characters = {
+                ["Player-Ravencrest"] = {
+                    sessionRows = {
+                        {
+                            id = "delayed-identity-session",
+                            looter = "Otherplayer-Ravencrest",
+                            itemLink = savedItem,
+                            equippedText = "Equipped: unknown",
+                            askable = true,
+                        },
+                    },
+                },
+            },
+        },
+    })
+    h.units.player = nil
+    h:loadAddon()
+    h:slash("history")
+    assertEqual(#h:visibleRows(), 0, "precondition: unavailable player identity does not load another character's session rows")
+
+    h:setUnit("player", { name = "Player", realm = "Ravencrest", guid = "PlayerGUID", classToken = "WARRIOR" })
+    h:fire("PLAYER_ENTERING_WORLD")
+
+    assertEqual(h.env.DoYouNeedItDB.currentCharacter, "Player-Ravencrest", "entering world repairs the saved character key")
+    assertEqual(#h:visibleRows(), 1, "entering world loads the real character's saved session rows")
+    assertEqual(h:visibleRows()[1].row.id, "delayed-identity-session", "delayed identity keeps the real character row payload")
+end
+
 local function testLegacySavedRowBackfillsLooterClassColor()
     local h = Harness.new({
         db = {
@@ -1245,6 +1278,7 @@ testDebugPersistenceIsOptIn()
 testDebugPersistenceLoadState()
 testLegacySavedAllGearFallbackDisplays()
 testAccountWideSavedDropsDoNotLeakIntoCharacterHistory()
+testDelayedPlayerIdentityLoadsCharacterDrops()
 testLegacySavedRowBackfillsLooterClassColor()
 testLegacyPlainItemTextDoesNotCreateDropHoverTarget()
 testLocalizedEquippedDisplayKeepsSavedTextStable()
