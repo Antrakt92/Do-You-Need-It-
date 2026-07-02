@@ -132,6 +132,10 @@ try {
         Remove-Item -LiteralPath $packageTemp -Recurse -Force -ErrorAction SilentlyContinue
     }
 
+    $defaultUploadZip = Join-Path (Get-Location) "dist\DoYouNeedIt-$tocVersion.zip"
+    New-Item -ItemType Directory -Path (Split-Path -Parent $defaultUploadZip) -Force | Out-Null
+    Set-Content -LiteralPath $defaultUploadZip -Value "stale-upload-check" -NoNewline
+
     $uploadDryRun = .\scripts\upload-curseforge.ps1 -DryRun | ConvertFrom-Json
     if ($uploadDryRun.ProjectId -ne 1595368) {
         throw "CurseForge upload dry run used unexpected project id: $($uploadDryRun.ProjectId)"
@@ -143,6 +147,16 @@ try {
     $expectedGameVersionNames = @("12.0.7", "12.1.0")
     if (($actualGameVersionNames -join ',') -ne ($expectedGameVersionNames -join ',')) {
         throw "CurseForge upload dry run used unexpected game versions: $($actualGameVersionNames -join ', ')"
+    }
+    $uploadArchive = [System.IO.Compression.ZipFile]::OpenRead($uploadDryRun.ZipPath)
+    try {
+        $uploadEntries = @($uploadArchive.Entries | ForEach-Object { $_.FullName -replace '\\', '/' })
+        if ($uploadEntries -notcontains "DoYouNeedIt/DoYouNeedIt.lua") {
+            throw "CurseForge upload dry run did not rebuild a valid addon package"
+        }
+    }
+    finally {
+        $uploadArchive.Dispose()
     }
 
     $forbidden = @(

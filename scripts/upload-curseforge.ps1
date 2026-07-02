@@ -111,11 +111,9 @@ function Resolve-UploadZip {
     }
 
     $defaultZip = Join-Path $repoRoot "dist\$addonName-$Version.zip"
-    if (-not (Test-Path -LiteralPath $defaultZip -PathType Leaf)) {
-        & (Join-Path $repoRoot "scripts\package.ps1") | Write-Host
-        if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
-            throw "scripts\package.ps1 failed with exit code $LASTEXITCODE"
-        }
+    & (Join-Path $repoRoot "scripts\package.ps1") | Write-Host
+    if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+        throw "scripts\package.ps1 failed with exit code $LASTEXITCODE"
     }
     if (-not (Test-Path -LiteralPath $defaultZip -PathType Leaf)) {
         throw "Expected package was not created: $defaultZip"

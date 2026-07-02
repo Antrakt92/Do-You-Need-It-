@@ -28,6 +28,7 @@
 - **Encounter loot handling is more defensive** — malformed or partial encounter loot payloads are ignored safely instead of corrupting the visible drop state.
 - **Stale item-load callbacks can no longer re-add cleared loot** — callbacks from older loot contexts are cancelled before they can resurrect outdated rows.
 - **Saved numeric data is hardened** — invalid `NaN` or infinite values are stripped during normalization instead of surviving into SavedVariables.
+- **CurseForge upload now rebuilds the default package before upload** — stale files in `dist` can no longer be reused accidentally when publishing without an explicit `-ZipPath`.
 
 ### Updated
 

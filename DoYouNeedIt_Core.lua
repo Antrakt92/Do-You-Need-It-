@@ -1478,7 +1478,7 @@ function Core.ResolvePlayerCanEquip(item, playerClassToken, apiCanEquip)
 
     local equipLoc = item.equipLoc or ""
     if UNIVERSAL_EQUIP_LOCS[equipLoc] == true then
-        return apiCanEquip == false and false or true
+        return true
     end
 
     local classID = tonumber(item.classID or item.itemClassID)

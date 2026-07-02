@@ -146,6 +146,11 @@ assertEqual(Core.ResolvePlayerCanEquip({
 }, "DEATHKNIGHT", nil), true, "cloak is universally askable")
 assertEqual(Core.ResolvePlayerCanEquip({
     classID = 4,
+    subclassID = 1,
+    equipLoc = "INVTYPE_CLOAK",
+}, "DEATHKNIGHT", false), true, "cloak remains askable even when usability API is conservative")
+assertEqual(Core.ResolvePlayerCanEquip({
+    classID = 4,
     subclassID = 0,
     equipLoc = "INVTYPE_FINGER",
 }, "PRIEST", nil), true, "ring is universally askable")
