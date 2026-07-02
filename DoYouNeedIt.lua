@@ -881,13 +881,18 @@ function Addon.ShouldSkipDuplicateLoot(looter, itemLink)
 
     local now = Now()
     Addon.CleanupRecentLootKeys(now)
-    local key = looter .. "\031" .. itemLink
-    if Addon.recentLootKeys[key] then
-        return true
+    local itemID = Core.ExtractItemID(itemLink)
+    local linkKey = "link\031" .. looter .. "\031" .. itemLink
+    local itemKey = itemID and ("item\031" .. looter .. "\031" .. tostring(itemID)) or nil
+    if Addon.recentLootKeys[linkKey] or (itemKey and Addon.recentLootKeys[itemKey]) then
+        return true, itemID
     end
 
-    Addon.recentLootKeys[key] = now
-    return false
+    Addon.recentLootKeys[linkKey] = now
+    if itemKey then
+        Addon.recentLootKeys[itemKey] = now
+    end
+    return false, itemID
 end
 
 function Addon.ResolveEncounterLootLooter(playerName)
@@ -1770,8 +1775,8 @@ function Addon.RemoveRowFromList(list, row)
     return removed
 end
 
-function Addon.FindTrackedLootRow(looter, itemLink)
-    if type(Addon.state) ~= "table" or type(looter) ~= "string" or type(itemLink) ~= "string" then
+function Addon.FindTrackedLootRowMatching(looter, matches)
+    if type(Addon.state) ~= "table" or type(looter) ~= "string" or type(matches) ~= "function" then
         return nil
     end
     local state = Addon.state
@@ -1786,7 +1791,7 @@ function Addon.FindTrackedLootRow(looter, itemLink)
         if type(list) == "table" then
             for rowIndex = #list, 1, -1 do
                 local row = list[rowIndex]
-                if type(row) == "table" and row.looter == looter and row.itemLink == itemLink then
+                if type(row) == "table" and row.looter == looter and matches(row) then
                     return row
                 end
             end
@@ -1804,7 +1809,7 @@ function Addon.FindTrackedLootRow(looter, itemLink)
                     if type(list) == "table" then
                         for rowIndex = #list, 1, -1 do
                             local row = list[rowIndex]
-                            if type(row) == "table" and row.looter == looter and row.itemLink == itemLink then
+                            if type(row) == "table" and row.looter == looter and matches(row) then
                                 return row
                             end
                         end
@@ -1816,17 +1821,54 @@ function Addon.FindTrackedLootRow(looter, itemLink)
     return nil
 end
 
+function Addon.FindTrackedLootRow(looter, itemLink)
+    if type(itemLink) ~= "string" then
+        return nil
+    end
+    return Addon.FindTrackedLootRowMatching(looter, function(row)
+        return row.itemLink == itemLink
+    end)
+end
+
+function Addon.FindTrackedLootRowByItemID(looter, itemID)
+    itemID = tonumber(itemID)
+    if not itemID then
+        return nil
+    end
+    return Addon.FindTrackedLootRowMatching(looter, function(row)
+        return tonumber(row.itemID) == itemID
+    end)
+end
+
+function Addon.UpdateTrackedLootLink(row, itemLink, source)
+    if type(row) ~= "table" or type(itemLink) ~= "string" or itemLink == "" or row.itemLink == itemLink then
+        return false
+    end
+    if source ~= "chat" and type(row.itemLink) == "string" and row.itemLink ~= "" then
+        return false
+    end
+
+    row.itemLink = itemLink
+    local itemID = Core.ExtractItemID(itemLink)
+    if itemID then
+        row.itemID = itemID
+    end
+    return true
+end
+
 function Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
     context = type(context) == "table" and context or {}
     if context.lootSource ~= "bonus_roll" then
         return false
     end
 
-    local row = Addon.FindTrackedLootRow(looter, itemLink)
+    local itemID = Core.ExtractItemID(itemLink)
+    local row = Addon.FindTrackedLootRow(looter, itemLink) or Addon.FindTrackedLootRowByItemID(looter, itemID)
     if not row then
         return false
     end
 
+    Addon.UpdateTrackedLootLink(row, itemLink, source)
     CancelPendingAuto(row)
     row.whisperInFlight = false
     row.whisperToken = nil
@@ -2610,11 +2652,23 @@ function Addon.HandleResolvedLoot(looter, itemLink, context, source)
         return
     end
 
-    if Addon.ShouldSkipDuplicateLoot(looter, itemLink) then
+    local duplicate, duplicateItemID = Addon.ShouldSkipDuplicateLoot(looter, itemLink)
+    if duplicate then
         if Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
             or Addon.UpgradePendingLootToBonus(looter, itemLink, context, source)
         then
             return
+        end
+        local row = Addon.FindTrackedLootRow(looter, itemLink) or Addon.FindTrackedLootRowByItemID(looter, duplicateItemID)
+        if Addon.UpdateTrackedLootLink(row, itemLink, source) then
+            RecordDiagnostic("duplicate_loot_link_updated", {
+                looter = looter,
+                itemLink = itemLink,
+                itemID = duplicateItemID,
+                source = source or "unknown",
+            })
+            SaveDB()
+            RefreshRows()
         end
         RecordDiagnostic("duplicate_loot", {
             looter = looter,

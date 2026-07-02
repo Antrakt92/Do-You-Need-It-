@@ -467,6 +467,34 @@ local function testEncounterAndChatLootDeduplicateSameDrop()
     assertEqual(#h:visibleRows(), 1, "same encounter/chat loot is visible once")
 end
 
+local function testEncounterAndChatLootDeduplicateSameItemWithDifferentLinks()
+    local h = Harness.new()
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    local encounterLink = "|cff0070dd|Hitem:22018:::::::::::::|h[Variant Event Spaulders]|h|r"
+    local chatLink = "|cffa335ee|Hitem:22018:::::::::::::|h[Variant Event Spaulders]|h|r"
+    h:addItem(22018, {
+        name = "Variant Event Spaulders",
+        equipLoc = "INVTYPE_SHOULDER",
+        classID = 4,
+        subclassID = 4,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 22018, encounterLink, 1, "Otherplayer", "PALADIN")
+    h:fireLoot("Otherplayer", chatLink)
+
+    assertEqual(#h.env.DoYouNeedItDB.sessionRows, 1, "same item id from encounter/chat is saved once in askable session")
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 1, "same item id from encounter/chat is saved once in all-gear session")
+    assertEqual(#h:visibleRows(), 1, "same item id from encounter/chat is visible once")
+    assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].itemLink, chatLink, "chat item link replaces the earlier encounter link")
+end
+
 local function testBonusLootChatIsAllGearOnlyWithSourceIcon()
     local h = Harness.new()
     h:loadAddon()
@@ -1386,6 +1414,7 @@ testPostEncounterLootMovesToHistoryAfterGrace()
 testEncounterLootReceivedCreatesLootRow()
 testEncounterLootUsesEventClassTokenWhenRosterClassMissing()
 testEncounterAndChatLootDeduplicateSameDrop()
+testEncounterAndChatLootDeduplicateSameItemWithDifferentLinks()
 testBonusLootChatIsAllGearOnlyWithSourceIcon()
 testBonusLootChatUpgradesEarlierEncounterRow()
 testLateBonusLootChatUpgradesOutsideDedupeWindow()
