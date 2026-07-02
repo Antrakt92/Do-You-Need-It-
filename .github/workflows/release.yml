@@ -7,7 +7,9 @@ on:
 
 jobs:
   package-and-upload:
-    if: ${{ github.event.created == true && github.event.forced == false && github.event.deleted == false }}
+    # CurseForge uploads are public marketplace side effects. Do not repeat them
+    # on manual workflow reruns for an already-processed tag.
+    if: ${{ github.event.created == true && github.event.forced == false && github.event.deleted == false && github.run_attempt == 1 }}
     runs-on: windows-latest
     permissions:
       contents: read
