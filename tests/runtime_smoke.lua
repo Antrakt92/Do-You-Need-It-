@@ -277,25 +277,29 @@ local function testLegacySavedAllGearFallbackDisplays()
     local h = Harness.new({
         db = {
             settings = { font = "Fonts\\FRIZQT__.TTF" },
-            sessionRows = {
-                {
-                    id = "legacy-session",
-                    looter = "Otherplayer-Ravencrest",
-                    itemLink = sessionItem,
-                    equippedText = "Equipped: unknown",
-                    askable = true,
-                },
-            },
-            history = {
-                {
-                    title = "Legacy Boss",
-                    rows = {
+            characters = {
+                ["Player-Ravencrest"] = {
+                    sessionRows = {
                         {
-                            id = "legacy-history",
+                            id = "legacy-session",
                             looter = "Otherplayer-Ravencrest",
-                            itemLink = historyItem,
+                            itemLink = sessionItem,
                             equippedText = "Equipped: unknown",
                             askable = true,
+                        },
+                    },
+                    history = {
+                        {
+                            title = "Legacy Boss",
+                            rows = {
+                                {
+                                    id = "legacy-history",
+                                    looter = "Otherplayer-Ravencrest",
+                                    itemLink = historyItem,
+                                    equippedText = "Equipped: unknown",
+                                    askable = true,
+                                },
+                            },
                         },
                     },
                 },
@@ -320,17 +324,73 @@ local function testLegacySavedAllGearFallbackDisplays()
     assertEqual(rows[1].row.id, "legacy-history", "legacy history fallback keeps row identity")
 end
 
-local function testLegacySavedRowBackfillsLooterClassColor()
+local function testAccountWideSavedDropsDoNotLeakIntoCharacterHistory()
     local h = Harness.new({
         db = {
             settings = { font = "Fonts\\FRIZQT__.TTF" },
             sessionRows = {
                 {
-                    id = "legacy-class-row",
+                    id = "account-wide-session",
                     looter = "Otherplayer-Ravencrest",
-                    itemLink = "|cff0070dd|Hitem:30003:::::::::::::|h[Legacy Class Sword]|h|r",
+                    itemLink = "|cff0070dd|Hitem:30011:::::::::::::|h[Other Character Session]|h|r",
                     equippedText = "Equipped: unknown",
                     askable = true,
+                },
+            },
+            sessionAllRows = {
+                {
+                    id = "account-wide-all",
+                    looter = "Otherplayer-Ravencrest",
+                    itemLink = "|cff0070dd|Hitem:30012:::::::::::::|h[Other Character All]|h|r",
+                    equippedText = "Equipped: unknown",
+                    askable = false,
+                },
+            },
+            history = {
+                {
+                    title = "Other Character Boss",
+                    rows = {
+                        {
+                            id = "account-wide-history",
+                            looter = "Otherplayer-Ravencrest",
+                            itemLink = "|cff0070dd|Hitem:30013:::::::::::::|h[Other Character History]|h|r",
+                            equippedText = "Equipped: unknown",
+                            askable = true,
+                        },
+                    },
+                },
+            },
+        },
+    })
+    h:loadAddon()
+
+    h:slash("history")
+    assertEqual(#h:visibleRows(), 0, "account-wide legacy session rows do not show for the current character")
+    h:slash("history")
+    assertEqual(#h:visibleRows(), 0, "account-wide legacy history groups do not show for the current character")
+    assertTruthy(h.env.DoYouNeedItDB.characters, "per-character drop buckets are created")
+    assertTruthy(h.env.DoYouNeedItDB.characters["Player-Ravencrest"], "current character gets a drop bucket")
+    assertEqual(#(h.env.DoYouNeedItDB.characters["Player-Ravencrest"].sessionRows or {}), 0, "current character session starts empty")
+    assertTruthy(h.env.DoYouNeedItDB.legacyAccountDrops, "old account-wide drops are preserved separately")
+    assertEqual(#(h.env.DoYouNeedItDB.legacyAccountDrops.sessionRows or {}), 1, "legacy backup keeps old session rows")
+    assertEqual(#(h.env.DoYouNeedItDB.legacyAccountDrops.history or {}), 1, "legacy backup keeps old history groups")
+end
+
+local function testLegacySavedRowBackfillsLooterClassColor()
+    local h = Harness.new({
+        db = {
+            settings = { font = "Fonts\\FRIZQT__.TTF" },
+            characters = {
+                ["Player-Ravencrest"] = {
+                    sessionRows = {
+                        {
+                            id = "legacy-class-row",
+                            looter = "Otherplayer-Ravencrest",
+                            itemLink = "|cff0070dd|Hitem:30003:::::::::::::|h[Legacy Class Sword]|h|r",
+                            equippedText = "Equipped: unknown",
+                            askable = true,
+                        },
+                    },
                 },
             },
         },
@@ -350,13 +410,17 @@ local function testLegacyPlainItemTextDoesNotCreateDropHoverTarget()
     local h = Harness.new({
         db = {
             settings = { font = "Fonts\\FRIZQT__.TTF" },
-            sessionRows = {
-                {
-                    id = "legacy-plain-item",
-                    looter = "Otherplayer-Ravencrest",
-                    itemLink = "Legacy Plain Item Name",
-                    equippedText = "Equipped: unknown",
-                    askable = true,
+            characters = {
+                ["Player-Ravencrest"] = {
+                    sessionRows = {
+                        {
+                            id = "legacy-plain-item",
+                            looter = "Otherplayer-Ravencrest",
+                            itemLink = "Legacy Plain Item Name",
+                            equippedText = "Equipped: unknown",
+                            askable = true,
+                        },
+                    },
                 },
             },
         },
@@ -389,13 +453,17 @@ local function testLocalizedEquippedDisplayKeepsSavedTextStable()
     local cached = Harness.new({
         db = {
             settings = { forceLocale = "ruRU", font = "Fonts\\ARIALN.TTF" },
-            sessionRows = {
-                {
-                    id = "cached-display",
-                    looter = "Otherplayer-Ravencrest",
-                    itemLink = "|cff0070dd|Hitem:30001:::::::::::::|h[Cached Drop]|h|r",
-                    equippedText = "Cached: " .. cachedLink,
-                    askable = true,
+            characters = {
+                ["Player-Ravencrest"] = {
+                    sessionRows = {
+                        {
+                            id = "cached-display",
+                            looter = "Otherplayer-Ravencrest",
+                            itemLink = "|cff0070dd|Hitem:30001:::::::::::::|h[Cached Drop]|h|r",
+                            equippedText = "Cached: " .. cachedLink,
+                            askable = true,
+                        },
+                    },
                 },
             },
         },
@@ -414,10 +482,14 @@ local function testHistoryMenuUsesLocalizedStaticLabels()
     local h = Harness.new({
         db = {
             settings = { forceLocale = "ruRU", font = "Fonts\\ARIALN.TTF" },
-            history = {
-                {
-                    rows = {},
-                    allRows = {},
+            characters = {
+                ["Player-Ravencrest"] = {
+                    history = {
+                        {
+                            rows = {},
+                            allRows = {},
+                        },
+                    },
                 },
             },
         },
@@ -676,6 +748,7 @@ testInstanceChangeHistoryTitleUsesActiveLocale()
 testDebugPersistenceIsOptIn()
 testDebugPersistenceLoadState()
 testLegacySavedAllGearFallbackDisplays()
+testAccountWideSavedDropsDoNotLeakIntoCharacterHistory()
 testLegacySavedRowBackfillsLooterClassColor()
 testLegacyPlainItemTextDoesNotCreateDropHoverTarget()
 testLocalizedEquippedDisplayKeepsSavedTextStable()

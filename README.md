@@ -12,7 +12,7 @@ The addon focuses on quiet signal:
 - Shows real item tooltips when you hover dropped or equipped item links in the loot window.
 - Colors looter names by class when roster data is available.
 - Keeps Cyrillic player names readable with dynamic font fallback even when the selected UI font lacks those glyphs.
-- Keeps a lightweight history for the current view, the last 50 saved session drops, and the last 10 completed boss/run groups.
+- Keeps per-character lightweight history for the current view, the last 50 saved session drops, and the last 10 completed boss/run groups.
 - Sends whispers only from row actions unless auto-whisper is explicitly enabled.
 - Includes a settings gear with auto-whisper, delay, whisper text, language, font, and font-size controls.
 - Previews language and font choices on hover, then rolls back if you close the picker without selecting.

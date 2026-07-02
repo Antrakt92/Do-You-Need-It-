@@ -290,6 +290,32 @@ local function SafePlayerName()
     return fullName or shortName
 end
 
+local function SafeRealmName()
+    if type(GetNormalizedRealmName) == "function" then
+        local normalized = CleanString(SafeCall(GetNormalizedRealmName))
+        if normalized then
+            return normalized
+        end
+    end
+    if type(GetRealmName) == "function" then
+        return CleanString(SafeCall(GetRealmName))
+    end
+    return nil
+end
+
+local function SafePlayerStorageKey()
+    local fullName, shortName = SafeUnitName("player")
+    local name = shortName or fullName
+    if fullName and fullName:find("-", 1, true) then
+        return fullName
+    end
+    local realm = SafeRealmName()
+    if name and realm then
+        return name .. "-" .. realm
+    end
+    return name or "__unknown"
+end
+
 local function SafeInstanceName()
     local name = SafeCall(GetInstanceInfo)
     return CleanString(name) or "Unknown Instance"
@@ -526,6 +552,49 @@ local function PersistDiagnostics()
     else
         DoYouNeedItDB.diagnostics = nil
     end
+end
+
+local function SavedDropListHasEntries(value)
+    return type(value) == "table" and #value > 0
+end
+
+local function PreserveLegacyAccountDrops(settings)
+    DoYouNeedItDB = DoYouNeedItDB or {}
+    if type(DoYouNeedItDB.legacyAccountDrops) == "table" then
+        return
+    end
+    if not SavedDropListHasEntries(DoYouNeedItDB.history)
+        and not SavedDropListHasEntries(DoYouNeedItDB.sessionRows)
+        and not SavedDropListHasEntries(DoYouNeedItDB.sessionAllRows) then
+        return
+    end
+
+    settings = Core.NormalizeSettings(settings or {})
+    DoYouNeedItDB.legacyAccountDrops = {
+        history = Core.SnapshotHistoryForSave(DoYouNeedItDB.history, settings.maxHistoryGroups, settings.maxSessionRows),
+        sessionRows = Core.SnapshotRowsForSave(DoYouNeedItDB.sessionRows, settings.maxSessionRows),
+        sessionAllRows = Core.SnapshotRowsForSave(DoYouNeedItDB.sessionAllRows, settings.maxSessionRows),
+    }
+end
+
+local function GetCharacterDropsDB(create)
+    DoYouNeedItDB = DoYouNeedItDB or {}
+    local key = Addon.characterKey or SafePlayerStorageKey()
+    Addon.characterKey = key
+    if type(DoYouNeedItDB.characters) ~= "table" then
+        if not create then
+            return {}, key
+        end
+        DoYouNeedItDB.characters = {}
+    end
+
+    if type(DoYouNeedItDB.characters[key]) ~= "table" then
+        if not create then
+            return {}, key
+        end
+        DoYouNeedItDB.characters[key] = {}
+    end
+    return DoYouNeedItDB.characters[key], key
 end
 
 local function RecordDiagnostic(stage, fields)
@@ -1282,10 +1351,18 @@ end
 local function SaveDB()
     DoYouNeedItDB = DoYouNeedItDB or {}
     local settings = Addon.state and Addon.state.settings or Core.NormalizeSettings({})
+    local characterDB = GetCharacterDropsDB(true)
+    local history = Addon.state and Core.SnapshotHistoryForSave(Addon.state.history, settings.maxHistoryGroups, settings.maxSessionRows) or {}
+    local sessionRows = Addon.state and Core.SnapshotRowsForSave(Addon.state.sessionRows, settings.maxSessionRows) or {}
+    local sessionAllRows = Addon.state and Core.SnapshotRowsForSave(Addon.state.sessionAllRows, settings.maxSessionRows) or {}
     DoYouNeedItDB.settings = settings
-    DoYouNeedItDB.history = Addon.state and Core.SnapshotHistoryForSave(Addon.state.history, settings.maxHistoryGroups, settings.maxSessionRows) or {}
-    DoYouNeedItDB.sessionRows = Addon.state and Core.SnapshotRowsForSave(Addon.state.sessionRows, settings.maxSessionRows) or {}
-    DoYouNeedItDB.sessionAllRows = Addon.state and Core.SnapshotRowsForSave(Addon.state.sessionAllRows, settings.maxSessionRows) or {}
+    characterDB.history = history
+    characterDB.sessionRows = sessionRows
+    characterDB.sessionAllRows = sessionAllRows
+    DoYouNeedItDB.currentCharacter = Addon.characterKey
+    DoYouNeedItDB.history = history
+    DoYouNeedItDB.sessionRows = sessionRows
+    DoYouNeedItDB.sessionAllRows = sessionAllRows
     PersistDiagnostics()
 end
 
@@ -3253,16 +3330,19 @@ end
 local function Initialize()
     DoYouNeedItDB = DoYouNeedItDB or {}
     local settings = Core.NormalizeSettings(DoYouNeedItDB.settings or {})
+    Addon.characterKey = SafePlayerStorageKey()
+    PreserveLegacyAccountDrops(settings)
+    local characterDB = GetCharacterDropsDB(true)
     if type(DoYouNeedItDB.settings) ~= "table" or type(DoYouNeedItDB.settings.font) ~= "string" or DoYouNeedItDB.settings.font == "" then
         settings.font = Core.LocaleAwareDefaultFont(STANDARD_TEXT_FONT)
     end
     Addon.state = Core.CreateState(settings)
     local fontChanged = MaybeAutoSwitchFont()
-    Addon.state.history = Core.SnapshotHistoryForSave(DoYouNeedItDB.history, Addon.state.settings.maxHistoryGroups, Addon.state.settings.maxSessionRows)
-    Addon.state.sessionRows = Core.NormalizeSavedRows(DoYouNeedItDB.sessionRows, Addon.state.settings.maxSessionRows)
+    Addon.state.history = Core.SnapshotHistoryForSave(characterDB.history, Addon.state.settings.maxHistoryGroups, Addon.state.settings.maxSessionRows)
+    Addon.state.sessionRows = Core.NormalizeSavedRows(characterDB.sessionRows, Addon.state.settings.maxSessionRows)
     Addon.state.sessionAllRows = Core.NormalizeSavedAllRows(
-        DoYouNeedItDB.sessionAllRows,
-        DoYouNeedItDB.sessionRows,
+        characterDB.sessionAllRows,
+        characterDB.sessionRows,
         Addon.state.settings.maxSessionRows
     )
     Addon.diagnostics = Addon.state.settings.debug == true and type(DoYouNeedItDB.diagnostics) == "table" and DoYouNeedItDB.diagnostics or {}
