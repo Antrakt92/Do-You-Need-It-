@@ -144,6 +144,7 @@ local LABELS_BY_LOCALE = {
         ["player_cannot_equip"] = "cannot equip",
         ["player_equip_unknown"] = "equip unknown",
         ["self_loot"] = "own loot",
+        ["bonus_roll"] = "bonus loot",
         ["not_tradeable"] = "not tradeable",
         ["looter_unresolved"] = "looter unresolved",
         ["Font may not render %s glyphs."] = "Font may not render %s glyphs.",
@@ -202,6 +203,7 @@ local LABELS_BY_LOCALE = {
         ["player_cannot_equip"] = "не надеть",
         ["player_equip_unknown"] = "неизвестно, можно ли надеть",
         ["self_loot"] = "свой лут",
+        ["bonus_roll"] = "доп. лут",
         ["not_tradeable"] = "не передать",
         ["looter_unresolved"] = "лутер не найден",
         ["Font may not render %s glyphs."] = "Шрифт может не отображать символы %s.",
@@ -278,6 +280,7 @@ local PERSISTED_ROW_KEYS = {
     instanceName = "string",
     encounterName = "string",
     timestamp = "number",
+    lootSource = "string",
     reason = "string",
     statusKey = "string",
     statusText = "string",
@@ -1211,6 +1214,8 @@ function Core.CreateLootMessagePatterns(formats)
     local patterns = {
         self = {},
         other = {},
+        bonusSelf = {},
+        bonusOther = {},
     }
 
     local selfPattern = lootFormatToPattern(formats.lootSelf, false)
@@ -1229,6 +1234,14 @@ function Core.CreateLootMessagePatterns(formats)
     if otherMultiplePattern then
         patterns.other[#patterns.other + 1] = otherMultiplePattern
     end
+    local bonusSelfPattern = lootFormatToPattern(formats.bonusSelf, false)
+    if bonusSelfPattern then
+        patterns.bonusSelf[#patterns.bonusSelf + 1] = bonusSelfPattern
+    end
+    local bonusOtherPattern = lootFormatToPattern(formats.bonusOther, true)
+    if bonusOtherPattern then
+        patterns.bonusOther[#patterns.bonusOther + 1] = bonusOtherPattern
+    end
 
     return patterns
 end
@@ -1236,6 +1249,29 @@ end
 function Core.ResolveLootMessageLooter(message, patterns, playerName)
     if type(message) ~= "string" or type(patterns) ~= "table" then
         return nil
+    end
+
+    local bonusSelfPatterns = type(patterns.bonusSelf) == "table" and patterns.bonusSelf or {}
+    for index = 1, #bonusSelfPatterns do
+        if message:match(bonusSelfPatterns[index]) then
+            return {
+                name = playerName,
+                isSelf = true,
+                lootSource = "bonus_roll",
+            }
+        end
+    end
+
+    local bonusOtherPatterns = type(patterns.bonusOther) == "table" and patterns.bonusOther or {}
+    for index = 1, #bonusOtherPatterns do
+        local name = message:match(bonusOtherPatterns[index])
+        if type(name) == "string" and name ~= "" then
+            return {
+                name = name,
+                isSelf = false,
+                lootSource = "bonus_roll",
+            }
+        end
     end
 
     local selfPatterns = type(patterns.self) == "table" and patterns.self or {}
@@ -1366,6 +1402,9 @@ function Core.ClassifyTradeCandidate(item, looter, playerName, settings)
     local gear = Core.ClassifyGearLoot(item, looter, settings)
     if not gear.visible then
         return gear
+    end
+    if item.lootSource == "bonus_roll" then
+        return { visible = false, reason = "bonus_roll" }
     end
     if isSelfLootName(looter, playerName) then
         return { visible = false, reason = "self_loot" }

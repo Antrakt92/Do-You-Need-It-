@@ -300,6 +300,99 @@ local function testEncounterAndChatLootDeduplicateSameDrop()
     assertEqual(#h:visibleRows(), 1, "same encounter/chat loot is visible once")
 end
 
+local function testBonusLootChatIsAllGearOnlyWithSourceIcon()
+    local h = Harness.new()
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    local item = h:addItem(22006, {
+        name = "Bonus Roll Gloves",
+        equipLoc = "INVTYPE_HAND",
+        classID = 4,
+        subclassID = 4,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fireBonusLoot("Otherplayer", item)
+
+    assertEqual(#h.env.DoYouNeedItDB.sessionRows, 0, "other bonus loot is not saved as askable")
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 1, "other bonus loot is saved in all gear")
+    assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].lootSource, "bonus_roll", "other bonus loot stores its source")
+    assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].statusKey, "bonus_roll", "other bonus loot stores a stable display status")
+
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "other bonus loot appears in the all gear view")
+    assertEqual(rows[1].row.askable, false, "visible bonus loot row is not askable")
+    assertEqual(rows[1].whisper:IsShown(), false, "visible bonus loot row has no Ask button")
+    assertTruthy(rows[1].rollIcon and rows[1].rollIcon:IsShown(), "visible bonus loot row shows the roll source icon")
+    assertEqual(rows[1].rollIcon.atlas, "lootroll-toast-icon-need-up", "visible bonus loot row uses Blizzard's roll atlas")
+
+    h.env.DoYouNeedItFrame.tabAskable:FireScript("OnClick")
+    assertEqual(#h:visibleRows(), 0, "other bonus loot is hidden from the askable tab")
+end
+
+local function testBonusLootChatUpgradesEarlierEncounterRow()
+    local h = Harness.new()
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    local item = h:addItem(22007, {
+        name = "Encounter Then Bonus Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 22007, item, 1, "Otherplayer", "PALADIN")
+    assertEqual(#h.env.DoYouNeedItDB.sessionRows, 1, "encounter loot starts as askable before source is known")
+
+    h:fireBonusLoot("Otherplayer", item)
+
+    assertEqual(#h.env.DoYouNeedItDB.sessionRows, 0, "later bonus loot chat removes the earlier askable row")
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 1, "later bonus loot chat keeps one all-gear row")
+    assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].lootSource, "bonus_roll", "later bonus loot chat source-tags the existing row")
+    assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].statusKey, "bonus_roll", "later bonus loot chat updates the existing row status")
+end
+
+local function testBonusLootChatUpgradesEarlierCompletedHistoryRow()
+    local h = Harness.new()
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    local item = h:addItem(22008, {
+        name = "History Then Bonus Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 22008, item, 1, "Otherplayer", "PALADIN")
+    h:fire("ENCOUNTER_END", 123, "Late Bonus Boss")
+    assertEqual(#h.env.DoYouNeedItDB.history, 1, "encounter completion saves the first loot row to history")
+    assertEqual(#h.env.DoYouNeedItDB.history[1].rows, 1, "history initially treats the earlier encounter row as askable")
+
+    h:fireBonusLoot("Otherplayer", item)
+
+    assertEqual(#h.env.DoYouNeedItDB.sessionRows, 0, "late bonus loot chat removes the completed row from session askable")
+    assertEqual(#h.env.DoYouNeedItDB.history[1].rows, 0, "late bonus loot chat removes the completed row from history askable")
+    assertEqual(#h.env.DoYouNeedItDB.history[1].allRows, 1, "late bonus loot chat keeps the completed row in history all gear")
+    assertEqual(h.env.DoYouNeedItDB.history[1].allRows[1].lootSource, "bonus_roll", "late bonus loot chat source-tags the completed history row")
+end
+
 local function testDebugPersistenceIsOptIn()
     local h = Harness.new()
     h:loadAddon()
@@ -829,6 +922,9 @@ testInstanceChangeHistoryTitleUsesActiveLocale()
 testChallengeCompletionKeepsEndLootInHistory()
 testEncounterLootReceivedCreatesLootRow()
 testEncounterAndChatLootDeduplicateSameDrop()
+testBonusLootChatIsAllGearOnlyWithSourceIcon()
+testBonusLootChatUpgradesEarlierEncounterRow()
+testBonusLootChatUpgradesEarlierCompletedHistoryRow()
 testDebugPersistenceIsOptIn()
 testDebugPersistenceLoadState()
 testLegacySavedAllGearFallbackDisplays()

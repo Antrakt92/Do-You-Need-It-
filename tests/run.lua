@@ -280,6 +280,18 @@ assertEqual(#cappedSavedHistory[1].rows, 3, "history save snapshot caps askable 
 assertEqual(cappedSavedHistory[1].rows[1].id, "askable-history-4", "history askable row cap keeps newest retained row first")
 assertEqual(#cappedSavedHistory[1].allRows, 3, "history save snapshot caps all-gear rows per group")
 assertEqual(cappedSavedHistory[1].allRows[1].id, "all-history-4", "history all-gear row cap keeps newest retained row first")
+local bonusSavedRows = Core.SnapshotRowsForSave({
+    {
+        id = "bonus-row",
+        looter = "Otherplayer",
+        itemLink = "|cff0070dd|Hitem:303:::::::::::::|h[Bonus Drop]|h|r",
+        lootSource = "bonus_roll",
+        statusKey = "bonus_roll",
+        askable = false,
+    },
+}, 10)
+assertEqual(bonusSavedRows[1].lootSource, "bonus_roll", "saved rows keep the bonus-roll source marker")
+assertEqual(bonusSavedRows[1].statusKey, "bonus_roll", "saved rows keep the bonus-roll display status")
 
 local emptyState = Core.CreateState({ maxHistoryGroups = 10 })
 Core.CompleteCurrentGroup(emptyState, { title = "No Drops", endedAt = 1 })
@@ -703,6 +715,8 @@ local lootPatterns = Core.CreateLootMessagePatterns({
     lootSelfMultiple = "You receive loot: %sx%d.",
     lootOther = "%s receives loot: %s.",
     lootOtherMultiple = "%s receives loot: %sx%d.",
+    bonusSelf = "You receive bonus loot: %s.",
+    bonusOther = "%s receives bonus loot: %s.",
 })
 local resolvedOther = Core.ResolveLootMessageLooter(
     "Otherplayer receives loot: |cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r.",
@@ -724,8 +738,25 @@ local resolvedSelf = Core.ResolveLootMessageLooter(
 )
 assertEqual(resolvedSelf.name, "Player-Ravencrest", "localized self loot returns player name")
 assertEqual(resolvedSelf.isSelf, true, "localized self loot marks self")
+local resolvedBonusOther = Core.ResolveLootMessageLooter(
+    "Otherplayer receives bonus loot: |cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r.",
+    lootPatterns,
+    "Player-Ravencrest"
+)
+assertEqual(resolvedBonusOther.name, "Otherplayer", "localized bonus loot patterns resolve other looter")
+assertEqual(resolvedBonusOther.isSelf, false, "localized other bonus loot is not self loot")
+assertEqual(resolvedBonusOther.lootSource, "bonus_roll", "localized other bonus loot is source-tagged")
+local resolvedBonusSelf = Core.ResolveLootMessageLooter(
+    "You receive bonus loot: |cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r.",
+    lootPatterns,
+    "Player-Ravencrest"
+)
+assertEqual(resolvedBonusSelf.name, "Player-Ravencrest", "localized self bonus loot returns player name")
+assertEqual(resolvedBonusSelf.isSelf, true, "localized self bonus loot marks self")
+assertEqual(resolvedBonusSelf.lootSource, "bonus_roll", "localized self bonus loot is source-tagged")
 local positionalPatterns = Core.CreateLootMessagePatterns({
     lootOther = "%1$s receives loot: %2$s.",
+    bonusOther = "%1$s receives bonus loot: %2$s.",
 })
 local resolvedPositional = Core.ResolveLootMessageLooter(
     "Otherplayer receives loot: |cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r.",
@@ -733,6 +764,13 @@ local resolvedPositional = Core.ResolveLootMessageLooter(
     "Player-Ravencrest"
 )
 assertEqual(resolvedPositional.name, "Otherplayer", "positional localized loot pattern resolves looter")
+local resolvedBonusPositional = Core.ResolveLootMessageLooter(
+    "Otherplayer receives bonus loot: |cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r.",
+    positionalPatterns,
+    "Player-Ravencrest"
+)
+assertEqual(resolvedBonusPositional.name, "Otherplayer", "positional localized bonus loot pattern resolves looter")
+assertEqual(resolvedBonusPositional.lootSource, "bonus_roll", "positional localized bonus loot pattern is source-tagged")
 assertEqual(Core.ExtractItemID("|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r"), 19019, "item id extracted from item link")
 
 local metadata = Core.BuildItemMetadata("|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r", {

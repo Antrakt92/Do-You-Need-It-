@@ -228,6 +228,14 @@ function FrameMethods:SetColorTexture(...)
     self.colorTexture = { ... }
 end
 
+function FrameMethods:SetTexture(texture)
+    self.texture = texture
+end
+
+function FrameMethods:SetAtlas(atlas)
+    self.atlas = atlas
+end
+
 function FrameMethods:SetBlendMode(blendMode)
     self.blendMode = blendMode
 end
@@ -477,6 +485,10 @@ function Harness:fireLoot(looterName, itemLink)
     self:fire("CHAT_MSG_LOOT", looterName .. " receives loot: " .. itemLink .. ".")
 end
 
+function Harness:fireBonusLoot(looterName, itemLink)
+    self:fire("CHAT_MSG_LOOT", looterName .. " receives bonus loot: " .. itemLink .. ".")
+end
+
 function Harness:findFrame(predicate, root)
     root = root or self.env.UIParent
     if predicate(root) then
@@ -605,6 +617,8 @@ function Harness.new(options)
     env.LOOT_ITEM_SELF_MULTIPLE = "You receive loot: %sx%d."
     env.LOOT_ITEM = "%s receives loot: %s."
     env.LOOT_ITEM_MULTIPLE = "%s receives loot: %sx%d."
+    env.LOOT_ITEM_BONUS_ROLL_SELF = "You receive bonus loot: %s."
+    env.LOOT_ITEM_BONUS_ROLL = "%s receives bonus loot: %s."
     env.ITEM_CLASS_WEAPON = 2
     env.ITEM_CLASS_ARMOR = 4
     env.LE_ITEM_CLASS_WEAPON = 2

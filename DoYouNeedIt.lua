@@ -812,16 +812,16 @@ local function FindLooterFromMessage(message, ...)
     local resolved = Core.ResolveLootMessageLooter(cleanMessage, Addon.lootPatterns, playerName)
     if resolved and resolved.name then
         if resolved.isSelf then
-            return resolved.name
+            return resolved.name, false, nil, resolved.lootSource
         end
         local canonical = Core.FindRosterNameInMessage(resolved.name, Addon.roster, playerName)
             or Core.ResolveRosterName(resolved.name, Addon.roster)
         if canonical then
-            return canonical, false
+            return canonical, false, nil, resolved.lootSource
         end
         local cleanName = CleanString(resolved.name)
         if cleanName and not Core.IsPlaceholderName(cleanName) then
-            return cleanName, true, "looter_unresolved"
+            return cleanName, true, "looter_unresolved", resolved.lootSource
         end
         return nil
     end
@@ -1388,6 +1388,16 @@ local function RefreshRows()
             rowFrame.row = row
             rowFrame.looter:SetText(row.looter or "?")
             ApplyLooterClassColor(rowFrame.looter, EnsureRowClassToken(row))
+            rowFrame.drop:ClearAllPoints()
+            if row.lootSource == "bonus_roll" then
+                rowFrame.rollIcon:Show()
+                rowFrame.drop:SetPoint("LEFT", rowFrame.rollIcon, "RIGHT", 4, 0)
+                rowFrame.drop:SetWidth(ROW_DROP_WIDTH - 18)
+            else
+                rowFrame.rollIcon:Hide()
+                rowFrame.drop:SetPoint("LEFT", rowFrame.looter, "RIGHT", 8, 0)
+                rowFrame.drop:SetWidth(ROW_DROP_WIDTH)
+            end
             rowFrame.drop:SetText(row.itemLink or "")
             rowFrame.equipped:SetText(DisplayEquippedText(row.equippedText))
             rowFrame.dropLink.itemLink = FirstItemLink(row.itemLink)
@@ -1413,6 +1423,7 @@ local function RefreshRows()
             rowFrame.row = nil
             rowFrame.dropLink.itemLink = nil
             rowFrame.equippedLink.itemLink = nil
+            rowFrame.rollIcon:Hide()
             rowFrame.dropLink:Hide()
             rowFrame.equippedLink:Hide()
             rowFrame:Hide()
@@ -1518,6 +1529,93 @@ local function CancelPendingAuto(row)
             row.statusText = nil
         end
     end
+end
+
+function Addon.RemoveRowFromList(list, row)
+    if type(list) ~= "table" or type(row) ~= "table" then
+        return false
+    end
+    local removed = false
+    for index = #list, 1, -1 do
+        if list[index] == row then
+            table.remove(list, index)
+            removed = true
+        end
+    end
+    return removed
+end
+
+function Addon.FindTrackedLootRow(looter, itemLink)
+    if type(Addon.state) ~= "table" or type(looter) ~= "string" or type(itemLink) ~= "string" then
+        return nil
+    end
+    local state = Addon.state
+    local lists = {
+        state.allRows,
+        state.currentRows,
+        state.sessionAllRows,
+        state.sessionRows,
+    }
+    for listIndex = 1, #lists do
+        local list = lists[listIndex]
+        if type(list) == "table" then
+            for rowIndex = #list, 1, -1 do
+                local row = list[rowIndex]
+                if type(row) == "table" and row.looter == looter and row.itemLink == itemLink then
+                    return row
+                end
+            end
+        end
+    end
+    return nil
+end
+
+function Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
+    context = type(context) == "table" and context or {}
+    if context.lootSource ~= "bonus_roll" then
+        return false
+    end
+
+    local row = Addon.FindTrackedLootRow(looter, itemLink)
+    if not row then
+        return false
+    end
+
+    CancelPendingAuto(row)
+    row.lootSource = "bonus_roll"
+    row.askable = false
+    row.reason = "bonus_roll"
+    row.statusKey = "bonus_roll"
+    row.statusSeconds = nil
+    row.statusText = nil
+    Addon.RemoveRowFromList(Addon.state.currentRows, row)
+    Addon.RemoveRowFromList(Addon.state.sessionRows, row)
+    local history = Addon.state.history
+    if type(history) == "table" then
+        for index = 1, #history do
+            local group = history[index]
+            if type(group) == "table" then
+                Addon.RemoveRowFromList(group.rows, row)
+            end
+        end
+    end
+
+    RecordDiagnostic("bonus_loot_upgrade", {
+        looter = looter,
+        itemLink = itemLink,
+        source = source or "unknown",
+    })
+    Addon.selectedTab = DoYouNeedItCore.GetAutoShowTabForRow(Addon.state, row)
+    Addon.selectedView = "current"
+    Addon.selectedHistoryIndex = nil
+    SaveDB()
+    RefreshRows()
+    Addon.ScheduleChallengeHistoryFinalizeIfRecent(context.source or source or "bonus_loot_upgrade")
+    if DoYouNeedItCore.ShouldAutoShowWindow(row) then
+        CreateUI()
+        Addon.frame:Show()
+    end
+    return true
 end
 
 local function ScheduleAutoWhisper(row)
@@ -1962,6 +2060,7 @@ end
 local function AddTradeCandidate(looter, itemLink, metadata, context)
     context = type(context) == "table" and context or BuildDropContext(false)
     local playerName = SafePlayerName()
+    metadata.lootSource = context.lootSource
     local gearClassification = DoYouNeedItCore.ClassifyGearLoot(metadata, looter, Addon.state.settings)
     if not gearClassification.visible then
         RecordDiagnostic("filtered", {
@@ -1973,6 +2072,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
             quality = metadata and metadata.quality,
             bindType = metadata and metadata.bindType,
             playerCanEquip = metadata and metadata.playerCanEquip,
+            lootSource = context.lootSource,
         })
         return false, gearClassification.reason
     end
@@ -1991,6 +2091,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
             quality = metadata and metadata.quality,
             bindType = metadata and metadata.bindType,
             playerCanEquip = metadata and metadata.playerCanEquip,
+            lootSource = context.lootSource,
         })
     end
 
@@ -2004,6 +2105,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
         instanceName = context.instanceName or Addon.currentInstanceName or SafeInstanceName(),
         encounterName = context.encounterName,
         timestamp = context.timestamp or Now(),
+        lootSource = context.lootSource,
         reason = askable and "trade candidate" or classification.reason,
         statusKey = askable and "candidate" or (classification.reason or "not_askable"),
         equippedText = cachedEquippedText or UNKNOWN_EQUIPPED,
@@ -2025,6 +2127,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
         itemID = metadata.itemID,
         askable = askable,
         playerCanEquip = metadata.playerCanEquip,
+        lootSource = context.lootSource,
     })
     if not row.unsafe then
         RequestInspectForRow(row)
@@ -2211,7 +2314,12 @@ function Addon.HandleResolvedLoot(looter, itemLink, context, source)
         return
     end
 
+    context = type(context) == "table" and context or BuildDropContext(false)
+    context.source = source or context.source
     if Addon.ShouldSkipDuplicateLoot(looter, itemLink) then
+        if Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source) then
+            return
+        end
         RecordDiagnostic("duplicate_loot", {
             looter = looter,
             itemLink = itemLink,
@@ -2220,8 +2328,6 @@ function Addon.HandleResolvedLoot(looter, itemLink, context, source)
         return
     end
 
-    context = type(context) == "table" and context or BuildDropContext(false)
-    context.source = source or context.source
     local metadata = ReadItemMetadata(itemLink)
     if not metadata then
         RecordDiagnostic("metadata_pending", {
@@ -2243,8 +2349,9 @@ local function HandleLootMessage(message, ...)
     })
 
     local itemLink = ExtractItemLink(message)
-    local looter, unsafe, unsafeReason = FindLooterFromMessage(message, ...)
+    local looter, unsafe, unsafeReason, lootSource = FindLooterFromMessage(message, ...)
     local context = BuildDropContext(unsafe, unsafeReason)
+    context.lootSource = lootSource
     Addon.HandleResolvedLoot(looter, itemLink, context, "chat")
 end
 
@@ -2343,6 +2450,12 @@ local function CreateRow(parent, index)
     row.drop:SetJustifyH("LEFT")
     KeepOneLine(row.drop)
     RegisterFontString(row.drop, 11, nil, false, true)
+
+    row.rollIcon = row:CreateTexture(nil, "OVERLAY")
+    row.rollIcon:SetSize(14, 14)
+    row.rollIcon:SetPoint("LEFT", row.looter, "RIGHT", 6, 0)
+    row.rollIcon:SetAtlas("lootroll-toast-icon-need-up")
+    row.rollIcon:Hide()
 
     row.dropLink = CreateFrame("Button", nil, row)
     row.dropLink:SetPoint("LEFT", row.looter, "RIGHT", 6, 0)
@@ -3482,6 +3595,8 @@ local function Initialize()
         lootSelfMultiple = LOOT_ITEM_SELF_MULTIPLE,
         lootOther = LOOT_ITEM,
         lootOtherMultiple = LOOT_ITEM_MULTIPLE,
+        bonusSelf = LOOT_ITEM_BONUS_ROLL_SELF,
+        bonusOther = LOOT_ITEM_BONUS_ROLL,
     })
     while #Addon.state.history > Addon.state.settings.maxHistoryGroups do
         table.remove(Addon.state.history)
