@@ -363,6 +363,35 @@ local function testBonusLootChatUpgradesEarlierEncounterRow()
     assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].statusKey, "bonus_roll", "later bonus loot chat updates the existing row status")
 end
 
+local function testBonusLootChatUpgradesPendingEncounterRowBeforeItemLoads()
+    local h = Harness.new()
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    local item = h:addItem(22009, {
+        name = "Pending Then Bonus Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+        cacheLoaded = false,
+    })
+
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 22009, item, 1, "Otherplayer", "PALADIN")
+    assertEqual(#(h.env.DoYouNeedItDB.sessionRows or {}), 0, "uncached encounter loot waits for item metadata")
+    h:fireBonusLoot("Otherplayer", item)
+    h:runTimers(0, 10)
+
+    assertEqual(#h.env.DoYouNeedItDB.sessionRows, 0, "bonus loot source on a pending row keeps it out of askable")
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 1, "bonus loot source on a pending row still saves all gear")
+    assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].lootSource, "bonus_roll", "bonus loot source survives pending item load")
+    assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].statusKey, "bonus_roll", "pending bonus loot row renders with bonus status")
+end
+
 local function testBonusLootChatUpgradesEarlierCompletedHistoryRow()
     local h = Harness.new()
     h:loadAddon()
@@ -924,6 +953,7 @@ testEncounterLootReceivedCreatesLootRow()
 testEncounterAndChatLootDeduplicateSameDrop()
 testBonusLootChatIsAllGearOnlyWithSourceIcon()
 testBonusLootChatUpgradesEarlierEncounterRow()
+testBonusLootChatUpgradesPendingEncounterRowBeforeItemLoads()
 testBonusLootChatUpgradesEarlierCompletedHistoryRow()
 testDebugPersistenceIsOptIn()
 testDebugPersistenceLoadState()

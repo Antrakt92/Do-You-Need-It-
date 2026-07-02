@@ -1618,6 +1618,38 @@ function Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
     return true
 end
 
+function Addon.UpgradePendingLootToBonus(looter, itemLink, context, source)
+    context = type(context) == "table" and context or {}
+    if context.lootSource ~= "bonus_roll" or type(Addon.pendingItems) ~= "table" then
+        return false
+    end
+
+    local bucket = Addon.pendingItems[itemLink]
+    local waiters = type(bucket) == "table" and bucket.waiters or nil
+    if type(waiters) ~= "table" then
+        return false
+    end
+
+    local updated = false
+    for index = 1, #waiters do
+        local waiter = waiters[index]
+        if type(waiter) == "table" and waiter.looter == looter and type(waiter.context) == "table" then
+            waiter.context.lootSource = "bonus_roll"
+            waiter.context.source = waiter.context.source or context.source or source
+            updated = true
+        end
+    end
+
+    if updated then
+        RecordDiagnostic("bonus_loot_pending_upgrade", {
+            looter = looter,
+            itemLink = itemLink,
+            source = source or "unknown",
+        })
+    end
+    return updated
+end
+
 local function ScheduleAutoWhisper(row)
     local decision = Core.GetAutoWhisperDecision(Addon.state.settings, row)
     if not decision.shouldSchedule then
@@ -2317,7 +2349,9 @@ function Addon.HandleResolvedLoot(looter, itemLink, context, source)
     context = type(context) == "table" and context or BuildDropContext(false)
     context.source = source or context.source
     if Addon.ShouldSkipDuplicateLoot(looter, itemLink) then
-        if Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source) then
+        if Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
+            or Addon.UpgradePendingLootToBonus(looter, itemLink, context, source)
+        then
             return
         end
         RecordDiagnostic("duplicate_loot", {
