@@ -1002,6 +1002,10 @@ function Core.ResolveFontSize(baseSize, selectedSize)
     return math.floor(clamp(resolved, DEFAULTS.minFontSize, DEFAULTS.maxFontSize) + 0.5)
 end
 
+local groupTitle
+local appendUniqueRows
+local matchingRecentHistoryGroup
+
 function Core.NormalizeSavedRows(rows, limit)
     return snapshotRowsForSave(rows, limit or DEFAULTS.maxSessionRows)
 end
@@ -1014,7 +1018,7 @@ function Core.SnapshotRowsForSave(rows, limit)
     return snapshotRowsForSave(rows, limit or DEFAULTS.maxSessionRows)
 end
 
-function Core.SnapshotHistoryForSave(history, limit, rowLimit)
+function Core.SnapshotHistoryForSave(history, limit, rowLimit, mergeWindow, locale)
     local saved = {}
     local perGroupRowLimit = rowLimit or DEFAULTS.maxSessionRows
     if type(history) == "table" then
@@ -1024,7 +1028,37 @@ function Core.SnapshotHistoryForSave(history, limit, rowLimit)
                 local savedGroup = copyPrimitiveFields(group, PERSISTED_GROUP_KEYS)
                 savedGroup.rows = snapshotRowsForSave(group.rows, perGroupRowLimit)
                 savedGroup.allRows = snapshotRowsForSaveWithFallback(group.allRows, group.rows, perGroupRowLimit)
-                saved[#saved + 1] = savedGroup
+                local latest = saved[#saved]
+                if matchingRecentHistoryGroup(latest, {
+                    instanceName = savedGroup.instanceName,
+                    encounterName = savedGroup.encounterName,
+                    endedAt = savedGroup.endedAt,
+                    mergeWindow = mergeWindow,
+                }) then
+                    latest.rows = appendUniqueRows(latest.rows, savedGroup.rows)
+                    latest.allRows = appendUniqueRows(latest.allRows, savedGroup.allRows)
+                    pruneListStart(latest.rows, perGroupRowLimit)
+                    pruneListStart(latest.allRows, perGroupRowLimit)
+                    local latestStartedAt = tonumber(latest.startedAt)
+                    local savedStartedAt = tonumber(savedGroup.startedAt)
+                    if savedStartedAt and (not latestStartedAt or savedStartedAt < latestStartedAt) then
+                        latest.startedAt = savedStartedAt
+                    end
+                    local latestEndedAt = tonumber(latest.endedAt)
+                    local savedEndedAt = tonumber(savedGroup.endedAt)
+                    if savedEndedAt and (not latestEndedAt or savedEndedAt > latestEndedAt) then
+                        latest.endedAt = savedEndedAt
+                    end
+                    local mergedDropCount = #latest.allRows > 0 and #latest.allRows or #latest.rows
+                    latest.title = groupTitle({
+                        instanceName = latest.instanceName,
+                        encounterName = latest.encounterName,
+                        title = latest.title,
+                        locale = locale,
+                    }, mergedDropCount)
+                else
+                    saved[#saved + 1] = savedGroup
+                end
             end
         end
     end
@@ -1497,7 +1531,7 @@ local function localizedDropNoun(locale, dropCount)
     return Core.GetLocaleLabel(dropCount == 1 and "drop_one" or "drop_many", locale)
 end
 
-local function groupTitle(meta, dropCount)
+groupTitle = function(meta, dropCount)
     local instanceName = type(meta.instanceName) == "string" and meta.instanceName ~= "" and meta.instanceName or nil
     local encounterName = type(meta.encounterName) == "string" and meta.encounterName ~= "" and meta.encounterName or nil
     local title = type(meta.title) == "string" and meta.title ~= "" and meta.title or nil
@@ -1516,6 +1550,69 @@ local function groupTitle(meta, dropCount)
 
     local noun = localizedDropNoun(locale, dropCount)
     return base .. " (" .. tostring(dropCount) .. " " .. noun .. ")"
+end
+
+local function rowMergeKey(row)
+    if type(row) ~= "table" then
+        return nil
+    end
+    if type(row.id) == "string" and row.id ~= "" then
+        return "id\031" .. row.id
+    end
+    local itemID = tonumber(row.itemID) or Core.ExtractItemID(row.itemLink)
+    return tostring(row.looter or "") .. "\031"
+        .. tostring(itemID or row.itemLink or "") .. "\031"
+        .. tostring(row.timestamp or "")
+end
+
+appendUniqueRows = function(target, rows)
+    target = type(target) == "table" and target or {}
+    if type(rows) ~= "table" then
+        return target
+    end
+
+    local seen = {}
+    for index = 1, #target do
+        local key = rowMergeKey(target[index])
+        if key then
+            seen[key] = true
+        end
+    end
+    for index = 1, #rows do
+        local row = rows[index]
+        local key = rowMergeKey(row)
+        if key and not seen[key] then
+            target[#target + 1] = row
+            seen[key] = true
+        end
+    end
+    return target
+end
+
+matchingRecentHistoryGroup = function(group, meta)
+    if type(group) ~= "table" or type(meta) ~= "table" then
+        return false
+    end
+    local window = tonumber(meta.mergeWindow)
+    if not window or window < 0 then
+        return false
+    end
+
+    local instanceName = type(meta.instanceName) == "string" and meta.instanceName ~= "" and meta.instanceName or nil
+    local encounterName = type(meta.encounterName) == "string" and meta.encounterName ~= "" and meta.encounterName or nil
+    if not instanceName and not encounterName then
+        return false
+    end
+    if instanceName and group.instanceName ~= instanceName then
+        return false
+    end
+    if encounterName and group.encounterName ~= encounterName then
+        return false
+    end
+
+    local groupEndedAt = tonumber(group.endedAt)
+    local endedAt = tonumber(meta.endedAt)
+    return groupEndedAt ~= nil and endedAt ~= nil and math.abs(endedAt - groupEndedAt) <= window
 end
 
 function Core.CompleteCurrentGroup(state, groupMeta)
@@ -1545,6 +1642,28 @@ function Core.CompleteCurrentGroup(state, groupMeta)
         rows = rows,
         allRows = allRows,
     }
+
+    local latest = type(state.history) == "table" and state.history[1] or nil
+    if matchingRecentHistoryGroup(latest, groupMeta) then
+        latest.rows = appendUniqueRows(latest.rows, rows)
+        latest.allRows = appendUniqueRows(latest.allRows, allRows)
+        pruneListStart(latest.rows, rowLimit)
+        pruneListStart(latest.allRows, rowLimit)
+        latest.instanceName = latest.instanceName or group.instanceName
+        latest.encounterName = latest.encounterName or group.encounterName
+        latest.startedAt = latest.startedAt or group.startedAt
+        latest.endedAt = group.endedAt or latest.endedAt
+        local mergedDropCount = #latest.allRows > 0 and #latest.allRows or #latest.rows
+        latest.title = groupTitle({
+            instanceName = latest.instanceName,
+            encounterName = latest.encounterName,
+            title = latest.title,
+            locale = groupMeta.locale,
+        }, mergedDropCount)
+        state.currentRows = {}
+        state.allRows = {}
+        return latest
+    end
 
     table.insert(state.history, 1, group)
     local limit = state.settings and state.settings.maxHistoryGroups or DEFAULTS.maxHistoryGroups

@@ -422,6 +422,47 @@ local function testPostEncounterLootMovesToHistoryAfterGrace()
     assertEqual(#h.env.DoYouNeedItDB.history[1].allRows, 1, "post-encounter history keeps all-gear loot")
 end
 
+local function testLatePostEncounterLootMergesIntoLatestHistoryGroup()
+    local h = Harness.new()
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    h:fire("ENCOUNTER_END", 779, "Split Loot Boss")
+    local firstItem = h:addItem(22020, {
+        name = "First Split Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+    local lateItem = h:addItem(22021, {
+        name = "Late Split Gloves",
+        equipLoc = "INVTYPE_HAND",
+        classID = 4,
+        subclassID = 4,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 779, 22020, firstItem, 1, "Otherplayer", "PALADIN")
+    h:runTimers(3)
+    assertEqual(#h.env.DoYouNeedItDB.history, 1, "precondition: first post-encounter batch creates one group")
+
+    h:fireBonusLoot("Secondplayer", lateItem)
+    h:runTimers(3)
+
+    assertEqual(#h.env.DoYouNeedItDB.history, 1, "late post-encounter loot merges into the latest matching group")
+    assertEqual(#h.env.DoYouNeedItDB.history[1].allRows, 2, "merged history group keeps first and late all-gear rows")
+    assertEqual(#h.env.DoYouNeedItDB.history[1].rows, 1, "bonus late loot does not become askable after merging")
+    assertTruthy(h.env.DoYouNeedItDB.history[1].title:find("%(2 drops%)"), "merged history title updates the drop count")
+end
+
 local function testCurrentViewFallsBackToLatestHistoryGroup()
     local h = Harness.new()
     h:loadAddon()
@@ -960,6 +1001,57 @@ local function testLegacySavedAllGearFallbackDisplays()
     assertEqual(rows[1].row.id, "legacy-history", "legacy history fallback keeps row identity")
 end
 
+local function testSavedDuplicateHistoryGroupsMergeOnLoad()
+    local h = Harness.new({
+        db = {
+            settings = { font = "Fonts\\FRIZQT__.TTF" },
+            characters = {
+                ["Player-Ravencrest"] = {
+                    history = {
+                        {
+                            title = "Ruby Life Pools - Split Boss (1 drop)",
+                            instanceName = "Ruby Life Pools",
+                            encounterName = "Split Boss",
+                            endedAt = 105,
+                            rows = {},
+                            allRows = {
+                                {
+                                    id = "saved-late-row",
+                                    looter = "Secondplayer-Ravencrest",
+                                    itemLink = "|cffa335ee|Hitem:30021:::::::::::::|h[Saved Late Gloves]|h|r",
+                                    equippedText = "Equipped: unknown",
+                                    askable = false,
+                                },
+                            },
+                        },
+                        {
+                            title = "Ruby Life Pools - Split Boss (1 drop)",
+                            instanceName = "Ruby Life Pools",
+                            encounterName = "Split Boss",
+                            endedAt = 100,
+                            rows = {
+                                {
+                                    id = "saved-first-row",
+                                    looter = "Otherplayer-Ravencrest",
+                                    itemLink = "|cffa335ee|Hitem:30020:::::::::::::|h[Saved First Sword]|h|r",
+                                    equippedText = "Equipped: unknown",
+                                    askable = true,
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    })
+    h:loadAddon()
+
+    h.env.DoYouNeedItFrame.historyButton:FireScript("OnClick")
+
+    assertEqual(#h.menuButtons, 3, "duplicate saved history groups load as one menu entry")
+    assertTruthy(h.menuButtons[3].text:find("%(2 drops%)"), "merged saved history title updates the drop count")
+end
+
 local function testAccountWideSavedDropsDoNotLeakIntoCharacterHistory()
     local h = Harness.new({
         db = {
@@ -1475,6 +1567,7 @@ testInstanceChangeCompletesCurrentGroup()
 testInstanceChangeHistoryTitleUsesActiveLocale()
 testChallengeCompletionKeepsEndLootInHistory()
 testPostEncounterLootMovesToHistoryAfterGrace()
+testLatePostEncounterLootMergesIntoLatestHistoryGroup()
 testCurrentViewFallsBackToLatestHistoryGroup()
 testEncounterLootReceivedCreatesLootRow()
 testEncounterLootUsesEventClassTokenWhenRosterClassMissing()
@@ -1491,6 +1584,7 @@ testBonusLootChatUpgradesHistoryRowAfterSessionPrune()
 testDebugPersistenceIsOptIn()
 testDebugPersistenceLoadState()
 testLegacySavedAllGearFallbackDisplays()
+testSavedDuplicateHistoryGroupsMergeOnLoad()
 testAccountWideSavedDropsDoNotLeakIntoCharacterHistory()
 testDelayedPlayerIdentityLoadsCharacterDrops()
 testDelayedPlayerIdentityDoesNotEraseExistingCharacterHistory()

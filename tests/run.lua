@@ -335,6 +335,36 @@ assertEqual(#mixedGroup.allRows, 2, "history all gear keeps every gear row")
 assertEqual(#mixedState.currentRows, 0, "completion clears current askable rows")
 assertEqual(#mixedState.allRows, 0, "completion clears current all gear rows")
 
+local mergeState = Core.CreateState({ maxHistoryGroups = 10, maxSessionRows = 10 })
+Core.AddVisibleRow(mergeState, {
+    id = "merge-askable-row",
+    looter = "Otherplayer",
+    itemLink = "|cff0070dd|Hitem:110:::::::::::::|h[Merge Askable]|h|r",
+    askable = true,
+}, true)
+Core.CompleteCurrentGroup(mergeState, { instanceName = "Dungeon", encounterName = "Merge Boss", endedAt = 100, mergeWindow = 10 })
+Core.AddVisibleRow(mergeState, {
+    id = "merge-bonus-row",
+    looter = "Secondplayer",
+    itemLink = "|cff0070dd|Hitem:111:::::::::::::|h[Merge Bonus]|h|r",
+    lootSource = "bonus_roll",
+    statusKey = "bonus_roll",
+    askable = false,
+}, false)
+local mergedGroup = Core.CompleteCurrentGroup(mergeState, { instanceName = "Dungeon", encounterName = "Merge Boss", endedAt = 105, mergeWindow = 10 })
+assertEqual(#mergeState.history, 1, "matching recent history groups are merged")
+assertEqual(#mergedGroup.rows, 1, "merged group keeps askable rows filtered")
+assertEqual(#mergedGroup.allRows, 2, "merged group keeps late all-gear rows")
+assertEqual(mergedGroup.title, "Dungeon - Merge Boss (2 drops)", "merged group title updates the drop count")
+
+Core.AddVisibleRow(mergeState, {
+    id = "merge-later-row",
+    looter = "Thirdplayer",
+    itemLink = "|cff0070dd|Hitem:112:::::::::::::|h[Merge Later]|h|r",
+}, true)
+Core.CompleteCurrentGroup(mergeState, { instanceName = "Dungeon", encounterName = "Merge Boss", endedAt = 130, mergeWindow = 10 })
+assertEqual(#mergeState.history, 2, "same boss outside merge window creates a new history group")
+
 local localizedHistoryState = Core.CreateState({ maxHistoryGroups = 10, maxSessionRows = 10 })
 Core.AddVisibleRow(localizedHistoryState, {
     id = "localized-row-1",

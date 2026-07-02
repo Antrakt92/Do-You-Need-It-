@@ -591,7 +591,13 @@ local function PreserveLegacyAccountDrops(settings)
 
     settings = Core.NormalizeSettings(settings or {})
     DoYouNeedItDB.legacyAccountDrops = {
-        history = Core.SnapshotHistoryForSave(DoYouNeedItDB.history, settings.maxHistoryGroups, settings.maxSessionRows),
+        history = Core.SnapshotHistoryForSave(
+            DoYouNeedItDB.history,
+            settings.maxHistoryGroups,
+            settings.maxSessionRows,
+            ENCOUNTER_LOOT_GRACE,
+            Core.ResolveActiveLocale(settings.forceLocale, ClientLocale())
+        ),
         sessionRows = Core.SnapshotRowsForSave(DoYouNeedItDB.sessionRows, settings.maxSessionRows),
         sessionAllRows = Core.SnapshotRowsForSave(DoYouNeedItDB.sessionAllRows, settings.maxSessionRows),
     }
@@ -1561,7 +1567,13 @@ local function SaveDB()
     DoYouNeedItDB = DoYouNeedItDB or {}
     local settings = Addon.state and Addon.state.settings or Core.NormalizeSettings({})
     local characterDB = GetCharacterDropsDB(true)
-    local history = Addon.state and Core.SnapshotHistoryForSave(Addon.state.history, settings.maxHistoryGroups, settings.maxSessionRows) or {}
+    local history = Addon.state and Core.SnapshotHistoryForSave(
+        Addon.state.history,
+        settings.maxHistoryGroups,
+        settings.maxSessionRows,
+        ENCOUNTER_LOOT_GRACE,
+        ActiveLocale()
+    ) or {}
     local sessionRows = Addon.state and Core.SnapshotRowsForSave(Addon.state.sessionRows, settings.maxSessionRows) or {}
     local sessionAllRows = Addon.state and Core.SnapshotRowsForSave(Addon.state.sessionAllRows, settings.maxSessionRows) or {}
     DoYouNeedItDB.settings = settings
@@ -1684,7 +1696,13 @@ local function RefreshCharacterStorageFromPlayerIdentity()
     local characterDB = GetCharacterDropsDB(true)
     if Addon.state then
         local settings = Addon.state.settings or Core.NormalizeSettings({})
-        local savedHistory = Core.SnapshotHistoryForSave(characterDB.history, settings.maxHistoryGroups, settings.maxSessionRows)
+        local savedHistory = Core.SnapshotHistoryForSave(
+            characterDB.history,
+            settings.maxHistoryGroups,
+            settings.maxSessionRows,
+            ENCOUNTER_LOOT_GRACE,
+            ActiveLocale()
+        )
         local savedSessionRows = Core.NormalizeSavedRows(characterDB.sessionRows, settings.maxSessionRows)
         local savedSessionAllRows = Core.NormalizeSavedAllRows(
             characterDB.sessionAllRows,
@@ -2755,6 +2773,7 @@ function Addon.CompleteCurrentGroup(encounterName)
         locale = ActiveLocale(),
         startedAt = Addon.currentEncounterStartedAt,
         endedAt = Now(),
+        mergeWindow = ENCOUNTER_LOOT_GRACE,
     })
     Addon.selectedView = "history"
     Addon.selectedHistoryIndex = 1
@@ -4019,7 +4038,13 @@ local function Initialize()
     end
     Addon.state = Core.CreateState(settings)
     local fontChanged = MaybeAutoSwitchFont()
-    Addon.state.history = Core.SnapshotHistoryForSave(characterDB.history, Addon.state.settings.maxHistoryGroups, Addon.state.settings.maxSessionRows)
+    Addon.state.history = Core.SnapshotHistoryForSave(
+        characterDB.history,
+        Addon.state.settings.maxHistoryGroups,
+        Addon.state.settings.maxSessionRows,
+        ENCOUNTER_LOOT_GRACE,
+        ActiveLocale()
+    )
     Addon.state.sessionRows = Core.NormalizeSavedRows(characterDB.sessionRows, Addon.state.settings.maxSessionRows)
     Addon.state.sessionAllRows = Core.NormalizeSavedAllRows(
         characterDB.sessionAllRows,
