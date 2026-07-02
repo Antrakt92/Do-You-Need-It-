@@ -72,6 +72,15 @@ Build a local addon zip with:
 
 The package is written to `dist\DoYouNeedIt-<version>.zip` with `DoYouNeedIt/` as the zip root. It includes the addon TOC, Lua files, bundled runtime libraries, README, changelog, license, and third-party notices, while excluding tests, scripts, and local development files. The main check script also validates this package shape.
 
+Upload a prepared package to CurseForge with:
+
+```powershell
+$env:CURSEFORGE_API_TOKEN = "<token from CurseForge>"
+.\scripts\upload-curseforge.ps1
+```
+
+The upload script reads `## X-Curse-Project-ID`, `## Version`, and `## Interface` from the TOC, uses the top matching `CHANGELOG.md` entry, and sends the package through CurseForge's upload API. Run `.\scripts\upload-curseforge.ps1 -DryRun` to inspect the metadata without uploading.
+
 ## License
 
 MIT. This project is intended to be freely modifiable and redistributable under the license terms.

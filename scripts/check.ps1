@@ -31,6 +31,9 @@ try {
         throw "DoYouNeedIt.toc is missing ## Version"
     }
     $tocVersion = $Matches[1]
+    if ($tocText -notmatch '(?m)^##\s*X-Curse-Project-ID:\s*1595368\s*$') {
+        throw "DoYouNeedIt.toc is missing the expected CurseForge project id"
+    }
     if ($coreText -notmatch 'Core\.VERSION\s*=\s*"([^"]+)"') {
         throw "DoYouNeedIt_Core.lua is missing Core.VERSION"
     }
@@ -104,6 +107,17 @@ try {
     }
     finally {
         Remove-Item -LiteralPath $packageTemp -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    $uploadDryRun = .\scripts\upload-curseforge.ps1 -DryRun | ConvertFrom-Json
+    if ($uploadDryRun.ProjectId -ne 1595368) {
+        throw "CurseForge upload dry run used unexpected project id: $($uploadDryRun.ProjectId)"
+    }
+    if ($uploadDryRun.Metadata.releaseType -ne 'release') {
+        throw "CurseForge upload dry run used unexpected release type: $($uploadDryRun.Metadata.releaseType)"
+    }
+    if (@($uploadDryRun.Metadata.gameVersionNames).Count -lt 1) {
+        throw "CurseForge upload dry run did not include game versions"
     }
 
     $forbidden = @(

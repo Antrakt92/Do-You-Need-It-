@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  package-and-upload:
+    if: ${{ github.event.created == true && github.event.forced == false && github.event.deleted == false }}
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag matches addon version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_NAME -notmatch '^v(.+)$') {
+            throw "Release tag must use v<version>, got $env:GITHUB_REF_NAME"
+          }
+          $tagVersion = $Matches[1]
+          $toc = Get-Content -LiteralPath .\DoYouNeedIt.toc -Raw
+          if ($toc -notmatch '(?m)^##\s*Version:\s*(\S+)\s*$') {
+            throw "DoYouNeedIt.toc is missing ## Version"
+          }
+          $tocVersion = $Matches[1]
+          if ($tocVersion -ne $tagVersion) {
+            throw "Tag/version mismatch: tag=$tagVersion toc=$tocVersion"
+          }
+
+      - name: Check addon
+        shell: pwsh
+        run: .\scripts\check.ps1
+
+      - name: Package addon
+        shell: pwsh
+        run: .\scripts\package.ps1
+
+      - name: Upload to CurseForge
+        shell: pwsh
+        env:
+          CURSEFORGE_API_TOKEN: ${{ secrets.CURSEFORGE_API_TOKEN }}
+        run: .\scripts\upload-curseforge.ps1

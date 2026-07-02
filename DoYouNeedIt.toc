@@ -4,6 +4,7 @@
 ## Author: Antrakt92
 ## Version: 0.2.0
 ## SavedVariables: DoYouNeedItDB
+## X-Curse-Project-ID: 1595368
 
 libs\LibStub\LibStub.lua
 libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
