@@ -67,6 +67,64 @@ local function testSlashTestRowsAndManualWhisper()
     assertEqual(rows[1].row.manualWhispered, true, "manual Ask marks row sent")
 end
 
+local function testLootSlashCommandsLeaveEmbeddedSettingsMode()
+    local h = Harness.new()
+    h:loadAddon()
+    h:slash("settings")
+
+    assertEqual(h.env.DoYouNeedItSettingsFrame:IsShown(), true, "precondition: settings panel is open")
+
+    h:slash("test")
+    assertEqual(h.env.DoYouNeedItSettingsFrame:IsShown(), false, "test command leaves embedded settings mode")
+    assertEqual(h.env.DoYouNeedItFrame.tabAskable:IsShown(), true, "test command restores loot tabs")
+    assertEqual(#h:visibleRows(), 1, "test command shows the test loot row")
+
+    h:slash("settings")
+    assertEqual(h.env.DoYouNeedItSettingsFrame:IsShown(), true, "precondition: settings panel reopens")
+
+    h:slash("history")
+    assertEqual(h.env.DoYouNeedItSettingsFrame:IsShown(), false, "history command leaves embedded settings mode")
+    assertEqual(h.env.DoYouNeedItFrame.historyButton:IsShown(), true, "history command restores the history selector")
+end
+
+local function testLootDropLeavesEmbeddedSettingsMode()
+    local h = Harness.new()
+    h:loadAddon()
+    h:slash("settings")
+
+    local item = h:addItem(22100, {
+        name = "Settings Interrupt Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fireLoot("Otherplayer", item)
+
+    assertEqual(h.env.DoYouNeedItFrame:IsShown(), true, "loot drop keeps the main frame visible")
+    assertEqual(h.env.DoYouNeedItSettingsFrame:IsShown(), false, "loot drop leaves embedded settings mode")
+    assertEqual(h.env.DoYouNeedItFrame.tabAskable:IsShown(), true, "loot drop restores loot tabs")
+    assertEqual(#h:visibleRows(), 1, "loot drop shows the visible loot row")
+end
+
+local function testLeavingSettingsClosesSharedDropdown()
+    local h = Harness.new()
+    h:loadAddon()
+    h:slash("settings")
+
+    h.env.UIDROPDOWNMENU_OPEN_MENU = h.env.DoYouNeedItLanguageDropdown
+    h.env.DropDownList1:Show()
+
+    h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
+
+    assertEqual(h.env.DropDownList1:IsShown(), false, "leaving settings closes the shared Blizzard dropdown")
+    assertEqual(h.env.UIDROPDOWNMENU_OPEN_MENU, nil, "leaving settings clears the shared dropdown owner")
+end
+
 local function testCustomWhisperTemplateIsUsedForManualAsk()
     local h = Harness.new({
         db = {
@@ -1131,6 +1189,9 @@ end
 
 testLoadAndSettings()
 testSlashTestRowsAndManualWhisper()
+testLootSlashCommandsLeaveEmbeddedSettingsMode()
+testLootDropLeavesEmbeddedSettingsMode()
+testLeavingSettingsClosesSharedDropdown()
 testCustomWhisperTemplateIsUsedForManualAsk()
 testManualWhisperFailureLeavesRowRetryable()
 testMainWindowLayoutBoundsLongText()

@@ -1720,6 +1720,7 @@ function Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
     Addon.selectedTab = DoYouNeedItCore.GetAutoShowTabForRow(Addon.state, row)
     Addon.selectedView = "current"
     Addon.selectedHistoryIndex = nil
+    Addon.EnterLootMode()
     SaveDB()
     RefreshRows()
     if not Addon.ScheduleChallengeHistoryFinalizeIfRecent(context.source or source or "bonus_loot_upgrade") then
@@ -2284,6 +2285,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
     Addon.selectedTab = DoYouNeedItCore.GetAutoShowTabForRow(Addon.state, row)
     Addon.selectedView = "current"
     Addon.selectedHistoryIndex = nil
+    Addon.EnterLootMode()
     SaveDB()
     RefreshRows()
     if not Addon.ScheduleChallengeHistoryFinalizeIfRecent(context.source or "post_challenge_loot") then
@@ -2326,6 +2328,7 @@ local function AddTestRow()
     Addon.selectedTab = "askable"
     Addon.selectedView = "current"
     Addon.selectedHistoryIndex = nil
+    Addon.EnterLootMode()
     RefreshRows()
     if DoYouNeedItCore.ShouldAutoShowWindow(row) then
         CreateUI()
@@ -2541,6 +2544,7 @@ function Addon.CompleteCurrentGroup(encounterName)
     Addon.selectedHistoryIndex = 1
     Addon.challengeFinalizeToken = nil
     Addon.recentEncounterFinalizeToken = nil
+    Addon.EnterLootMode()
     SaveDB()
     RefreshRows()
 end
@@ -2548,11 +2552,13 @@ end
 local function SelectView(view, historyIndex)
     Addon.selectedView = view
     Addon.selectedHistoryIndex = historyIndex
+    Addon.EnterLootMode()
     RefreshRows()
 end
 
 local function SelectTab(tab)
     Addon.selectedTab = tab == "all" and "all" or "askable"
+    Addon.EnterLootMode()
     RefreshRows()
 end
 
@@ -3339,14 +3345,22 @@ function Addon.CommitFocusedWhisperTemplate()
     end
 end
 
-function Addon.CloseSettings()
-    Addon.CommitFocusedWhisperTemplate()
-    HideFontPicker()
-    CancelSettingsPreview()
+function Addon.EnterLootMode()
+    local leavingSettings = Addon.contentMode == "settings" or (Addon.settingsFrame and Addon.settingsFrame:IsShown())
+    if leavingSettings then
+        Addon.CommitFocusedWhisperTemplate()
+        HideFontPicker()
+        SafeCall(CloseDropDownMenus)
+        CancelSettingsPreview()
+    end
     Addon.contentMode = "loot"
-    if Addon.settingsFrame then
+    if Addon.settingsFrame and Addon.settingsFrame:IsShown() then
         Addon.settingsFrame:Hide()
     end
+end
+
+function Addon.CloseSettings()
+    Addon.EnterLootMode()
     RefreshRows()
 end
 
@@ -3684,6 +3698,7 @@ local function HandleSlash(message)
         Addon.selectedTab = "askable"
         Addon.selectedView = "current"
         Addon.selectedHistoryIndex = nil
+        Addon.EnterLootMode()
         SaveDB()
         RefreshRows()
     elseif command == "history" then
