@@ -34,6 +34,9 @@ try {
     if ($tocText -notmatch '(?m)^##\s*X-Curse-Project-ID:\s*1595368\s*$') {
         throw "DoYouNeedIt.toc is missing the expected CurseForge project id"
     }
+    if ($tocText -notmatch '(?m)^##\s*IconTexture:\s*Interface\\AddOns\\DoYouNeedIt\\media\\icon\.png\s*$') {
+        throw "DoYouNeedIt.toc is missing the addon list icon texture"
+    }
     if ($coreText -notmatch 'Core\.VERSION\s*=\s*"([^"]+)"') {
         throw "DoYouNeedIt_Core.lua is missing Core.VERSION"
     }
@@ -102,6 +105,7 @@ try {
                 "DoYouNeedIt/libs/LibStub/LibStub.lua",
                 "DoYouNeedIt/libs/CallbackHandler-1.0/CallbackHandler-1.0.lua",
                 "DoYouNeedIt/libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua",
+                "DoYouNeedIt/media/icon.png",
                 "DoYouNeedIt/CHANGELOG.md",
                 "DoYouNeedIt/LICENSE",
                 "DoYouNeedIt/THIRD-PARTY-NOTICES.md"

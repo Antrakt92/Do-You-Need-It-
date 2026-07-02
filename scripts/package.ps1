@@ -13,10 +13,15 @@ if (-not (Test-Path -LiteralPath $tocPath)) {
 }
 
 $version = $null
+$iconTexture = $null
 $tocEntries = @()
 foreach ($line in Get-Content -LiteralPath $tocPath) {
     if ($line -match '^##\s*Version:\s*(\S+)\s*$') {
         $version = $Matches[1]
+        continue
+    }
+    if ($line -match '^##\s*IconTexture:\s*(.+?)\s*$') {
+        $iconTexture = $Matches[1].Trim()
         continue
     }
     if ($line -match '^\s*$' -or $line -match '^\s*##') {
@@ -58,12 +63,34 @@ function Copy-PackageFile {
     Copy-Item -LiteralPath $source -Destination $destination -Force
 }
 
+function Resolve-AddonRelativeTexture {
+    param([string]$TexturePath)
+
+    if ([string]::IsNullOrWhiteSpace($TexturePath)) {
+        return $null
+    }
+    if ($TexturePath -match '^\d+$') {
+        return $null
+    }
+
+    $normalized = $TexturePath -replace '/', '\'
+    $prefix = "Interface\AddOns\$addonName\"
+    if ($normalized.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $normalized.Substring($prefix.Length)
+    }
+    return $null
+}
+
 try {
     New-Item -ItemType Directory -Path $addonRoot -Force | Out-Null
 
     Copy-PackageFile "$addonName.toc"
     foreach ($entry in $tocEntries) {
         Copy-PackageFile ($entry -replace '/', '\')
+    }
+    $iconRelativePath = Resolve-AddonRelativeTexture -TexturePath $iconTexture
+    if ($iconRelativePath) {
+        Copy-PackageFile $iconRelativePath
     }
     Copy-PackageFile "README.md"
     Copy-PackageFile "CHANGELOG.md"

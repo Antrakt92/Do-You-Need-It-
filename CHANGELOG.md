@@ -6,6 +6,7 @@
 
 - Mark bonus-roll loot reported by Blizzard loot events with a small roll icon and save that source in history.
 - Detect bonus loot for both your character and other group members when WoW exposes it through loot events.
+- Added the addon icon to WoW's in-game AddOn List.
 
 ### Improved
 
