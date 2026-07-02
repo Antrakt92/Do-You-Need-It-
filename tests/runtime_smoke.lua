@@ -422,6 +422,39 @@ local function testPostEncounterLootMovesToHistoryAfterGrace()
     assertEqual(#h.env.DoYouNeedItDB.history[1].allRows, 1, "post-encounter history keeps all-gear loot")
 end
 
+local function testCurrentViewFallsBackToLatestHistoryGroup()
+    local h = Harness.new()
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    h:fire("ENCOUNTER_END", 778, "Latest Current Boss")
+    local item = h:addItem(22019, {
+        name = "Latest Current Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 778, 22019, item, 1, "Otherplayer", "PALADIN")
+    h:runTimers(3)
+    assertEqual(#h.env.DoYouNeedItDB.history, 1, "precondition: finalized loot is in latest history")
+
+    h.menuButtons = {}
+    h.env.DoYouNeedItFrame.historyButton:FireScript("OnClick")
+    h.menuButtons[1].callback()
+    h.env.DoYouNeedItFrame.tabAllGear:FireScript("OnClick")
+
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "current view falls back to the latest history all-gear rows")
+    assertTruthy(rows[1].drop:GetText():find("Latest Current Sword", 1, true), "current fallback shows the latest finalized drop")
+    assertEqual(h.env.DoYouNeedItFrame.historyButton:GetText(), "Current", "history button still labels the fallback as current")
+end
+
 local function testEncounterLootReceivedCreatesLootRow()
     local h = Harness.new()
     h:loadAddon()
@@ -1442,6 +1475,7 @@ testInstanceChangeCompletesCurrentGroup()
 testInstanceChangeHistoryTitleUsesActiveLocale()
 testChallengeCompletionKeepsEndLootInHistory()
 testPostEncounterLootMovesToHistoryAfterGrace()
+testCurrentViewFallsBackToLatestHistoryGroup()
 testEncounterLootReceivedCreatesLootRow()
 testEncounterLootUsesEventClassTokenWhenRosterClassMissing()
 testEncounterAndChatLootDeduplicateSameDrop()

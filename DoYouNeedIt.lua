@@ -1417,6 +1417,13 @@ local function RowsForSelectedView()
         end
         return useAllGear and (group.allRows or group.rows or {}) or (group.rows or {})
     end
+    local hasLiveCurrentRows = #(Addon.state.currentRows or {}) > 0 or #(Addon.state.allRows or {}) > 0
+    if Addon.selectedView == "current" and not hasLiveCurrentRows then
+        local group = Addon.state.history and Addon.state.history[1]
+        if group then
+            return useAllGear and (group.allRows or group.rows or {}) or (group.rows or {})
+        end
+    end
     return useAllGear and (Addon.state.allRows or {}) or Addon.state.currentRows
 end
 
