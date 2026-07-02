@@ -1380,6 +1380,32 @@ local function testHistoryMenuUsesLocalizedStaticLabels()
     assertEqual(h.menuButtons[3].text, "История 1", "history menu localizes fallback history entry titles")
 end
 
+local function testHistoryMenuShowsDropDateTime()
+    local endedAt = 1719945840
+    local h = Harness.new({
+        db = {
+            characters = {
+                ["Player-Ravencrest"] = {
+                    history = {
+                        {
+                            title = "Algeth'ar Academy - Echo of Doragosa (2 drops)",
+                            endedAt = endedAt,
+                            rows = {},
+                            allRows = {},
+                        },
+                    },
+                },
+            },
+        },
+    })
+    h:loadAddon()
+
+    h.env.DoYouNeedItFrame.historyButton:FireScript("OnClick")
+
+    local expectedTime = os.date("%d.%m %H:%M", endedAt)
+    assertTruthy(h.menuButtons[3].text:find(expectedTime, 1, true), "history menu appends the saved drop date/time")
+end
+
 local function testMissingSavedFontPathRepairsToAvailableFont()
     local staleFontPath = "Interface\\AddOns\\RemovedFontPack\\Gone.ttf"
     local h = Harness.new({
@@ -1656,6 +1682,7 @@ testLegacySavedRowBackfillsLooterClassColor()
 testLegacyPlainItemTextDoesNotCreateDropHoverTarget()
 testLocalizedEquippedDisplayKeepsSavedTextStable()
 testHistoryMenuUsesLocalizedStaticLabels()
+testHistoryMenuShowsDropDateTime()
 testMissingSavedFontPathRepairsToAvailableFont()
 testForcedCjkLocalesUseLocaleSpecificBlizzardFontsOnWesternClients()
 testCustomFontPickerGridPreviewAndCommit()

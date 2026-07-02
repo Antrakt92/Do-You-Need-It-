@@ -2840,6 +2840,30 @@ local function CycleHistoryView()
     end
 end
 
+function Addon.FormatHistoryTimestamp(timestamp)
+    local value = CleanNumber(timestamp)
+    if not value or value <= 0 then
+        return nil
+    end
+
+    local formatter = type(date) == "function" and date or (os and type(os.date) == "function" and os.date)
+    local text = CleanString(SafeCall(formatter, "%d.%m %H:%M", value))
+    return text ~= "" and text or nil
+end
+
+function Addon.HistoryGroupMenuTitle(group, index)
+    local title = type(group) == "table" and CleanString(group.title) or nil
+    if not title then
+        title = L("History") .. " " .. tostring(index)
+    end
+
+    local timestamp = type(group) == "table" and Addon.FormatHistoryTimestamp(group.endedAt or group.startedAt) or nil
+    if timestamp then
+        return timestamp .. " - " .. title
+    end
+    return title
+end
+
 local function OpenHistoryMenu(owner)
     if MenuUtil and type(MenuUtil.CreateContextMenu) == "function" then
         MenuUtil.CreateContextMenu(owner, function(_, rootDescription)
@@ -2851,7 +2875,7 @@ local function OpenHistoryMenu(owner)
             end)
             for index = 1, #Addon.state.history do
                 local group = Addon.state.history[index]
-                rootDescription:CreateButton(group.title or (L("History") .. " " .. index), function()
+                rootDescription:CreateButton(Addon.HistoryGroupMenuTitle(group, index), function()
                     SelectView("history", index)
                 end)
             end

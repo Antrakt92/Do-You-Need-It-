@@ -10,6 +10,7 @@
 ### Improved
 
 - **Saved loot history is now per character** — alts no longer share the same recent dungeon and boss drop history.
+- **History entries now show when the drop group happened** — saved boss/run entries include a compact `DD.MM HH:MM` timestamp in the history menu.
 - **`Current` stays useful after boss or dungeon completion** — if live loot has already been finalized into history, the Current view falls back to the latest completed drop group instead of showing an empty panel.
 - **`All Gear` now includes your own drops for review** — your loot appears in All Gear, while Askable remains focused on items worth asking other players about.
 - **`Askable` now follows player equip eligibility instead of upgrade guesses** — armor-slot drops must match your class armor type, while cloak, neck, ring, and trinket drops remain universal candidates; item level is not used to decide whether a row belongs in Askable.
