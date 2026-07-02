@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2 - 02-Jul-2026 - Compatibility Hotfix
+
+### Fixed
+
+- Restored current Retail 12.0.7 interface metadata while keeping Midnight 12.1.0 file metadata, so the addon no longer appears as incompatible on the current client.
+
 ## 0.2.1 - 02-Jul-2026 - Midnight 12.1.0 Compatibility
 
 ### Changed

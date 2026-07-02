@@ -136,7 +136,7 @@ try {
         throw "CurseForge upload dry run used unexpected release type: $($uploadDryRun.Metadata.releaseType)"
     }
     $actualGameVersionNames = @($uploadDryRun.Metadata.gameVersionNames)
-    $expectedGameVersionNames = @("12.1.0")
+    $expectedGameVersionNames = @("12.0.7", "12.1.0")
     if (($actualGameVersionNames -join ',') -ne ($expectedGameVersionNames -join ',')) {
         throw "CurseForge upload dry run used unexpected game versions: $($actualGameVersionNames -join ', ')"
     }

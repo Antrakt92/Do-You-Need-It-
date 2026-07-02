@@ -1,8 +1,8 @@
-## Interface: 120100
+## Interface: 120007, 120100
 ## Title: Do You Need It?
 ## Notes: Shows likely-tradeable gear drops and helps ask group members if they need them.
 ## Author: Antrakt92
-## Version: 0.2.1
+## Version: 0.2.2
 ## SavedVariables: DoYouNeedItDB
 ## X-Curse-Project-ID: 1595368
 

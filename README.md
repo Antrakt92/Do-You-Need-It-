@@ -1,6 +1,6 @@
 # Do You Need It?
 
-Do You Need It? is a Retail World of Warcraft addon for Midnight 12.1.0. It tracks likely-tradeable Mythic+ and raid gear drops, compares the drop with the looter's equipped item, and helps you ask with optional delayed whispers.
+Do You Need It? is a Retail World of Warcraft addon for Midnight 12.x. It tracks likely-tradeable Mythic+ and raid gear drops, compares the drop with the looter's equipped item, and helps you ask with optional delayed whispers.
 
 The addon focuses on quiet signal:
 
@@ -42,7 +42,7 @@ The loot window opens on the `Askable` tab by default. `Askable` only shows drop
 
 Language defaults to `Auto`, which follows your WoW client locale. You can force any current WoW addon locale from the settings window. Font choices use bundled LibSharedMedia support; hovering a language or font previews it live, and closing the picker without selecting restores the saved setting.
 
-If you are checking whether the latest addon code loaded, run `/dyni status` and confirm it reports `build=0.2.1`, `session drops=...`, `all gear=...`, `cache=...`, and `layout=540x300`, then run `/dyni scan` before a dungeon to pre-cache group equipment. `/dyni test` forces a compact auto-show test row without a chat confirmation. Hover the dropped item or equipped item text to confirm the normal item tooltip appears, then switch to `All Gear` to confirm the bound test item appears without an Ask button. For live loot debugging, run `/dyni debug on` before a boss or dungeon chest and `/dyni diag` afterward; inspect/cache problems are reported as `inspect_retry`, `inspect_failed`, `scan_retry`, or `scan_failed`.
+If you are checking whether the latest addon code loaded, run `/dyni status` and confirm it reports `build=0.2.2`, `session drops=...`, `all gear=...`, `cache=...`, and `layout=540x300`, then run `/dyni scan` before a dungeon to pre-cache group equipment. `/dyni test` forces a compact auto-show test row without a chat confirmation. Hover the dropped item or equipped item text to confirm the normal item tooltip appears, then switch to `All Gear` to confirm the bound test item appears without an Ask button. For live loot debugging, run `/dyni debug on` before a boss or dungeon chest and `/dyni diag` afterward; inspect/cache problems are reported as `inspect_retry`, `inspect_failed`, `scan_retry`, or `scan_failed`.
 
 ## Install
 
