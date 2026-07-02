@@ -66,6 +66,7 @@ try {
         Copy-PackageFile ($entry -replace '/', '\')
     }
     Copy-PackageFile "README.md"
+    Copy-PackageFile "CHANGELOG.md"
     Copy-PackageFile "LICENSE"
     Copy-PackageFile "THIRD-PARTY-NOTICES.md"
 

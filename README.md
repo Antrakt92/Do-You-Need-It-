@@ -11,6 +11,8 @@ The addon focuses on quiet signal:
 - shows the dropped item next to the looter's currently equipped item when inspection data is safely available, retrying briefly when inspection data is delayed;
 - pre-scans group equipment into a session cache, then shows `Cached:` equipped items if live inspection is blocked or delayed;
 - shows real item tooltips when you hover dropped or equipped item links in the loot window;
+- colors looter names by class when roster data is available;
+- keeps Cyrillic player names readable with dynamic font fallback even when the selected UI font lacks those glyphs;
 - keeps a lightweight history for the current view, the last 50 saved session drops, and the last 10 completed boss/run groups;
 - sends whispers only from row actions unless auto-whisper is explicitly enabled.
 - includes a settings gear with auto-whisper, delay, whisper text, language, font, and font-size controls.
@@ -40,7 +42,7 @@ The loot window opens on the `Askable` tab by default. `Askable` only shows drop
 
 Language defaults to `Auto`, which follows your WoW client locale. You can force any current WoW addon locale from the settings window. Font choices use bundled LibSharedMedia support; hovering a language or font previews it live, and closing the picker without selecting restores the saved setting.
 
-If you are checking whether the latest addon code loaded, run `/dyni status` and confirm it reports `build=0.1.21`, `session drops=...`, `all gear=...`, `cache=...`, and `layout=540x300`, then run `/dyni scan` before a dungeon to pre-cache group equipment. `/dyni test` forces a compact auto-show test row without a chat confirmation. Hover the dropped item or equipped item text to confirm the normal item tooltip appears, then switch to `All Gear` to confirm the bound test item appears without an Ask button. For live loot debugging, run `/dyni debug on` before a boss or dungeon chest and `/dyni diag` afterward; inspect/cache problems are reported as `inspect_retry`, `inspect_failed`, `scan_retry`, or `scan_failed`.
+If you are checking whether the latest addon code loaded, run `/dyni status` and confirm it reports `build=0.2.0`, `session drops=...`, `all gear=...`, `cache=...`, and `layout=540x300`, then run `/dyni scan` before a dungeon to pre-cache group equipment. `/dyni test` forces a compact auto-show test row without a chat confirmation. Hover the dropped item or equipped item text to confirm the normal item tooltip appears, then switch to `All Gear` to confirm the bound test item appears without an Ask button. For live loot debugging, run `/dyni debug on` before a boss or dungeon chest and `/dyni diag` afterward; inspect/cache problems are reported as `inspect_retry`, `inspect_failed`, `scan_retry`, or `scan_failed`.
 
 ## Install
 
@@ -68,7 +70,7 @@ Build a local addon zip with:
 .\scripts\package.ps1
 ```
 
-The package is written to `dist\DoYouNeedIt-<version>.zip` with `DoYouNeedIt/` as the zip root. It includes the addon TOC, Lua files, bundled runtime libraries, README, license, and third-party notices, while excluding tests, scripts, and local development files. The main check script also validates this package shape.
+The package is written to `dist\DoYouNeedIt-<version>.zip` with `DoYouNeedIt/` as the zip root. It includes the addon TOC, Lua files, bundled runtime libraries, README, changelog, license, and third-party notices, while excluding tests, scripts, and local development files. The main check script also validates this package shape.
 
 ## License
 

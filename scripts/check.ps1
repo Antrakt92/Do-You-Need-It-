@@ -80,6 +80,7 @@ try {
                 "DoYouNeedIt/libs/LibStub/LibStub.lua",
                 "DoYouNeedIt/libs/CallbackHandler-1.0/CallbackHandler-1.0.lua",
                 "DoYouNeedIt/libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua",
+                "DoYouNeedIt/CHANGELOG.md",
                 "DoYouNeedIt/LICENSE",
                 "DoYouNeedIt/THIRD-PARTY-NOTICES.md"
             )
