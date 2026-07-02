@@ -450,22 +450,6 @@ local localizedGroup = Core.CompleteCurrentGroup(localizedHistoryState, {
 })
 assertEqual(localizedGroup.title, "Dungeon - Boss (2 дропа)", "history title localizes drop-count wording")
 
-assertEqual(
-    Core.GetAutoShowTabForRow({ currentRows = {} }, { askable = false, itemLink = "|cff0070dd|Hitem:101:::::::::::::|h[All Only]|h|r" }),
-    "all",
-    "all-only loot opens all gear when no askable rows exist"
-)
-assertEqual(
-    Core.GetAutoShowTabForRow({ currentRows = { { id = "askable-row" } } }, { askable = false, itemLink = "|cff0070dd|Hitem:101:::::::::::::|h[All Only]|h|r" }),
-    "askable",
-    "all-only loot keeps askable selected when askable rows exist"
-)
-assertEqual(
-    Core.GetAutoShowTabForRow({ currentRows = {} }, { askable = true, itemLink = "|cff0070dd|Hitem:100:::::::::::::|h[Askable]|h|r" }),
-    "askable",
-    "askable loot opens askable"
-)
-
 local equipmentCache = {}
 local cachedWeapon = "Cached: |cff1eff00|Hitem:25:::::::::::::|h[Worn Shortsword]|h|r"
 assertEqual(
@@ -737,19 +721,21 @@ local inFlightAuto = Core.GetAutoWhisperDecision(
     { looter = "Otherplayer", itemLink = "|cff0070dd|Hitem:1:::::::::::::|h[Test]|h|r", whisperInFlight = true }
 )
 assertEqual(inFlightAuto.shouldSchedule, false, "in-flight whispers do not schedule another auto whisper")
-local askButton = Core.GetWhisperButtonState("askable", "current", { askable = true })
-assertEqual(askButton.visible, true, "current askable row shows Ask button")
+local askButton = Core.GetWhisperButtonState(nil, "current", { askable = true })
+assertEqual(askButton.visible, true, "current askable row shows Ask button without a selected tab")
 assertEqual(askButton.enabled, true, "current askable row enables Ask button")
 assertEqual(askButton.text, "Ask", "current askable row uses Ask text")
-local sentButton = Core.GetWhisperButtonState("askable", "current", { askable = true, manualWhispered = true })
+local sentButton = Core.GetWhisperButtonState(nil, "current", { askable = true, manualWhispered = true })
 assertEqual(sentButton.visible, true, "sent current row keeps visible status button")
 assertEqual(sentButton.enabled, false, "sent current row disables whisper button")
 assertEqual(sentButton.text, "Sent", "sent current row uses Sent text")
-local sendingButton = Core.GetWhisperButtonState("askable", "current", { askable = true, whisperInFlight = true })
+local sendingButton = Core.GetWhisperButtonState(nil, "current", { askable = true, whisperInFlight = true })
 assertEqual(sendingButton.visible, true, "in-flight current row keeps visible status button")
 assertEqual(sendingButton.enabled, false, "in-flight current row disables whisper button")
 assertEqual(sendingButton.text, "Sending", "in-flight current row uses Sending text")
-local sessionButton = Core.GetWhisperButtonState("askable", "session", { askable = true })
+local allOnlyButton = Core.GetWhisperButtonState(nil, "current", { askable = false })
+assertEqual(allOnlyButton.visible, false, "non-askable current rows do not show Ask button")
+local sessionButton = Core.GetWhisperButtonState(nil, "session", { askable = true })
 assertEqual(sessionButton.visible, false, "session rows do not show Ask button")
 assertEqual(Core.GetLocaleLabel("sent", "ruRU"), "отправлено", "manual whisper success status is localized")
 assertEqual(Core.GetLocaleLabel("auto sent", "ruRU"), "авто отправлено", "auto whisper success status is localized")
@@ -1012,13 +998,14 @@ assertTruthy(runtime:find("Core.ResolveFontSize", 1, true), "runtime applies fon
 assertTruthy(runtime:find("local WINDOW_WIDTH = 540", 1, true), "runtime uses compact non-overlapping window width")
 assertTruthy(runtime:find("local WINDOW_HEIGHT = 300", 1, true), "runtime uses compact settings-enabled window height")
 assertTruthy(runtime:find("local ROW_START_Y = -82", 1, true), "runtime leaves a compact header area above rows")
-assertTruthy(runtime:find("local HEADER_HISTORY_WIDTH = 262", 1, true), "runtime bounds the history selector before settings controls")
+assertTruthy(runtime:find("local HEADER_HISTORY_WIDTH = 456", 1, true), "runtime uses freed tab space for the history selector")
 assertTruthy(runtime:find("frame.historyButton:SetSize(HEADER_HISTORY_WIDTH, 22)", 1, true), "runtime uses the bounded history selector width")
 assertTruthy(runtime:find("KeepOneLine", 1, true), "runtime caps long labels and loot rows to one line")
-assertTruthy(runtime:find("frame.tabAskable:SetPoint(\"TOPLEFT\", frame, \"TOPLEFT\", 16, -42)", 1, true), "runtime moves tabs below the title row")
+assertEqual(runtime:find("frame.tabAskable", 1, true), nil, "runtime no longer creates an askable tab")
+assertEqual(runtime:find("frame.tabAllGear", 1, true), nil, "runtime no longer creates an all-gear tab")
 assertTruthy(runtime:find("local MAX_VISIBLE_ROWS = 6", 1, true), "runtime uses freed settings space for another visible row")
 assertTruthy(runtime:find("DoYouNeedItCore.ShouldAutoShowWindow", 1, true), "runtime auto-shows on new loot rows")
-assertTruthy(runtime:find("GetAutoShowTabForRow", 1, true), "runtime selects all gear when only non-askable loot drops")
+assertEqual(runtime:find("GetAutoShowTabForRow", 1, true), nil, "runtime no longer selects between loot tabs")
 assertEqual(runtime:find("if askable and DoYouNeedItCore.ShouldAutoShowWindow", 1, true), nil, "runtime does not limit auto-show to askable rows")
 assertTruthy(runtime:find("QueueEquipmentScan", 1, true), "runtime queues equipment pre-scans")
 assertTruthy(runtime:find("StartEquipmentScan", 1, true), "runtime processes equipment scans one unit at a time")
@@ -1058,8 +1045,8 @@ assertTruthy(runtime:find("ContinueOnItemLoad", 1, true), "runtime waits for unc
 assertTruthy(runtime:find("BuildItemMetadata", 1, true), "runtime maps item info through core metadata helper")
 assertTruthy(runtime:find("DoYouNeedItDB.sessionRows", 1, true), "runtime persists session rows")
 assertTruthy(runtime:find("DoYouNeedItDB.sessionAllRows", 1, true), "runtime persists all gear session rows")
-assertTruthy(runtime:find("selectedTab", 1, true), "runtime has askable/all gear tabs")
-assertTruthy(runtime:find("tabAllGear", 1, true), "runtime creates all gear tab")
+assertEqual(runtime:find("selectedTab", 1, true), nil, "runtime does not keep a loot tab state")
+assertTruthy(runtime:find("RowsForSelectedView", 1, true), "runtime still routes current/session/history rows through one view helper")
 assertTruthy(runtime:find("TooltipHasTradeTimer", 1, true), "runtime detects trade timer tooltip lines")
 assertTruthy(runtime:find("CanPlayerEquipItem", 1, true), "runtime detects whether the player can equip a drop")
 assertTruthy(runtime:find("C_Item.IsUsableItem", 1, true), "runtime asks WoW whether the player can use the item")

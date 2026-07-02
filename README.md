@@ -4,8 +4,8 @@ Do You Need It? is a Retail World of Warcraft addon for Midnight 12.x, currently
 
 The addon focuses on quiet signal:
 
-- Keeps the default `Askable` view focused on likely-tradeable equipment your current character can use or wear.
-- Separates `Askable` from an `All Gear` tab that records every visible gear drop without pointless Ask buttons.
+- Shows every visible gear drop in one compact list, including own loot and bonus loot.
+- Shows the `Ask` action only on rows that look worth asking for and usable by your current character.
 - Hides currency, reagents, recipes, consumables, quest items, and other non-gear loot.
 - Shows the dropped item next to the looter's currently equipped item when inspection data is safely available, retrying briefly when inspection data is delayed.
 - Pre-scans group equipment into a session cache, then shows `Cached:` equipped items if live inspection is blocked or delayed.
@@ -16,7 +16,7 @@ The addon focuses on quiet signal:
 - Sends whispers only from row actions unless auto-whisper is explicitly enabled.
 - Includes a settings gear with auto-whisper, delay, whisper text, language, font, and font-size controls.
 - Previews language and font choices on hover, then rolls back if you close the picker without selecting.
-- Uses a compact loot window with separated title, tabs, history, and settings controls.
+- Uses a compact loot window with separated title, history, and settings controls.
 
 ## Commands
 
@@ -37,7 +37,7 @@ The addon focuses on quiet signal:
 
 Auto-whisper is off by default. When enabled, it waits 10 seconds by default before sending, and pending sends are cancelled if you manually ask first, clear current rows, or turn auto-whisper off.
 
-The loot window opens on the `Askable` tab by default. `Askable` only shows drops that the addon currently considers worth asking about and usable by your current character; `All Gear` shows every visible gear drop for review and hides the Ask button. If a drop has visible gear but no askable rows, the window opens directly on `All Gear` so the drop is not silent. Use the gear button or `/dyni settings` to switch the same window into settings for auto-whisper, delay, whisper text, language, font, and font-size controls.
+The loot window uses one unified list. Every visible gear drop stays reviewable, and the `Ask` button appears only on rows that the addon currently considers worth asking about and usable by your current character. Bonus loot, your own loot, and other review-only drops stay visible without pointless Ask buttons. Use the gear button or `/dyni settings` to switch the same window into settings for auto-whisper, delay, whisper text, language, font, and font-size controls.
 
 ## Language and Fonts
 
@@ -68,7 +68,7 @@ After installing a new build:
 1. Run `/reload`.
 2. Run `/dyni status` and confirm it reports `build=0.3.0`, `session drops=...`, `all gear=...`, `cache=...`, and `layout=540x300`.
 3. Run `/dyni scan` before a dungeon to pre-cache group equipment.
-4. Run `/dyni test`, hover the dropped and equipped item text, then switch to `All Gear` to confirm the bound test item appears without an Ask button.
+4. Run `/dyni test`, hover the dropped and equipped item text, and confirm the bound test item appears in the same list without an Ask button.
 5. For live loot debugging, run `/dyni debug on` before a boss or dungeon chest and `/dyni diag` afterward. Inspect/cache problems appear as `inspect_retry`, `inspect_failed`, `scan_retry`, or `scan_failed`.
 
 ## Install

@@ -1792,13 +1792,13 @@ function Core.GetAutoWhisperDecision(settings, row)
     }
 end
 
-function Core.GetWhisperButtonState(selectedTab, selectedView, row)
+function Core.GetWhisperButtonState(_selectedTab, selectedView, row)
     local state = {
         visible = false,
         enabled = false,
         text = "Ask",
     }
-    if selectedTab ~= "askable" or selectedView ~= "current" or type(row) ~= "table" or row.askable == false then
+    if selectedView ~= "current" or type(row) ~= "table" or row.askable == false then
         return state
     end
 
@@ -1818,19 +1818,6 @@ end
 
 function Core.ShouldAutoShowWindow(row)
     return type(row) == "table" and row.itemLink ~= nil and row.itemLink ~= ""
-end
-
-function Core.GetAutoShowTabForRow(state, row)
-    if type(row) ~= "table" then
-        return "askable"
-    end
-    if row.askable ~= false then
-        return "askable"
-    end
-    if type(state) == "table" and type(state.currentRows) == "table" and #state.currentRows > 0 then
-        return "askable"
-    end
-    return "all"
 end
 
 _G.DoYouNeedItCore = Core

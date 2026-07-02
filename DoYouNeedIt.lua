@@ -14,7 +14,6 @@ local Addon = {
     equipmentScanScheduled = false,
     selectedHistoryIndex = nil,
     selectedView = "current",
-    selectedTab = "askable",
     contentMode = "loot",
     pendingItems = {},
     lootGeneration = 0,
@@ -57,9 +56,7 @@ local ROW_WIDTH = 510
 local ROW_HEIGHT = 30
 local ROW_START_Y = -82
 local ROW_STRIDE = 34
-local HEADER_TAB_ASKABLE_WIDTH = 104
-local HEADER_TAB_ALL_WIDTH = 82
-local HEADER_HISTORY_WIDTH = 262
+local HEADER_HISTORY_WIDTH = 456
 local ROW_LOOTER_WIDTH = 90
 local ROW_DROP_WIDTH = 180
 local ROW_DROP_HOVER_WIDTH = 188
@@ -1369,25 +1366,31 @@ StartEquipmentScan = function()
 end
 
 local function RowsForSelectedView()
-    local useAllGear = Addon.selectedTab == "all"
+    local function unifiedRows(allRows, askableRows)
+        if type(allRows) == "table" and #allRows > 0 then
+            return allRows
+        end
+        return askableRows or {}
+    end
+
     if Addon.selectedView == "session" then
-        return useAllGear and (Addon.state.sessionAllRows or {}) or Addon.state.sessionRows
+        return unifiedRows(Addon.state.sessionAllRows, Addon.state.sessionRows)
     end
     if Addon.selectedView == "history" and Addon.selectedHistoryIndex then
         local group = Addon.state.history[Addon.selectedHistoryIndex]
         if not group then
             return {}
         end
-        return useAllGear and (group.allRows or group.rows or {}) or (group.rows or {})
+        return unifiedRows(group.allRows, group.rows)
     end
     local hasLiveCurrentRows = #(Addon.state.currentRows or {}) > 0 or #(Addon.state.allRows or {}) > 0
     if Addon.selectedView == "current" and not hasLiveCurrentRows then
         local group = Addon.state.history and Addon.state.history[1]
         if group then
-            return useAllGear and (group.allRows or group.rows or {}) or (group.rows or {})
+            return unifiedRows(group.allRows, group.rows)
         end
     end
-    return useAllGear and (Addon.state.allRows or {}) or Addon.state.currentRows
+    return unifiedRows(Addon.state.allRows, Addon.state.currentRows)
 end
 
 function Addon.SetLootChromeShown(shown)
@@ -1402,8 +1405,6 @@ function Addon.SetLootChromeShown(shown)
         end
     end
 
-    setShown(Addon.tabAskable)
-    setShown(Addon.tabAllGear)
     setShown(Addon.historyButton)
     setShown(Addon.settingsButton)
 end
@@ -1449,15 +1450,6 @@ local function RefreshRows()
         title = group and group.title or L("History")
     end
     Addon.historyButton:SetText(title)
-    if Addon.tabAskable then
-        Addon.tabAskable:SetText(L("Askable"))
-        Addon.tabAskable:SetEnabled(Addon.selectedTab ~= "askable")
-    end
-    if Addon.tabAllGear then
-        Addon.tabAllGear:SetText(L("All Gear"))
-        Addon.tabAllGear:SetEnabled(Addon.selectedTab ~= "all")
-    end
-
     for index = 1, MAX_VISIBLE_ROWS do
         local rowFrame = Addon.rowFrames[index]
         local row = displayRows[index]
@@ -1482,7 +1474,7 @@ local function RefreshRows()
             rowFrame.dropLink:SetShown(rowFrame.dropLink.itemLink ~= nil)
             rowFrame.equippedLink:SetShown(rowFrame.equippedLink.itemLink ~= nil)
             rowFrame.status:SetText(Core.GetRowStatusText(row, ActiveLocale()))
-            local whisperState = Core.GetWhisperButtonState(Addon.selectedTab, Addon.selectedView, row)
+            local whisperState = Core.GetWhisperButtonState(nil, Addon.selectedView, row)
             if whisperState.visible then
                 rowFrame.whisper:SetText(L(whisperState.text))
                 if whisperState.enabled then
@@ -1510,7 +1502,7 @@ local function RefreshRows()
     ApplyCurrentFont()
 
     if #rows == 0 then
-        Addon.emptyText:SetText(Addon.selectedTab == "all" and L("No gear drops in this view.") or L("No askable gear drops in this view."))
+        Addon.emptyText:SetText(L("No gear drops in this view."))
         Addon.emptyText:Show()
     else
         Addon.emptyText:Hide()
@@ -1890,7 +1882,6 @@ function Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
         itemLink = itemLink,
         source = source or "unknown",
     })
-    Addon.selectedTab = DoYouNeedItCore.GetAutoShowTabForRow(Addon.state, row)
     Addon.selectedView = "current"
     Addon.selectedHistoryIndex = nil
     Addon.EnterLootMode()
@@ -2460,7 +2451,6 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
     if askable then
         ScheduleAutoWhisper(row)
     end
-    Addon.selectedTab = DoYouNeedItCore.GetAutoShowTabForRow(Addon.state, row)
     Addon.selectedView = "current"
     Addon.selectedHistoryIndex = nil
     Addon.EnterLootMode()
@@ -2503,7 +2493,6 @@ local function AddTestRow()
         equippedText = UNKNOWN_EQUIPPED,
         unsafe = false,
     }, false)
-    Addon.selectedTab = "askable"
     Addon.selectedView = "current"
     Addon.selectedHistoryIndex = nil
     Addon.EnterLootMode()
@@ -2824,12 +2813,6 @@ local function SelectView(view, historyIndex)
     RefreshRows()
 end
 
-local function SelectTab(tab)
-    Addon.selectedTab = tab == "all" and "all" or "askable"
-    Addon.EnterLootMode()
-    RefreshRows()
-end
-
 local function CycleHistoryView()
     if Addon.selectedView == "current" then
         SelectView("session")
@@ -3009,29 +2992,9 @@ CreateUI = function()
     frame.title:SetText(L("Do You Need It?"))
     RegisterFontString(frame.title, 16, "OUTLINE")
 
-    frame.tabAskable = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    frame.tabAskable:SetSize(HEADER_TAB_ASKABLE_WIDTH, 22)
-    frame.tabAskable:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -42)
-    frame.tabAskable:SetText(L("Askable"))
-    frame.tabAskable:SetScript("OnClick", function()
-        SelectTab("askable")
-    end)
-    RegisterButtonFont(frame.tabAskable, 11)
-    Addon.tabAskable = frame.tabAskable
-
-    frame.tabAllGear = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    frame.tabAllGear:SetSize(HEADER_TAB_ALL_WIDTH, 22)
-    frame.tabAllGear:SetPoint("LEFT", frame.tabAskable, "RIGHT", 4, 0)
-    frame.tabAllGear:SetText(L("All Gear"))
-    frame.tabAllGear:SetScript("OnClick", function()
-        SelectTab("all")
-    end)
-    RegisterButtonFont(frame.tabAllGear, 11)
-    Addon.tabAllGear = frame.tabAllGear
-
     frame.historyButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     frame.historyButton:SetSize(HEADER_HISTORY_WIDTH, 22)
-    frame.historyButton:SetPoint("LEFT", frame.tabAllGear, "RIGHT", 6, 0)
+    frame.historyButton:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -42)
     frame.historyButton:SetText(L("Current"))
     frame.historyButton:SetScript("OnClick", function(button)
         OpenHistoryMenu(button)
@@ -3061,7 +3024,7 @@ CreateUI = function()
 
     frame.emptyText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisable")
     frame.emptyText:SetPoint("CENTER", frame, "CENTER", 0, 0)
-    frame.emptyText:SetText(L("No askable gear drops in this view."))
+    frame.emptyText:SetText(L("No gear drops in this view."))
     RegisterFontString(frame.emptyText, 12)
     Addon.emptyText = frame.emptyText
 
@@ -4014,7 +3977,6 @@ local function HandleSlash(message)
         Addon.state.allRows = {}
         Addon.state.sessionRows = {}
         Addon.state.sessionAllRows = {}
-        Addon.selectedTab = "askable"
         Addon.selectedView = "current"
         Addon.selectedHistoryIndex = nil
         Addon.EnterLootMode()

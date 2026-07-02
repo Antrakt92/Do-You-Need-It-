@@ -18,6 +18,21 @@ local function assertFalsy(value, label)
     end
 end
 
+local function findVisibleRow(rows, predicate)
+    for index = 1, #rows do
+        if predicate(rows[index]) then
+            return rows[index]
+        end
+    end
+    return nil
+end
+
+local function findVisibleAskableRow(rows)
+    return findVisibleRow(rows, function(frame)
+        return frame.row and frame.row.askable ~= false
+    end)
+end
+
 local function testLoadAndSettings()
     local h = Harness.new()
     h:loadAddon()
@@ -35,7 +50,8 @@ local function testLoadAndSettings()
     assertEqual(h.env.DoYouNeedItFrame:IsShown(), true, "settings opens inside the main frame")
     assertEqual(h.env.DoYouNeedItSettingsFrame:GetParent(), h.env.DoYouNeedItFrame, "settings panel is embedded in the main window")
     assertEqual(h.env.DoYouNeedItSettingsFrame:IsShown(), true, "settings frame opens")
-    assertEqual(h.env.DoYouNeedItFrame.tabAskable:IsShown(), false, "settings mode hides loot tabs")
+    assertEqual(h.env.DoYouNeedItFrame.tabAskable, nil, "loot tabs are no longer created")
+    assertEqual(h.env.DoYouNeedItFrame.tabAllGear, nil, "all-gear tab is no longer created")
     assertEqual(h.env.DoYouNeedItFrame.historyButton:IsShown(), false, "settings mode hides the history selector")
     assertTruthy(h.env.DoYouNeedItSettingsFrame.back, "settings panel has a back button")
     assertTruthy(h.env.DoYouNeedItLanguageDropdown.Text:GetText() ~= "", "language dropdown has visible text")
@@ -43,7 +59,6 @@ local function testLoadAndSettings()
 
     h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
     assertEqual(h.env.DoYouNeedItSettingsFrame:IsShown(), false, "back closes the embedded settings panel")
-    assertEqual(h.env.DoYouNeedItFrame.tabAskable:IsShown(), true, "back restores loot tabs")
     assertEqual(h.env.DoYouNeedItFrame.historyButton:IsShown(), true, "back restores the history selector")
 end
 
@@ -54,17 +69,25 @@ local function testSlashTestRowsAndManualWhisper()
 
     assertEqual(h.env.DoYouNeedItFrame:IsShown(), true, "test command shows main frame")
     local rows = h:visibleRows()
-    assertEqual(#rows, 1, "askable tab shows only askable test row")
-    assertEqual(rows[1].row.looter, "Example", "test row looter visible")
-    assertTruthy(rows[1].drop:GetText():find("Test Sword", 1, true), "test row item text visible")
-    assertTruthy(rows[1].equipped:GetText():find("Worn Shortsword", 1, true), "test row equipped item visible")
+    assertEqual(#rows, 2, "test command shows askable and non-askable rows in one list")
+    local askableRow = findVisibleAskableRow(rows)
+    local boundRow = findVisibleRow(rows, function(frame)
+        return frame.drop:GetText():find("Bound Test Chest", 1, true) ~= nil
+    end)
+    assertTruthy(askableRow, "test command keeps an askable row")
+    assertTruthy(boundRow, "test command shows the non-askable test row")
+    assertEqual(askableRow.row.looter, "Example", "test row looter visible")
+    assertTruthy(askableRow.drop:GetText():find("Test Sword", 1, true), "test row item text visible")
+    assertTruthy(askableRow.equipped:GetText():find("Worn Shortsword", 1, true), "test row equipped item visible")
+    assertEqual(askableRow.whisper:IsShown(), true, "askable test row shows Ask")
+    assertEqual(boundRow.whisper:IsShown(), false, "non-askable test row hides Ask")
 
-    rows[1].whisper:FireScript("OnClick")
+    askableRow.whisper:FireScript("OnClick")
     h:runTimers(0)
     assertEqual(#h.sentMessages, 1, "manual Ask sends one whisper")
     assertEqual(h.sentMessages[1].target, "Example", "manual Ask whispers the row looter")
-    assertEqual(h.sentMessages[1].message, "Hey, do you need " .. rows[1].row.itemLink .. "?", "manual Ask uses the default whisper template")
-    assertEqual(rows[1].row.manualWhispered, true, "manual Ask marks row sent")
+    assertEqual(h.sentMessages[1].message, "Hey, do you need " .. askableRow.row.itemLink .. "?", "manual Ask uses the default whisper template")
+    assertEqual(askableRow.row.manualWhispered, true, "manual Ask marks row sent")
 end
 
 local function testLootSlashCommandsLeaveEmbeddedSettingsMode()
@@ -76,8 +99,7 @@ local function testLootSlashCommandsLeaveEmbeddedSettingsMode()
 
     h:slash("test")
     assertEqual(h.env.DoYouNeedItSettingsFrame:IsShown(), false, "test command leaves embedded settings mode")
-    assertEqual(h.env.DoYouNeedItFrame.tabAskable:IsShown(), true, "test command restores loot tabs")
-    assertEqual(#h:visibleRows(), 1, "test command shows the test loot row")
+    assertEqual(#h:visibleRows(), 2, "test command shows the unified test loot rows")
 
     h:slash("settings")
     assertEqual(h.env.DoYouNeedItSettingsFrame:IsShown(), true, "precondition: settings panel reopens")
@@ -107,7 +129,6 @@ local function testLootDropLeavesEmbeddedSettingsMode()
 
     assertEqual(h.env.DoYouNeedItFrame:IsShown(), true, "loot drop keeps the main frame visible")
     assertEqual(h.env.DoYouNeedItSettingsFrame:IsShown(), false, "loot drop leaves embedded settings mode")
-    assertEqual(h.env.DoYouNeedItFrame.tabAskable:IsShown(), true, "loot drop restores loot tabs")
     assertEqual(#h:visibleRows(), 1, "loot drop shows the visible loot row")
 end
 
@@ -135,9 +156,8 @@ local function testOwnLootShowsInAllGearWhenPlayerNameIsUnavailable()
     assertEqual(#(h.env.DoYouNeedItDB.sessionAllRows or {}), 1, "own loot is still saved in all gear when player identity is unavailable")
     assertEqual((h.env.DoYouNeedItDB.sessionAllRows or {})[1].reason, "self_loot", "own loot keeps an explicit all-gear reason")
 
-    h.env.DoYouNeedItFrame.tabAllGear:FireScript("OnClick")
     local rows = h:visibleRows()
-    assertEqual(#rows, 1, "own loot is visible on all gear when player identity is unavailable")
+    assertEqual(#rows, 1, "own loot is visible in the unified loot list when player identity is unavailable")
     assertEqual(rows[1].whisper:IsShown(), false, "own loot does not show an Ask button")
 end
 
@@ -196,12 +216,13 @@ local function testCustomWhisperTemplateIsUsedForManualAsk()
     h:slash("test")
 
     local rows = h:visibleRows()
-    assertEqual(#rows, 1, "custom template test has one askable row")
-    rows[1].whisper:FireScript("OnClick")
+    local askableRow = findVisibleAskableRow(rows)
+    assertTruthy(askableRow, "custom template test has one askable row")
+    askableRow.whisper:FireScript("OnClick")
     h:runTimers(0)
 
     assertEqual(#h.sentMessages, 1, "custom template manual Ask sends one whisper")
-    assertEqual(h.sentMessages[1].message, "Could you trade " .. rows[1].row.itemLink .. " please?", "manual Ask uses saved custom whisper template")
+    assertEqual(h.sentMessages[1].message, "Could you trade " .. askableRow.row.itemLink .. " please?", "manual Ask uses saved custom whisper template")
 end
 
 local function testManualWhisperFailureLeavesRowRetryable()
@@ -211,13 +232,15 @@ local function testManualWhisperFailureLeavesRowRetryable()
     h:slash("test")
 
     local rows = h:visibleRows()
-    rows[1].whisper:FireScript("OnClick")
+    local askableRow = findVisibleAskableRow(rows)
+    assertTruthy(askableRow, "manual failure test has one askable row")
+    askableRow.whisper:FireScript("OnClick")
     h:runTimers(0)
 
-    assertEqual(rows[1].row.statusKey, "whisper_failed", "failed manual whisper stores a stable failure status")
-    assertEqual(rows[1].row.manualWhispered, nil, "failed manual whisper does not mark the row sent")
-    assertEqual(rows[1].row.whisperInFlight, false, "failed manual whisper clears in-flight state")
-    assertEqual(rows[1].whisper:IsEnabled(), true, "failed manual whisper leaves Ask retry enabled")
+    assertEqual(askableRow.row.statusKey, "whisper_failed", "failed manual whisper stores a stable failure status")
+    assertEqual(askableRow.row.manualWhispered, nil, "failed manual whisper does not mark the row sent")
+    assertEqual(askableRow.row.whisperInFlight, false, "failed manual whisper clears in-flight state")
+    assertEqual(askableRow.whisper:IsEnabled(), true, "failed manual whisper leaves Ask retry enabled")
 end
 
 local function testClearCancelsDeferredManualWhisper()
@@ -226,8 +249,9 @@ local function testClearCancelsDeferredManualWhisper()
     h:slash("test")
 
     local rows = h:visibleRows()
-    assertEqual(#rows, 1, "clear-deferred manual whisper test starts with one askable row")
-    rows[1].whisper:FireScript("OnClick")
+    local askableRow = findVisibleAskableRow(rows)
+    assertTruthy(askableRow, "clear-deferred manual whisper test starts with one askable row")
+    askableRow.whisper:FireScript("OnClick")
     h:slash("clear")
     h:runTimers(0)
 
@@ -243,13 +267,14 @@ local function testMainWindowLayoutBoundsLongText()
 
     local frame = h.env.DoYouNeedItFrame
     assertTruthy(frame and frame.historyButton, "main window history button exists")
-    assertTruthy(frame.historyButton:GetWidth() <= 270, "history selector leaves room for settings and close buttons")
-    assertTruthy(frame.tabAskable:GetWidth() >= 104, "askable tab has enough width for localized labels")
-    assertTruthy(frame.tabAllGear:GetWidth() >= 82, "all gear tab has enough width for localized labels")
+    assertTruthy(frame.historyButton:GetWidth() >= 390, "unified history selector uses the freed tab space")
+    assertEqual(frame.tabAskable, nil, "main window does not create an askable tab")
+    assertEqual(frame.tabAllGear, nil, "main window does not create an all-gear tab")
 
     local rows = h:visibleRows()
-    assertEqual(#rows, 1, "layout test has one visible row")
-    local row = rows[1]
+    assertEqual(#rows, 2, "layout test has unified test rows")
+    local row = findVisibleAskableRow(rows)
+    assertTruthy(row, "layout test has an askable row")
     local fontStrings = {
         row.looter,
         row.drop,
@@ -488,10 +513,9 @@ local function testCurrentViewFallsBackToLatestHistoryGroup()
     h.menuButtons = {}
     h.env.DoYouNeedItFrame.historyButton:FireScript("OnClick")
     h.menuButtons[1].callback()
-    h.env.DoYouNeedItFrame.tabAllGear:FireScript("OnClick")
 
     local rows = h:visibleRows()
-    assertEqual(#rows, 1, "current view falls back to the latest history all-gear rows")
+    assertEqual(#rows, 1, "current view falls back to the latest unified history rows")
     assertTruthy(rows[1].drop:GetText():find("Latest Current Sword", 1, true), "current fallback shows the latest finalized drop")
     assertEqual(h.env.DoYouNeedItFrame.historyButton:GetText(), "Current", "history button still labels the fallback as current")
 end
@@ -660,9 +684,51 @@ local function testBonusLootChatIsAllGearOnlyWithSourceIcon()
     assertEqual(rows[1].whisper:IsShown(), false, "visible bonus loot row has no Ask button")
     assertTruthy(rows[1].rollIcon and rows[1].rollIcon:IsShown(), "visible bonus loot row shows the roll source icon")
     assertEqual(rows[1].rollIcon.atlas, "lootroll-toast-icon-need-up", "visible bonus loot row uses Blizzard's roll atlas")
+end
 
-    h.env.DoYouNeedItFrame.tabAskable:FireScript("OnClick")
-    assertEqual(#h:visibleRows(), 0, "other bonus loot is hidden from the askable tab")
+local function testUnifiedLootListShowsAskableAndBonusRowsTogether()
+    local h = Harness.new()
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    local askableItem = h:addItem(22024, {
+        name = "Unified Askable Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+    local bonusItem = h:addItem(22025, {
+        name = "Unified Bonus Cloak",
+        equipLoc = "INVTYPE_CLOAK",
+        classID = 4,
+        subclassID = 1,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fireLoot("Otherplayer", askableItem)
+    h:fireBonusLoot("Secondplayer", bonusItem)
+
+    local rows = h:visibleRows()
+    assertEqual(#rows, 2, "unified loot list shows askable and bonus rows together")
+    local askableRow = findVisibleRow(rows, function(frame)
+        return frame.drop:GetText():find("Unified Askable Sword", 1, true) ~= nil
+    end)
+    local bonusRow = findVisibleRow(rows, function(frame)
+        return frame.drop:GetText():find("Unified Bonus Cloak", 1, true) ~= nil
+    end)
+    assertTruthy(askableRow, "unified list includes the askable drop")
+    assertTruthy(bonusRow, "unified list includes the bonus drop")
+    assertEqual(askableRow.whisper:IsShown(), true, "askable unified row shows Ask")
+    assertEqual(bonusRow.whisper:IsShown(), false, "bonus unified row hides Ask")
+    assertTruthy(bonusRow.rollIcon and bonusRow.rollIcon:IsShown(), "bonus unified row shows the roll source icon")
 end
 
 local function testBonusLootChatUpgradesEarlierEncounterRow()
@@ -1048,18 +1114,13 @@ local function testLegacySavedAllGearFallbackDisplays()
     h:loadAddon()
 
     h:slash("history")
-    local allGearTab = h:findFrame(function(frame)
-        return type(frame.GetText) == "function" and frame:GetText() == "All Gear"
-    end)
-    assertTruthy(allGearTab, "all gear tab is findable")
-    allGearTab:FireScript("OnClick")
     local rows = h:visibleRows()
-    assertEqual(#rows, 1, "legacy session fallback displays in all gear")
+    assertEqual(#rows, 1, "legacy session fallback displays in the unified list")
     assertEqual(rows[1].row.id, "legacy-session", "legacy session fallback keeps row identity")
 
     h:slash("history")
     rows = h:visibleRows()
-    assertEqual(#rows, 1, "legacy history fallback displays in all gear")
+    assertEqual(#rows, 1, "legacy history fallback displays in the unified list")
     assertEqual(rows[1].row.id, "legacy-history", "legacy history fallback keeps row identity")
 end
 
@@ -1320,10 +1381,11 @@ local function testLocalizedEquippedDisplayKeepsSavedTextStable()
     h:slash("test")
 
     local rows = h:visibleRows()
-    assertEqual(#rows, 1, "localized test row is visible")
-    assertTruthy(rows[1].equipped:GetText():find("Надето:", 1, true), "equipped display label is localized")
-    assertTruthy(rows[1].equipped:GetText():find("Worn Shortsword", 1, true), "localized equipped display keeps the item link text")
-    assertTruthy(rows[1].row.equippedText:find("Equipped:", 1, true), "stored equipped text remains migration-stable")
+    local askableRow = findVisibleAskableRow(rows)
+    assertTruthy(askableRow, "localized test row is visible")
+    assertTruthy(askableRow.equipped:GetText():find("Надето:", 1, true), "equipped display label is localized")
+    assertTruthy(askableRow.equipped:GetText():find("Worn Shortsword", 1, true), "localized equipped display keeps the item link text")
+    assertTruthy(askableRow.row.equippedText:find("Equipped:", 1, true), "stored equipped text remains migration-stable")
 
     local cachedLink = "|cff1eff00|Hitem:25:::::::::::::|h[Cached Worn Shortsword]|h|r"
     local cached = Harness.new({
@@ -1663,6 +1725,7 @@ testEncounterAndChatLootDeduplicateSameDrop()
 testEncounterAndChatLootDeduplicateSameItemWithDifferentLinks()
 testSlowEncounterAndChatLootDeduplicateSameItemAfterWindow()
 testBonusLootChatIsAllGearOnlyWithSourceIcon()
+testUnifiedLootListShowsAskableAndBonusRowsTogether()
 testBonusLootChatUpgradesEarlierEncounterRow()
 testLateBonusLootChatUpgradesOutsideDedupeWindow()
 testBonusLootUpgradeCancelsInFlightAutoWhisper()

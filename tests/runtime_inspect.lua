@@ -315,8 +315,8 @@ local function testUnresolvedLootMessageNameCreatesUnsafeAllGearOnlyRow()
     assertEqual(#h.sentMessages, 0, "unresolved live looter does not auto-whisper")
 
     local rows = h:visibleRows()
-    assertEqual(#rows, 1, "unresolved live looter auto-opens all gear when there are no askable rows")
-    assertEqual(rows[1].row.askable, false, "unresolved live looter visible row is all-gear only")
+    assertEqual(#rows, 1, "unresolved live looter appears in the unified loot list when there are no askable rows")
+    assertEqual(rows[1].row.askable, false, "unresolved live looter visible row is review-only")
     assertEqual(rows[1].whisper:IsShown(), false, "unresolved live looter row hides Ask")
 end
 
