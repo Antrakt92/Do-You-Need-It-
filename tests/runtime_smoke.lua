@@ -24,6 +24,8 @@ local function testLoadAndSettings()
 
     assertTruthy(h.env.SlashCmdList.DOYOUNEEDIT, "slash command registered")
     assertTruthy(h:registered("CHAT_MSG_LOOT"), "loot event registered")
+    assertTruthy(h:registered("ENCOUNTER_LOOT_RECEIVED"), "encounter loot event registered")
+    assertTruthy(h:registered("CHALLENGE_MODE_COMPLETED"), "challenge completion event registered")
     assertTruthy(h:registered("INSPECT_READY"), "inspect event registered")
     assertTruthy(h.env.DoYouNeedItFrame, "main frame created on load")
     assertEqual(h.env.DoYouNeedItFrame:IsShown(), false, "main frame starts hidden")
@@ -217,6 +219,85 @@ local function testInstanceChangeHistoryTitleUsesActiveLocale()
     assertEqual(#h.env.DoYouNeedItDB.history, 1, "localized instance change saves current drops to history")
     assertTruthy(h.env.DoYouNeedItDB.history[1].title:find("%(2 дропа%)"), "history title uses localized drop-count wording")
     assertEqual(h.env.DoYouNeedItDB.history[1].title:find("drops", 1, true), nil, "history title does not keep English drop-count wording")
+end
+
+local function testChallengeCompletionKeepsEndLootInHistory()
+    local h = Harness.new()
+    h:loadAddon()
+
+    h:fire("CHALLENGE_MODE_COMPLETED")
+    local item = h:addItem(22003, {
+        name = "End Chest Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+    h:fireLoot("Otherplayer", item)
+
+    assertEqual(#h.env.DoYouNeedItDB.history, 0, "challenge end loot waits briefly for more chest drops")
+    h:runTimers(3)
+
+    assertEqual(#h.env.DoYouNeedItDB.history, 1, "challenge completion moves end loot to history")
+    assertTruthy(h.env.DoYouNeedItDB.history[1].title:find("Ruby Life Pools", 1, true), "challenge history uses dungeon name")
+    assertEqual(#h.env.DoYouNeedItDB.history[1].allRows, 1, "challenge history keeps all-gear end loot")
+    assertEqual(#h.env.DoYouNeedItDB.characters["Player-Ravencrest"].history, 1, "challenge history is saved in the character bucket")
+
+    h.env.DoYouNeedItFrame.historyButton:FireScript("OnClick")
+    assertTruthy(h.menuButtons[3] and h.menuButtons[3].text:find("Ruby Life Pools", 1, true), "history menu lists the completed challenge group")
+end
+
+local function testEncounterLootReceivedCreatesLootRow()
+    local h = Harness.new()
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    local item = h:addItem(22004, {
+        name = "Encounter Event Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 22004, item, 1, "Otherplayer", "PALADIN")
+
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "encounter loot event creates a visible row")
+    assertTruthy(rows[1].drop:GetText():find("Encounter Event Sword", 1, true), "encounter loot row shows the item link")
+    assertEqual(h.env.DoYouNeedItDB.sessionRows[1].itemID, 22004, "encounter loot persists to session rows")
+end
+
+local function testEncounterAndChatLootDeduplicateSameDrop()
+    local h = Harness.new()
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    local item = h:addItem(22005, {
+        name = "Deduped Event Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 22005, item, 1, "Otherplayer", "PALADIN")
+    h:fireLoot("Otherplayer", item)
+
+    assertEqual(#h.env.DoYouNeedItDB.sessionRows, 1, "same encounter/chat loot is saved once in askable session")
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 1, "same encounter/chat loot is saved once in all-gear session")
+    assertEqual(#h:visibleRows(), 1, "same encounter/chat loot is visible once")
 end
 
 local function testDebugPersistenceIsOptIn()
@@ -745,6 +826,9 @@ testCyrillicLootTextUsesGlyphCapableFont()
 testLootLooterNameUsesClassColor()
 testInstanceChangeCompletesCurrentGroup()
 testInstanceChangeHistoryTitleUsesActiveLocale()
+testChallengeCompletionKeepsEndLootInHistory()
+testEncounterLootReceivedCreatesLootRow()
+testEncounterAndChatLootDeduplicateSameDrop()
 testDebugPersistenceIsOptIn()
 testDebugPersistenceLoadState()
 testLegacySavedAllGearFallbackDisplays()

@@ -17,6 +17,11 @@ local Addon = {
     selectedTab = "askable",
     pendingItems = {},
     lootGeneration = 0,
+    recentLootKeys = {},
+    recentLootDedupeSeconds = 8,
+    challengeCompletedAt = nil,
+    challengeFinalizeToken = nil,
+    challengeLootFinalizeDelay = 3,
     fontStrings = {},
 }
 
@@ -854,6 +859,85 @@ local function BuildDropContext(unsafe, unsafeReason)
         unsafe = unsafe == true,
         unsafeReason = unsafeReason,
     }
+end
+
+function Addon.CleanupRecentLootKeys(now)
+    Addon.recentLootKeys = type(Addon.recentLootKeys) == "table" and Addon.recentLootKeys or {}
+    now = type(now) == "number" and now or Now()
+    for key, seenAt in pairs(Addon.recentLootKeys) do
+        if type(seenAt) ~= "number" or now - seenAt > Addon.recentLootDedupeSeconds then
+            Addon.recentLootKeys[key] = nil
+        end
+    end
+end
+
+function Addon.ShouldSkipDuplicateLoot(looter, itemLink)
+    if type(looter) ~= "string" or looter == "" or type(itemLink) ~= "string" or itemLink == "" then
+        return false
+    end
+
+    local now = Now()
+    Addon.CleanupRecentLootKeys(now)
+    local key = looter .. "\031" .. itemLink
+    if Addon.recentLootKeys[key] then
+        return true
+    end
+
+    Addon.recentLootKeys[key] = now
+    return false
+end
+
+function Addon.ResolveEncounterLootLooter(playerName)
+    if not Addon.roster then
+        BuildRoster()
+    end
+
+    local cleanName = CleanString(playerName)
+    if not cleanName or Core.IsPlaceholderName(cleanName) then
+        return nil
+    end
+
+    local player = SafePlayerName()
+    return Core.ResolveRosterName(cleanName, Addon.roster)
+        or Core.FindRosterNameInMessage(cleanName, Addon.roster, player)
+        or cleanName
+end
+
+function Addon.HasCurrentLootRows()
+    return Addon.state and (#(Addon.state.currentRows or {}) > 0 or #(Addon.state.allRows or {}) > 0)
+end
+
+function Addon.IsRecentChallengeCompletion()
+    local completedAt = Addon.challengeCompletedAt
+    local now = Now()
+    return type(completedAt) == "number" and now >= completedAt and now - completedAt <= ENCOUNTER_LOOT_GRACE
+end
+
+function Addon.ScheduleChallengeHistoryFinalize(reason)
+    if not Addon.state then
+        return
+    end
+
+    local token = {}
+    Addon.challengeFinalizeToken = token
+    C_Timer.After(Addon.challengeLootFinalizeDelay, function()
+        if Addon.challengeFinalizeToken ~= token then
+            return
+        end
+        Addon.challengeFinalizeToken = nil
+        if Addon.HasCurrentLootRows() then
+            RecordDiagnostic("challenge_history_complete", {
+                reason = reason or "challenge_completed",
+            })
+            Addon.CompleteCurrentGroup(Addon.currentEncounterName)
+        end
+    end)
+end
+
+function Addon.ScheduleChallengeHistoryFinalizeIfRecent(reason)
+    if Addon.IsRecentChallengeCompletion() then
+        Addon.ScheduleChallengeHistoryFinalize(reason)
+    end
 end
 
 local function RequestItemLoad(itemLink, callback)
@@ -1953,6 +2037,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
     Addon.selectedHistoryIndex = nil
     SaveDB()
     RefreshRows()
+    Addon.ScheduleChallengeHistoryFinalizeIfRecent(context.source or "post_challenge_loot")
     if DoYouNeedItCore.ShouldAutoShowWindow(row) then
         CreateUI()
         Addon.frame:Show()
@@ -2106,36 +2191,43 @@ end
 local function InvalidatePendingLoot()
     Addon.lootGeneration = (Addon.lootGeneration or 0) + 1
     Addon.pendingItems = {}
+    Addon.recentLootKeys = {}
 end
 
-local function HandleLootMessage(message, ...)
-    RecordDiagnostic("loot_event", {
-        message = CleanString(message),
-    })
-
-    local itemLink = ExtractItemLink(message)
+function Addon.HandleResolvedLoot(looter, itemLink, context, source)
+    itemLink = ExtractItemLink(itemLink) or CleanString(itemLink)
     if not itemLink then
         RecordDiagnostic("no_item_link", {
-            message = CleanString(message),
+            source = source or "unknown",
         })
         return
     end
 
-    local looter, unsafe, unsafeReason = FindLooterFromMessage(message, ...)
     if not looter then
         RecordDiagnostic("no_looter", {
             itemLink = itemLink,
-            message = CleanString(message),
+            source = source or "unknown",
         })
         return
     end
 
-    local context = BuildDropContext(unsafe, unsafeReason)
+    if Addon.ShouldSkipDuplicateLoot(looter, itemLink) then
+        RecordDiagnostic("duplicate_loot", {
+            looter = looter,
+            itemLink = itemLink,
+            source = source or "unknown",
+        })
+        return
+    end
+
+    context = type(context) == "table" and context or BuildDropContext(false)
+    context.source = source or context.source
     local metadata = ReadItemMetadata(itemLink)
     if not metadata then
         RecordDiagnostic("metadata_pending", {
             looter = looter,
             itemLink = itemLink,
+            source = source or "unknown",
         })
         RetryItemLater(looter, itemLink, context)
         return
@@ -2144,7 +2236,32 @@ local function HandleLootMessage(message, ...)
     AddTradeCandidate(looter, itemLink, metadata, context)
 end
 
-local function CompleteCurrentGroup(encounterName)
+local function HandleLootMessage(message, ...)
+    RecordDiagnostic("loot_event", {
+        message = CleanString(message),
+        source = "chat",
+    })
+
+    local itemLink = ExtractItemLink(message)
+    local looter, unsafe, unsafeReason = FindLooterFromMessage(message, ...)
+    local context = BuildDropContext(unsafe, unsafeReason)
+    Addon.HandleResolvedLoot(looter, itemLink, context, "chat")
+end
+
+function Addon.HandleEncounterLootReceived(encounterID, itemID, itemLink, quantity, playerName, classFileName)
+    RecordDiagnostic("loot_event", {
+        source = "encounter",
+        itemID = tonumber(itemID),
+        looter = CleanString(playerName),
+        classToken = CleanString(classFileName),
+    })
+
+    local looter = Addon.ResolveEncounterLootLooter(playerName)
+    local context = BuildDropContext(false)
+    Addon.HandleResolvedLoot(looter, itemLink, context, "encounter")
+end
+
+function Addon.CompleteCurrentGroup(encounterName)
     if not Addon.state or (#Addon.state.currentRows == 0 and #(Addon.state.allRows or {}) == 0) then
         return
     end
@@ -2157,6 +2274,7 @@ local function CompleteCurrentGroup(encounterName)
     })
     Addon.selectedView = "history"
     Addon.selectedHistoryIndex = 1
+    Addon.challengeFinalizeToken = nil
     SaveDB()
     RefreshRows()
 end
@@ -3354,6 +3472,9 @@ local function Initialize()
     Addon.inspectGeneration = 0
     Addon.pendingItems = {}
     Addon.lootGeneration = 0
+    Addon.recentLootKeys = {}
+    Addon.challengeCompletedAt = nil
+    Addon.challengeFinalizeToken = nil
     Addon.equipmentScanQueue = {}
     Addon.equipmentScanScheduled = false
     Addon.lootPatterns = Core.CreateLootMessagePatterns({
@@ -3384,8 +3505,11 @@ eventFrame:RegisterEvent("PLAYER_LOGOUT")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 eventFrame:RegisterEvent("CHALLENGE_MODE_START")
+eventFrame:RegisterEvent("CHALLENGE_MODE_COMPLETED")
+eventFrame:RegisterEvent("CHALLENGE_MODE_RESET")
 eventFrame:RegisterEvent("ENCOUNTER_START")
 eventFrame:RegisterEvent("ENCOUNTER_END")
+eventFrame:RegisterEvent("ENCOUNTER_LOOT_RECEIVED")
 eventFrame:RegisterEvent("CHAT_MSG_LOOT")
 eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 eventFrame:RegisterEvent("INSPECT_READY")
@@ -3398,7 +3522,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         end
     elseif event == "PLAYER_LOGOUT" then
         if Addon.state and (#Addon.state.currentRows > 0 or #(Addon.state.allRows or {}) > 0) then
-            CompleteCurrentGroup(Addon.currentEncounterName)
+            Addon.CompleteCurrentGroup(Addon.currentEncounterName)
         end
         SaveDB()
     elseif event == "PLAYER_ENTERING_WORLD" then
@@ -3406,13 +3530,15 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         local instanceChanged = Addon.currentInstanceName and Addon.currentInstanceName ~= instanceName
         if instanceChanged then
             if Addon.state and (#Addon.state.currentRows > 0 or #(Addon.state.allRows or {}) > 0) then
-                CompleteCurrentGroup(Addon.currentEncounterName)
+                Addon.CompleteCurrentGroup(Addon.currentEncounterName)
             end
             Addon.recentEncounterName = nil
             Addon.recentEncounterEndedAt = nil
             Addon.currentEncounterID = nil
             Addon.currentEncounterName = nil
             Addon.currentEncounterStartedAt = nil
+            Addon.challengeCompletedAt = nil
+            Addon.challengeFinalizeToken = nil
             InvalidatePendingLoot()
         end
         Addon.currentInstanceName = instanceName
@@ -3421,7 +3547,15 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "PLAYER_REGEN_ENABLED" then
         StartEquipmentScan()
     elseif event == "CHALLENGE_MODE_START" then
+        Addon.challengeCompletedAt = nil
+        Addon.challengeFinalizeToken = nil
         QueueEquipmentScan("challenge_start", true)
+    elseif event == "CHALLENGE_MODE_COMPLETED" then
+        Addon.challengeCompletedAt = Now()
+        Addon.ScheduleChallengeHistoryFinalize("challenge_completed")
+    elseif event == "CHALLENGE_MODE_RESET" then
+        Addon.challengeCompletedAt = nil
+        Addon.challengeFinalizeToken = nil
     elseif event == "GROUP_ROSTER_UPDATE" then
         BuildRoster()
         Addon.equipmentCache = {}
@@ -3429,7 +3563,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "ENCOUNTER_START" then
         local encounterID, encounterName = ...
         if Addon.state and (#Addon.state.currentRows > 0 or #(Addon.state.allRows or {}) > 0) then
-            CompleteCurrentGroup(Addon.currentEncounterName)
+            Addon.CompleteCurrentGroup(Addon.currentEncounterName)
         end
         Addon.recentEncounterName = nil
         Addon.recentEncounterEndedAt = nil
@@ -3441,12 +3575,14 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         local encounterID, encounterName = ...
         Addon.currentEncounterID = encounterID or Addon.currentEncounterID
         Addon.currentEncounterName = CleanString(encounterName) or Addon.currentEncounterName
-        CompleteCurrentGroup(Addon.currentEncounterName)
+        Addon.CompleteCurrentGroup(Addon.currentEncounterName)
         Addon.recentEncounterName = Addon.currentEncounterName
         Addon.recentEncounterEndedAt = Now()
         Addon.currentEncounterID = nil
         Addon.currentEncounterName = nil
         Addon.currentEncounterStartedAt = nil
+    elseif event == "ENCOUNTER_LOOT_RECEIVED" then
+        Addon.HandleEncounterLootReceived(...)
     elseif event == "CHAT_MSG_LOOT" then
         HandleLootMessage(...)
     elseif event == "INSPECT_READY" then
