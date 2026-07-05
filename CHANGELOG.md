@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.1 - 05-Jul-2026 — Raid loot stability
 
 ### Fixed
 

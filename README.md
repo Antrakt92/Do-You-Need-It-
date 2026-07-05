@@ -66,7 +66,7 @@ Font choices use bundled LibSharedMedia support plus Blizzard fallbacks. Hoverin
 After installing a new build:
 
 1. Run `/reload`.
-2. Run `/dyni status` and confirm it reports `build=0.3.0`, `session drops=...`, `all gear=...`, `cache=...`, and `layout=540x300`.
+2. Run `/dyni status` and confirm it reports `build=0.3.1`, `session drops=...`, `all gear=...`, `cache=...`, and `layout=540x300`.
 3. Run `/dyni scan` before a dungeon to pre-cache group equipment.
 4. Run `/dyni test`, hover the dropped and equipped item text, and confirm the bound test item appears in the same list without an Ask button.
 5. For live loot debugging, run `/dyni debug on` before a boss or dungeon chest and `/dyni diag` afterward. Inspect/cache problems appear as `inspect_retry`, `inspect_failed`, `scan_retry`, or `scan_failed`.
