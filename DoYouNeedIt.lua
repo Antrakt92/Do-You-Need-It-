@@ -1480,6 +1480,10 @@ function Addon.SetLootChromeShown(shown)
 
     setShown(Addon.historyButton)
     setShown(Addon.settingsButton)
+    if not shown then
+        setShown(Addon.scrollBadge)
+        setShown(Addon.scrollText)
+    end
 end
 
 function Addon.HideLootRows()
@@ -1490,6 +1494,12 @@ function Addon.HideLootRows()
     end
     if Addon.emptyText then
         Addon.emptyText:Hide()
+    end
+    if Addon.scrollBadge then
+        Addon.scrollBadge:Hide()
+    end
+    if Addon.scrollText then
+        Addon.scrollText:Hide()
     end
 end
 
@@ -1528,8 +1538,14 @@ local function RefreshRows()
             local newestPosition = rowCount - offset
             local oldestPosition = math.max(1, newestPosition - #displayRows + 1)
             Addon.scrollText:SetText(tostring(oldestPosition) .. "-" .. tostring(newestPosition) .. " / " .. tostring(rowCount))
+            if Addon.scrollBadge then
+                Addon.scrollBadge:Show()
+            end
             Addon.scrollText:Show()
         else
+            if Addon.scrollBadge then
+                Addon.scrollBadge:Hide()
+            end
             Addon.scrollText:Hide()
         end
     end
@@ -3150,12 +3166,25 @@ CreateUI = function()
     RegisterFontString(frame.emptyText, 12)
     Addon.emptyText = frame.emptyText
 
-    frame.scrollText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    frame.scrollText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -18, 12)
-    frame.scrollText:SetJustifyH("RIGHT")
+    frame.scrollBadge = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    frame.scrollBadge:SetSize(76, 16)
+    frame.scrollBadge:SetPoint("TOPRIGHT", frame.historyButton, "BOTTOMRIGHT", -2, -4)
+    frame.scrollBadge:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        tile = true,
+        tileSize = 8,
+        insets = { left = 0, right = 0, top = 0, bottom = 0 },
+    })
+    frame.scrollBadge:SetBackdropColor(0, 0, 0, 0.55)
+    frame.scrollBadge:Hide()
+    Addon.scrollBadge = frame.scrollBadge
+
+    frame.scrollText = frame.scrollBadge:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    frame.scrollText:SetAllPoints(frame.scrollBadge)
+    frame.scrollText:SetJustifyH("CENTER")
+    frame.scrollText:SetTextColor(0.95, 0.95, 0.95, 1)
     KeepOneLine(frame.scrollText)
-    RegisterFontString(frame.scrollText, 10)
-    frame.scrollText:Hide()
+    RegisterFontString(frame.scrollText, 11)
     Addon.scrollText = frame.scrollText
 
     for index = 1, MAX_VISIBLE_ROWS do

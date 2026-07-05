@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Improved
+
+- **Raid loot scrolling now uses a readable header badge** — the visible row range moved out of the lower window border and stays hidden in settings mode.
+
 ## 0.3.1 - 05-Jul-2026 — Raid loot stability
 
 ### Fixed

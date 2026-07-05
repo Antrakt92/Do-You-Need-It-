@@ -686,6 +686,12 @@ local function testRaidLootListCanScrollPastSixRows()
     local rows = h:visibleRows()
     assertEqual(#rows, 6, "raid encounter shows the first page of the compact loot list")
     assertTruthy(rows[1].drop:GetText():find("Raid Scroll Item 10", 1, true), "raid list starts on the newest drop")
+    assertTruthy(h.env.DoYouNeedItFrame.scrollBadge and h.env.DoYouNeedItFrame.scrollBadge:IsShown(), "raid scroll range uses a visible header badge")
+    assertEqual(h.env.DoYouNeedItFrame.scrollText:IsShown(), true, "raid scroll range text is visible inside the badge")
+    assertEqual(h.env.DoYouNeedItFrame.scrollText:GetText(), "5-10 / 10", "raid scroll range starts with the newest visible row range")
+    local scrollPoint = h.env.DoYouNeedItFrame.scrollBadge.points[1]
+    assertEqual(scrollPoint[1], "TOPRIGHT", "raid scroll range badge is anchored above the rows")
+    assertEqual(scrollPoint[2], h.env.DoYouNeedItFrame.historyButton, "raid scroll range badge follows the history selector")
 
     for _ = 1, 4 do
         h.env.DoYouNeedItFrame:FireScript("OnMouseWheel", -1)
@@ -695,6 +701,11 @@ local function testRaidLootListCanScrollPastSixRows()
     assertEqual(#rows, 6, "raid scroll keeps six visible row frames")
     assertTruthy(rows[1].drop:GetText():find("Raid Scroll Item 6", 1, true), "raid scroll can reveal older drops beyond the first six")
     assertTruthy(rows[6].drop:GetText():find("Raid Scroll Item 1", 1, true), "raid scroll reaches the oldest retained drop")
+    assertEqual(h.env.DoYouNeedItFrame.scrollText:GetText(), "1-6 / 10", "raid scroll range updates after scrolling older")
+
+    h:slash("settings")
+    assertEqual(h.env.DoYouNeedItFrame.scrollBadge:IsShown(), false, "settings mode hides the raid scroll range badge")
+    assertEqual(h.env.DoYouNeedItFrame.scrollText:IsShown(), false, "settings mode hides the raid scroll range text")
 end
 
 local function testRaidEncounterLootDisambiguatesShortNamesByClass()
