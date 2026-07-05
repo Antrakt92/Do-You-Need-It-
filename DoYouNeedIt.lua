@@ -15,6 +15,7 @@ local Addon = {
     selectedHistoryIndex = nil,
     selectedView = "current",
     contentMode = "loot",
+    rowScrollOffset = 0,
     pendingItems = {},
     lootGeneration = 0,
     recentLootKeys = {},
@@ -23,7 +24,7 @@ local Addon = {
     challengeFinalizeToken = nil,
     challengeLootFinalizeDelay = 3,
     recentEncounterFinalizeToken = nil,
-    encounterLootFinalizeDelay = 3,
+    encounterLootFinalizeDelay = 10,
     fontStrings = {},
 }
 
@@ -642,6 +643,7 @@ local function BuildRoster()
                 unit = unit,
                 fullName = fullName,
                 shortName = shortName,
+                classToken = SafeUnitClassToken(unit),
             }
         end
     end
@@ -653,6 +655,7 @@ local function BuildRoster()
     for index = 1, 40 do
         addUnit("raid" .. index)
     end
+    Addon.rosterEntries = entries
     Addon.roster = Core.CreateRosterIndex(entries)
 end
 
@@ -897,10 +900,8 @@ function Addon.ShouldSkipDuplicateLoot(looter, itemLink)
     return false, itemID
 end
 
-function Addon.ResolveEncounterLootLooter(playerName)
-    if not Addon.roster then
-        BuildRoster()
-    end
+function Addon.ResolveEncounterLootLooter(playerName, classFileName)
+    BuildRoster()
 
     local cleanName = CleanString(playerName)
     if not cleanName or Core.IsPlaceholderName(cleanName) then
@@ -908,9 +909,36 @@ function Addon.ResolveEncounterLootLooter(playerName)
     end
 
     local player = SafePlayerName()
-    return Core.ResolveRosterName(cleanName, Addon.roster)
+    local resolved = Core.ResolveRosterName(cleanName, Addon.roster)
         or Core.FindRosterNameInMessage(cleanName, Addon.roster, player)
-        or cleanName
+    if resolved then
+        return resolved
+    end
+
+    if Addon.roster and Addon.roster.ambiguous and Addon.roster.ambiguous[cleanName] == true then
+        local classToken = CleanString(classFileName)
+        local matches = 0
+        local matchedName
+        local entries = type(Addon.rosterEntries) == "table" and Addon.rosterEntries or {}
+        if classToken then
+            for index = 1, #entries do
+                local entry = entries[index]
+                if type(entry) == "table" and entry.shortName == cleanName then
+                    local entryClass = CleanString(entry.classToken) or SafeUnitClassToken(entry.unit)
+                    if entryClass == classToken then
+                        matches = matches + 1
+                        matchedName = entry.fullName
+                    end
+                end
+            end
+        end
+        if matches == 1 and matchedName then
+            return matchedName
+        end
+        return cleanName, "ambiguous_looter"
+    end
+
+    return cleanName
 end
 
 function Addon.HasCurrentLootRows()
@@ -1407,6 +1435,36 @@ local function RowsForSelectedView()
     return unifiedRows(Addon.state.allRows, Addon.state.currentRows)
 end
 
+local function NewestRowsWindow(rows)
+    local result = {}
+    if type(rows) ~= "table" then
+        Addon.rowScrollOffset = 0
+        return result, 0, 0, 0
+    end
+
+    local rowCount = #rows
+    local maxOffset = math.max(0, rowCount - MAX_VISIBLE_ROWS)
+    local offset = math.floor(tonumber(Addon.rowScrollOffset) or 0)
+    if offset < 0 then
+        offset = 0
+    elseif offset > maxOffset then
+        offset = maxOffset
+    end
+    Addon.rowScrollOffset = offset
+
+    local startIndex = rowCount - offset
+    for index = startIndex, 1, -1 do
+        local row = rows[index]
+        if type(row) == "table" then
+            result[#result + 1] = row
+            if #result >= MAX_VISIBLE_ROWS then
+                break
+            end
+        end
+    end
+    return result, offset, maxOffset, rowCount
+end
+
 function Addon.SetLootChromeShown(shown)
     local function setShown(frame)
         if not frame then
@@ -1454,7 +1512,7 @@ local function RefreshRows()
     end
 
     local rows = RowsForSelectedView()
-    local displayRows = Core.GetNewestRowsFirst(rows, MAX_VISIBLE_ROWS)
+    local displayRows, offset, _, rowCount = NewestRowsWindow(rows)
 
     local title = L("Current")
     if Addon.selectedView == "session" then
@@ -1464,6 +1522,16 @@ local function RefreshRows()
         title = group and group.title or L("History")
     end
     Addon.historyButton:SetText(title)
+    if Addon.scrollText then
+        if rowCount > MAX_VISIBLE_ROWS then
+            local newestPosition = rowCount - offset
+            local oldestPosition = math.max(1, newestPosition - #displayRows + 1)
+            Addon.scrollText:SetText(tostring(oldestPosition) .. "-" .. tostring(newestPosition) .. " / " .. tostring(rowCount))
+            Addon.scrollText:Show()
+        else
+            Addon.scrollText:Hide()
+        end
+    end
     for index = 1, MAX_VISIBLE_ROWS do
         local rowFrame = Addon.rowFrames[index]
         local row = displayRows[index]
@@ -1518,6 +1586,9 @@ local function RefreshRows()
     if #rows == 0 then
         Addon.emptyText:SetText(L("No gear drops in this view."))
         Addon.emptyText:Show()
+        if Addon.scrollText then
+            Addon.scrollText:Hide()
+        end
     else
         Addon.emptyText:Hide()
     end
@@ -1898,6 +1969,7 @@ function Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
     })
     Addon.selectedView = "current"
     Addon.selectedHistoryIndex = nil
+    Addon.rowScrollOffset = 0
     Addon.EnterLootMode()
     SaveDB()
     RefreshRows()
@@ -2467,6 +2539,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
     end
     Addon.selectedView = "current"
     Addon.selectedHistoryIndex = nil
+    Addon.rowScrollOffset = 0
     Addon.EnterLootMode()
     SaveDB()
     RefreshRows()
@@ -2509,6 +2582,7 @@ local function AddTestRow()
     }, false)
     Addon.selectedView = "current"
     Addon.selectedHistoryIndex = nil
+    Addon.rowScrollOffset = 0
     Addon.EnterLootMode()
     RefreshRows()
     if DoYouNeedItCore.ShouldAutoShowWindow(row, { forceAutoShow = true }) then
@@ -2735,33 +2809,35 @@ function Addon.HandleResolvedLoot(looter, itemLink, context, source)
         return
     end
 
-    local duplicate, duplicateItemID = Addon.ShouldSkipDuplicateLoot(looter, itemLink)
-    if duplicate then
-        if Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
-            or Addon.UpgradePendingLootToBonus(looter, itemLink, context, source)
-        then
-            return
-        end
-        local row = Addon.FindTrackedLootRow(looter, itemLink) or Addon.FindTrackedLootRowByItemID(looter, duplicateItemID)
-        if Addon.UpdateTrackedLootLink(row, itemLink, source) then
-            RecordDiagnostic("duplicate_loot_link_updated", {
+    if context.skipDuplicateLoot ~= true then
+        local duplicate, duplicateItemID = Addon.ShouldSkipDuplicateLoot(looter, itemLink)
+        if duplicate then
+            if Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
+                or Addon.UpgradePendingLootToBonus(looter, itemLink, context, source)
+            then
+                return
+            end
+            local row = Addon.FindTrackedLootRow(looter, itemLink) or Addon.FindTrackedLootRowByItemID(looter, duplicateItemID)
+            if Addon.UpdateTrackedLootLink(row, itemLink, source) then
+                RecordDiagnostic("duplicate_loot_link_updated", {
+                    looter = looter,
+                    itemLink = itemLink,
+                    itemID = duplicateItemID,
+                    source = source or "unknown",
+                })
+                SaveDB()
+                RefreshRows()
+            end
+            RecordDiagnostic("duplicate_loot", {
                 looter = looter,
                 itemLink = itemLink,
-                itemID = duplicateItemID,
                 source = source or "unknown",
             })
-            SaveDB()
-            RefreshRows()
+            return
         end
-        RecordDiagnostic("duplicate_loot", {
-            looter = looter,
-            itemLink = itemLink,
-            source = source or "unknown",
-        })
-        return
     end
 
-    if MergeDuplicatePendingLoot(looter, itemLink, context, source) then
+    if context.skipDuplicateLoot ~= true and MergeDuplicatePendingLoot(looter, itemLink, context, source) then
         return
     end
 
@@ -2801,9 +2877,12 @@ function Addon.HandleEncounterLootReceived(encounterID, itemID, itemLink, quanti
         classToken = CleanString(classFileName),
     })
 
-    local looter = Addon.ResolveEncounterLootLooter(playerName)
-    local context = BuildDropContext(false)
+    local looter, unsafeReason = Addon.ResolveEncounterLootLooter(playerName, classFileName)
+    local context = BuildDropContext(unsafeReason ~= nil, unsafeReason)
     context.classToken = CleanString(classFileName)
+    if unsafeReason == "ambiguous_looter" then
+        context.skipDuplicateLoot = true
+    end
     Addon.HandleResolvedLoot(looter, itemLink, context, "encounter")
 end
 
@@ -2819,8 +2898,9 @@ function Addon.CompleteCurrentGroup(encounterName)
         endedAt = Now(),
         mergeWindow = ENCOUNTER_LOOT_GRACE,
     })
-    Addon.selectedView = "history"
-    Addon.selectedHistoryIndex = 1
+    Addon.selectedView = "current"
+    Addon.selectedHistoryIndex = nil
+    Addon.rowScrollOffset = 0
     Addon.challengeFinalizeToken = nil
     Addon.recentEncounterFinalizeToken = nil
     Addon.EnterLootMode()
@@ -2831,6 +2911,7 @@ end
 local function SelectView(view, historyIndex)
     Addon.selectedView = view
     Addon.selectedHistoryIndex = historyIndex
+    Addon.rowScrollOffset = 0
     Addon.EnterLootMode()
     RefreshRows()
 end
@@ -2990,6 +3071,23 @@ CreateUI = function()
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    if frame.EnableMouseWheel then
+        frame:EnableMouseWheel(true)
+    end
+    frame:SetScript("OnMouseWheel", function(_, delta)
+        local value = CleanNumber(delta) or 0
+        if value == 0 then
+            return
+        end
+        local rows = RowsForSelectedView()
+        if #rows <= MAX_VISIBLE_ROWS then
+            Addon.rowScrollOffset = 0
+            RefreshRows()
+            return
+        end
+        Addon.rowScrollOffset = (tonumber(Addon.rowScrollOffset) or 0) + (value < 0 and 1 or -1)
+        RefreshRows()
+    end)
     frame:SetScript("OnHide", function()
         if type(Addon.EnterLootMode) == "function" then
             Addon.EnterLootMode()
@@ -3049,6 +3147,14 @@ CreateUI = function()
     frame.emptyText:SetText(L("No gear drops in this view."))
     RegisterFontString(frame.emptyText, 12)
     Addon.emptyText = frame.emptyText
+
+    frame.scrollText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    frame.scrollText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -18, 12)
+    frame.scrollText:SetJustifyH("RIGHT")
+    KeepOneLine(frame.scrollText)
+    RegisterFontString(frame.scrollText, 10)
+    frame.scrollText:Hide()
+    Addon.scrollText = frame.scrollText
 
     for index = 1, MAX_VISIBLE_ROWS do
         Addon.rowFrames[index] = CreateRow(frame, index)
@@ -4213,12 +4319,14 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         local encounterID, encounterName = ...
         Addon.currentEncounterID = encounterID or Addon.currentEncounterID
         Addon.currentEncounterName = CleanString(encounterName) or Addon.currentEncounterName
-        Addon.CompleteCurrentGroup(Addon.currentEncounterName)
         Addon.recentEncounterName = Addon.currentEncounterName
         Addon.recentEncounterEndedAt = Now()
         Addon.currentEncounterID = nil
         Addon.currentEncounterName = nil
         Addon.currentEncounterStartedAt = nil
+        if Addon.HasCurrentLootRows() then
+            Addon.ScheduleRecentEncounterHistoryFinalize("encounter_end")
+        end
     elseif event == "ENCOUNTER_LOOT_RECEIVED" then
         Addon.HandleEncounterLootReceived(...)
     elseif event == "CHAT_MSG_LOOT" then

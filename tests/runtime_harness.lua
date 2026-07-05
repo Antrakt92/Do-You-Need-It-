@@ -94,6 +94,10 @@ function FrameMethods:EnableMouse(enabled)
     self.mouseEnabled = enabled
 end
 
+function FrameMethods:EnableMouseWheel(enabled)
+    self.mouseWheelEnabled = enabled == true
+end
+
 function FrameMethods:SetMovable(movable)
     self.movable = movable
 end

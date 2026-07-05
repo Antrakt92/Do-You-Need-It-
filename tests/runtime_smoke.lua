@@ -471,9 +471,15 @@ local function testPostEncounterLootMovesToHistoryAfterGrace()
     assertEqual(#h.env.DoYouNeedItDB.sessionRows, 1, "post-encounter loot is visible before the history finalize timer")
     h:runTimers(3)
 
+    assertEqual(#h.env.DoYouNeedItDB.history, 0, "post-encounter loot does not finalize during the short raid-loot burst window")
+    assertEqual(#h:visibleRows(), 1, "post-encounter loot remains visible in Current before the raid grace expires")
+    h:runTimers(10)
+
     assertEqual(#h.env.DoYouNeedItDB.history, 1, "post-encounter loot moves into history after the grace timer")
     assertTruthy(h.env.DoYouNeedItDB.history[1].title:find("After End Boss", 1, true), "post-encounter history keeps the ended boss name")
     assertEqual(#h.env.DoYouNeedItDB.history[1].allRows, 1, "post-encounter history keeps all-gear loot")
+    assertEqual(h.env.DoYouNeedItFrame.historyButton:GetText(), "Current", "post-encounter finalization keeps the user on Current")
+    assertEqual(h:visibleRows()[1].whisper:IsShown(), true, "askable finalized post-encounter rows still show Ask in Current")
 end
 
 local function testLatePostEncounterLootMergesIntoLatestHistoryGroup()
@@ -505,11 +511,11 @@ local function testLatePostEncounterLootMergesIntoLatestHistoryGroup()
     })
 
     h:fire("ENCOUNTER_LOOT_RECEIVED", 779, 22020, firstItem, 1, "Otherplayer", "PALADIN")
-    h:runTimers(3)
+    h:runTimers(10)
     assertEqual(#h.env.DoYouNeedItDB.history, 1, "precondition: first post-encounter batch creates one group")
 
     h:fireBonusLoot("Secondplayer", lateItem)
-    h:runTimers(3)
+    h:runTimers(10)
 
     assertEqual(#h.env.DoYouNeedItDB.history, 1, "late post-encounter loot merges into the latest matching group")
     assertEqual(#h.env.DoYouNeedItDB.history[1].allRows, 2, "merged history group keeps first and late all-gear rows")
@@ -536,7 +542,7 @@ local function testCurrentViewFallsBackToLatestHistoryGroup()
     })
 
     h:fire("ENCOUNTER_LOOT_RECEIVED", 778, 22019, item, 1, "Otherplayer", "PALADIN")
-    h:runTimers(3)
+    h:runTimers(10)
     assertEqual(#h.env.DoYouNeedItDB.history, 1, "precondition: finalized loot is in latest history")
 
     h.menuButtons = {}
@@ -547,6 +553,199 @@ local function testCurrentViewFallsBackToLatestHistoryGroup()
     assertEqual(#rows, 1, "current view falls back to the latest unified history rows")
     assertTruthy(rows[1].drop:GetText():find("Latest Current Sword", 1, true), "current fallback shows the latest finalized drop")
     assertEqual(h.env.DoYouNeedItFrame.historyButton:GetText(), "Current", "history button still labels the fallback as current")
+end
+
+local function testRaidEncounterEndKeepsCurrentLootOpenForLateDrops()
+    local h = Harness.new({
+        inRaid = true,
+        instanceName = "The Dreamrift",
+        instanceType = "raid",
+    })
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+    h:setUnit("raid1", {
+        name = "Raidplate",
+        realm = "Ravencrest",
+        guid = "RaidGUID1",
+        classToken = "PALADIN",
+    })
+    h:setUnit("raid2", {
+        name = "Raidmage",
+        realm = "Ravencrest",
+        guid = "RaidGUID2",
+        classToken = "MAGE",
+    })
+
+    local firstItem = h:addItem(22103, {
+        name = "Raid First Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+    local lateItem = h:addItem(22104, {
+        name = "Raid Late Axe",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 0,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fire("ENCOUNTER_START", 888, "Chimaerus the Undreamt God")
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 888, 22103, firstItem, 1, "Raidplate", "PALADIN")
+    h:fire("ENCOUNTER_END", 888, "Chimaerus the Undreamt God")
+
+    assertEqual(#h.env.DoYouNeedItDB.history, 0, "raid encounter end does not immediately complete current loot")
+    assertEqual(#h:visibleRows(), 1, "raid loot remains visible after encounter end")
+    assertEqual(h:visibleRows()[1].whisper:IsShown(), true, "raid current loot keeps Ask after encounter end")
+
+    h:runTimers(3)
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 888, 22104, lateItem, 1, "Raidmage", "MAGE")
+
+    assertEqual(#h.env.DoYouNeedItDB.history, 0, "late raid loot still waits before history finalization")
+    assertEqual(#h:visibleRows(), 2, "late raid loot appends without visually resetting the current boss drops")
+    h:runTimers(10)
+
+    assertEqual(#h.env.DoYouNeedItDB.history, 1, "raid boss loot finalizes into one history group after the grace")
+    assertEqual(#h.env.DoYouNeedItDB.history[1].allRows, 2, "raid boss history keeps both early and late drops")
+    assertEqual(h.env.DoYouNeedItFrame.historyButton:GetText(), "Current", "raid finalization keeps the visible selector on Current")
+    assertEqual(#h:visibleRows(), 2, "Current still shows the finalized raid boss drops")
+end
+
+local function testRaidLootListCanScrollPastSixRows()
+    local h = Harness.new({
+        inRaid = true,
+        instanceName = "The Dreamrift",
+        instanceType = "raid",
+    })
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    h:fire("ENCOUNTER_START", 889, "Many Drops Boss")
+    for index = 1, 10 do
+        h:setUnit("raid" .. index, {
+            name = "Raider" .. index,
+            realm = "Ravencrest",
+            guid = "RaidManyGUID" .. index,
+            classToken = "PALADIN",
+        })
+        local item = h:addItem(22200 + index, {
+            name = "Raid Scroll Item " .. index,
+            equipLoc = "INVTYPE_WEAPON",
+            classID = 2,
+            subclassID = 7,
+            quality = 4,
+            bindType = 2,
+            equippable = true,
+            usable = true,
+        })
+        h:fire("ENCOUNTER_LOOT_RECEIVED", 889, 22200 + index, item, 1, "Raider" .. index, "PALADIN")
+    end
+
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 10, "raid encounter stores every visible gear drop")
+    local rows = h:visibleRows()
+    assertEqual(#rows, 6, "raid encounter shows the first page of the compact loot list")
+    assertTruthy(rows[1].drop:GetText():find("Raid Scroll Item 10", 1, true), "raid list starts on the newest drop")
+
+    for _ = 1, 4 do
+        h.env.DoYouNeedItFrame:FireScript("OnMouseWheel", -1)
+    end
+
+    rows = h:visibleRows()
+    assertEqual(#rows, 6, "raid scroll keeps six visible row frames")
+    assertTruthy(rows[1].drop:GetText():find("Raid Scroll Item 6", 1, true), "raid scroll can reveal older drops beyond the first six")
+    assertTruthy(rows[6].drop:GetText():find("Raid Scroll Item 1", 1, true), "raid scroll reaches the oldest retained drop")
+end
+
+local function testRaidEncounterLootDisambiguatesShortNamesByClass()
+    local h = Harness.new({
+        inRaid = true,
+        instanceName = "The Dreamrift",
+        instanceType = "raid",
+    })
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+    h:setUnit("raid1", {
+        name = "Alex",
+        realm = "RealmA",
+        guid = "AlexRealmAGUID",
+        classToken = "PALADIN",
+    })
+    h:setUnit("raid2", {
+        name = "Alex",
+        realm = "RealmB",
+        guid = "AlexRealmBGUID",
+        classToken = "MAGE",
+    })
+
+    local item = h:addItem(22301, {
+        name = "Ambiguous Class Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 890, 22301, item, 1, "Alex", "PALADIN")
+
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 1, "class-disambiguated short-name raid loot is saved")
+    assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].looter, "Alex-RealmA", "event class resolves the ambiguous short name to the matching full name")
+    assertEqual(h.notifyInspectCalls[1], "raid1", "class-disambiguated raid loot can inspect the matching raid unit")
+end
+
+local function testRaidEncounterLootKeepsAmbiguousSameClassDuplicates()
+    local h = Harness.new({
+        inRaid = true,
+        instanceName = "The Dreamrift",
+        instanceType = "raid",
+    })
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+    h:setUnit("raid1", {
+        name = "Alex",
+        realm = "RealmA",
+        guid = "AlexRealmAGUID",
+        classToken = "PALADIN",
+    })
+    h:setUnit("raid2", {
+        name = "Alex",
+        realm = "RealmB",
+        guid = "AlexRealmBGUID",
+        classToken = "PALADIN",
+    })
+
+    local item = h:addItem(22302, {
+        name = "Ambiguous Same Class Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 891, 22302, item, 1, "Alex", "PALADIN")
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 891, 22302, item, 1, "Alex", "PALADIN")
+
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 2, "unresolved same-class short-name raid drops do not collapse into one row")
+    assertEqual(#h.env.DoYouNeedItDB.sessionRows, 0, "unresolved ambiguous raid drops stay review-only")
+    assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].unsafe, true, "ambiguous raid rows are marked unsafe")
+    assertEqual(h.env.DoYouNeedItDB.sessionAllRows[2].unsafe, true, "each ambiguous duplicate keeps unsafe status")
+    assertEqual(#h.notifyInspectCalls, 0, "unresolved ambiguous raid rows do not inspect an arbitrary player")
 end
 
 local function testEncounterLootReceivedCreatesLootRow()
@@ -871,7 +1070,7 @@ local function testClearCancelsHistoryOnlyPendingAutoWhisper()
         db = {
             settings = {
                 autoWhisper = true,
-                autoDelay = 5,
+                autoDelay = 30,
                 maxSessionRows = 1,
                 font = "Fonts\\FRIZQT__.TTF",
             },
@@ -904,13 +1103,14 @@ local function testClearCancelsHistoryOnlyPendingAutoWhisper()
 
     h:fireLoot("Otherplayer", first)
     h:fire("ENCOUNTER_END", 123, "History Auto Boss")
+    h:runTimers(10)
     h:fireLoot("Secondplayer", second)
 
     assertEqual(#h.env.DoYouNeedItDB.sessionRows, 1, "precondition: session rows are pruned to the newest row")
     assertEqual(h.env.DoYouNeedItDB.history[1].rows[1].itemID, 22016, "precondition: older pending-auto row remains in history")
 
     h:slash("clear")
-    h:runTimers(5, 20)
+    h:runTimers(30, 40)
 
     assertEqual(#h.sentMessages, 0, "clear cancels pending auto whispers even for history-only rows")
 end
@@ -994,6 +1194,7 @@ local function testBonusLootChatUpgradesEarlierCompletedHistoryRow()
 
     h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 22008, item, 1, "Otherplayer", "PALADIN")
     h:fire("ENCOUNTER_END", 123, "Late Bonus Boss")
+    h:runTimers(10)
     assertEqual(#h.env.DoYouNeedItDB.history, 1, "encounter completion saves the first loot row to history")
     assertEqual(#h.env.DoYouNeedItDB.history[1].rows, 1, "history initially treats the earlier encounter row as askable")
 
@@ -1041,6 +1242,7 @@ local function testBonusLootChatUpgradesHistoryRowAfterSessionPrune()
 
     h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 22011, firstItem, 1, "Otherplayer", "PALADIN")
     h:fire("ENCOUNTER_END", 123, "Pruned Bonus Boss")
+    h:runTimers(10)
     h:fire("ENCOUNTER_LOOT_RECEIVED", 124, 22012, secondItem, 1, "Otherplayer", "PALADIN")
     assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 1, "session all gear prunes to the configured limit")
     assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].itemID, 22012, "session all gear pruned away the earlier row")
@@ -1749,6 +1951,10 @@ testChallengeCompletionKeepsEndLootInHistory()
 testPostEncounterLootMovesToHistoryAfterGrace()
 testLatePostEncounterLootMergesIntoLatestHistoryGroup()
 testCurrentViewFallsBackToLatestHistoryGroup()
+testRaidEncounterEndKeepsCurrentLootOpenForLateDrops()
+testRaidLootListCanScrollPastSixRows()
+testRaidEncounterLootDisambiguatesShortNamesByClass()
+testRaidEncounterLootKeepsAmbiguousSameClassDuplicates()
 testEncounterLootReceivedCreatesLootRow()
 testEncounterLootUsesEventClassTokenWhenRosterClassMissing()
 testEncounterAndChatLootDeduplicateSameDrop()

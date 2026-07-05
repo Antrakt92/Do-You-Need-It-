@@ -1070,7 +1070,8 @@ assertTruthy(runtime:find("SnapshotRowsForSave", 1, true), "runtime sanitizes sa
 assertTruthy(runtime:find("SnapshotHistoryForSave", 1, true), "runtime sanitizes saved history")
 assertTruthy(runtime:find("session drops=", 1, true), "runtime reports saved session drop count in status")
 assertTruthy(runtime:find("all gear=", 1, true), "runtime reports saved all gear drop count in status")
-assertTruthy(runtime:find("Core.GetNewestRowsFirst", 1, true), "runtime displays newest rows first")
+assertTruthy(runtime:find("NewestRowsWindow", 1, true), "runtime displays newest rows through a scrollable window")
+assertTruthy(runtime:find("OnMouseWheel", 1, true), "runtime lets raid-sized loot lists scroll")
 assertEqual(runtime:find("UnitExistsClean", 1, true), nil, "runtime does not gate roster building through UnitExists")
 assertTruthy(runtime:find("layout=540x300", 1, true), "runtime reports compact settings-enabled layout in status")
 
