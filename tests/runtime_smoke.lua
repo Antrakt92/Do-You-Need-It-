@@ -555,6 +555,38 @@ local function testCurrentViewFallsBackToLatestHistoryGroup()
     assertEqual(h.env.DoYouNeedItFrame.historyButton:GetText(), "Current", "history button still labels the fallback as current")
 end
 
+local function testClearHidesCurrentHistoryFallbackWithoutDeletingHistory()
+    local h = Harness.new()
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+
+    h:fire("ENCOUNTER_END", 780, "Clear Fallback Boss")
+    local item = h:addItem(22022, {
+        name = "Clear Fallback Sword",
+        equipLoc = "INVTYPE_WEAPON",
+        classID = 2,
+        subclassID = 7,
+        quality = 4,
+        bindType = 2,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 780, 22022, item, 1, "Otherplayer", "PALADIN")
+    h:runTimers(10)
+    assertEqual(#h.env.DoYouNeedItDB.history, 1, "precondition: finalized loot is saved to history")
+    assertEqual(#h:visibleRows(), 1, "precondition: current shows the fresh finalized fallback")
+
+    h:slash("clear")
+
+    assertEqual(#h.env.DoYouNeedItDB.history, 1, "clear does not delete saved history")
+    assertEqual(#h:visibleRows(), 0, "clear hides the fresh history fallback from Current")
+    h:slash("history")
+    h:slash("history")
+    assertEqual(#h:visibleRows(), 1, "saved history remains available from the history selector")
+end
+
 local function testRaidEncounterEndKeepsCurrentLootOpenForLateDrops()
     local h = Harness.new({
         inRaid = true,
@@ -1204,6 +1236,10 @@ local function testBonusLootChatUpgradesEarlierCompletedHistoryRow()
     assertEqual(#h.env.DoYouNeedItDB.history[1].rows, 0, "late bonus loot chat removes the completed row from history askable")
     assertEqual(#h.env.DoYouNeedItDB.history[1].allRows, 1, "late bonus loot chat keeps the completed row in history all gear")
     assertEqual(h.env.DoYouNeedItDB.history[1].allRows[1].lootSource, "bonus_roll", "late bonus loot chat source-tags the completed history row")
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "late bonus source upgrade keeps the fresh Current fallback visible")
+    assertEqual(rows[1].whisper:IsShown(), false, "late bonus source upgrade removes the stale Ask button")
+    assertEqual(rows[1].rollIcon:IsShown(), true, "late bonus source upgrade shows the roll icon in Current")
 end
 
 local function testBonusLootChatUpgradesHistoryRowAfterSessionPrune()
@@ -1353,6 +1389,50 @@ local function testLegacySavedAllGearFallbackDisplays()
     rows = h:visibleRows()
     assertEqual(#rows, 1, "legacy history fallback displays in the unified list")
     assertEqual(rows[1].row.id, "legacy-history", "legacy history fallback keeps row identity")
+end
+
+local function testSavedHistoryDoesNotBecomeCurrentAfterReload()
+    local historyItem = "|cff0070dd|Hitem:30017:::::::::::::|h[Reload History Sword]|h|r"
+    local h = Harness.new({
+        db = {
+            settings = { font = "Fonts\\FRIZQT__.TTF" },
+            characters = {
+                ["Player-Ravencrest"] = {
+                    history = {
+                        {
+                            title = "Reload Dungeon - Reload Boss (1 drop)",
+                            rows = {
+                                {
+                                    id = "reload-history",
+                                    looter = "Otherplayer-Ravencrest",
+                                    itemLink = historyItem,
+                                    equippedText = "Equipped: unknown",
+                                    askable = true,
+                                },
+                            },
+                            allRows = {
+                                {
+                                    id = "reload-history",
+                                    looter = "Otherplayer-Ravencrest",
+                                    itemLink = historyItem,
+                                    equippedText = "Equipped: unknown",
+                                    askable = true,
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    })
+    h:loadAddon()
+
+    assertEqual(#h:visibleRows(), 0, "saved history does not auto-populate Current after reload")
+    h:slash("history")
+    h:slash("history")
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "saved history remains available from the history selector")
+    assertEqual(rows[1].row.id, "reload-history", "history selector keeps the saved row identity")
 end
 
 local function testSavedDuplicateHistoryGroupsMergeOnLoad()
@@ -1951,6 +2031,7 @@ testChallengeCompletionKeepsEndLootInHistory()
 testPostEncounterLootMovesToHistoryAfterGrace()
 testLatePostEncounterLootMergesIntoLatestHistoryGroup()
 testCurrentViewFallsBackToLatestHistoryGroup()
+testClearHidesCurrentHistoryFallbackWithoutDeletingHistory()
 testRaidEncounterEndKeepsCurrentLootOpenForLateDrops()
 testRaidLootListCanScrollPastSixRows()
 testRaidEncounterLootDisambiguatesShortNamesByClass()
@@ -1973,6 +2054,7 @@ testBonusLootChatUpgradesHistoryRowAfterSessionPrune()
 testDebugPersistenceIsOptIn()
 testDebugPersistenceLoadState()
 testLegacySavedAllGearFallbackDisplays()
+testSavedHistoryDoesNotBecomeCurrentAfterReload()
 testSavedDuplicateHistoryGroupsMergeOnLoad()
 testAccountWideSavedDropsDoNotLeakIntoCharacterHistory()
 testDelayedPlayerIdentityLoadsCharacterDrops()

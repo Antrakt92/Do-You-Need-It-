@@ -7,6 +7,7 @@
 - **Raid boss loot now waits for the loot burst to settle before history finalization** — the window no longer flips between Current and History while late boss drops are still arriving, and fresh finalized boss drops keep their Ask buttons through the Current view.
 - **Raid-sized loot lists are scrollable** — compact windows still show six rows at a time, but mouse wheel scrolling can reveal older drops when a boss produces more rows.
 - **Ambiguous same-name raid looters are handled more safely** — encounter loot can disambiguate same short-name players by event class when possible, and unresolved same-class duplicates stay visible instead of being collapsed into one row.
+- **Clearing loot no longer resurrects saved history in Current** — `/dyni clear` hides the current fallback without deleting saved history, and old saved history no longer appears as fresh Current loot after reload.
 
 ## 0.3.0 - 03-Jul-2026 — Askable filters, bonus loot, and history reliability
 

@@ -16,6 +16,7 @@ local Addon = {
     selectedView = "current",
     contentMode = "loot",
     rowScrollOffset = 0,
+    currentHistoryFallbackGroup = nil,
     pendingItems = {},
     lootGeneration = 0,
     recentLootKeys = {},
@@ -1427,7 +1428,7 @@ local function RowsForSelectedView()
     end
     local hasLiveCurrentRows = #(Addon.state.currentRows or {}) > 0 or #(Addon.state.allRows or {}) > 0
     if Addon.selectedView == "current" and not hasLiveCurrentRows then
-        local group = Addon.state.history and Addon.state.history[1]
+        local group = Addon.currentHistoryFallbackGroup
         if group then
             return unifiedRows(group.allRows, group.rows)
         end
@@ -2540,6 +2541,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
     Addon.selectedView = "current"
     Addon.selectedHistoryIndex = nil
     Addon.rowScrollOffset = 0
+    Addon.currentHistoryFallbackGroup = nil
     Addon.EnterLootMode()
     SaveDB()
     RefreshRows()
@@ -2890,7 +2892,7 @@ function Addon.CompleteCurrentGroup(encounterName)
     if not Addon.state or (#Addon.state.currentRows == 0 and #(Addon.state.allRows or {}) == 0) then
         return
     end
-    Core.CompleteCurrentGroup(Addon.state, {
+    Addon.currentHistoryFallbackGroup = Core.CompleteCurrentGroup(Addon.state, {
         instanceName = Addon.currentInstanceName or SafeInstanceName(),
         encounterName = encounterName or Addon.currentEncounterName or Core.FirstRowEncounterName(Addon.state.currentRows) or Core.FirstRowEncounterName(Addon.state.allRows),
         locale = ActiveLocale(),
@@ -4107,6 +4109,7 @@ local function HandleSlash(message)
         Addon.state.sessionAllRows = {}
         Addon.selectedView = "current"
         Addon.selectedHistoryIndex = nil
+        Addon.currentHistoryFallbackGroup = nil
         Addon.EnterLootMode()
         SaveDB()
         RefreshRows()
@@ -4208,6 +4211,7 @@ local function Initialize()
     Addon.pendingItems = {}
     Addon.lootGeneration = 0
     Addon.recentLootKeys = {}
+    Addon.currentHistoryFallbackGroup = nil
     Addon.challengeCompletedAt = nil
     Addon.challengeFinalizeToken = nil
     Addon.recentEncounterFinalizeToken = nil
