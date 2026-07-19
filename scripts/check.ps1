@@ -60,7 +60,13 @@ try {
         $releaseWorkflowText -notmatch '(?m)^\s+--draft\s+`\s*$' -or
         $releaseWorkflowText -notmatch 'gh release edit' -or
         $releaseWorkflowText -notmatch 'gh release download' -or
-        $releaseWorkflowText -notmatch 'Get-FileHash') {
+        $releaseWorkflowText -notmatch 'Get-FileHash' -or
+        $releaseWorkflowText -notmatch 'IMMUTABLE_RELEASES_READ_TOKEN' -or
+        $releaseWorkflowText -notmatch 'check-release-policy\.ps1' -or
+        [regex]::Matches($releaseWorkflowText, 'check-release-ref\.ps1').Count -lt 3 -or
+        $releaseWorkflowText -notmatch '\$release\.immutable -is \[bool\]' -or
+        $releaseWorkflowText -notmatch '\.digest' -or
+        $releaseWorkflowText -notmatch 'persist-credentials:\s*false') {
         throw "release workflow is missing verified GitHub publication"
     }
     $prepareIndex = $releaseWorkflowText.IndexOf('- name: Prepare verified GitHub draft')
@@ -93,6 +99,8 @@ try {
         $retryWorkflowText -notmatch '(?m)^\s+- upload_not_started\s*$' -or
         $retryWorkflowText -notmatch '(?m)^\s+- curseforge_confirmed_accepted\s*$' -or
         $retryWorkflowText -notmatch 'ref:\s*\$\{\{\s*inputs\.tag\s*\}\}' -or
+        $retryWorkflowText -notmatch 'ref:\s*\$\{\{\s*github\.workflow_sha\s*\}\}' -or
+        $retryWorkflowText -notmatch 'path:\s*\.release-workflow-guards' -or
         $retryWorkflowText -notmatch 'refs/tags/\$env:RELEASE_TAG\^\{commit\}' -or
         $retryWorkflowText -notmatch 'git rev-parse HEAD' -or
         $retryWorkflowText -notmatch 'git merge-base --is-ancestor' -or
@@ -100,8 +108,31 @@ try {
         $retryWorkflowText -notmatch "inputs\.recovery_mode\s*==\s*'upload_not_started'" -or
         $retryWorkflowText -notmatch '(?m)^\s+- name:\s+Prepare or verify GitHub draft\s*$' -or
         $retryWorkflowText -notmatch '(?m)^\s+- name:\s+Publish GitHub release\s*$' -or
+        $retryWorkflowText -notmatch 'IMMUTABLE_RELEASES_READ_TOKEN' -or
+        $retryWorkflowText -notmatch 'check-release-policy\.ps1' -or
+        [regex]::Matches($retryWorkflowText, 'check-release-ref\.ps1').Count -lt 3 -or
+        $retryWorkflowText -notmatch '\$release\.immutable -is \[bool\]' -or
+        $retryWorkflowText -notmatch '\.digest' -or
+        $retryWorkflowText -notmatch 'persist-credentials:\s*false' -or
         [regex]::Matches($retryWorkflowText, '-ZipPath\b').Count -lt 2) {
         throw "CurseForge retry workflow is not bound to an explicitly confirmed exact tag"
+    }
+    foreach ($releaseGuard in @(
+        '.\scripts\check-release-policy.ps1',
+        '.\scripts\check-release-ref.ps1'
+    )) {
+        if (-not (Test-Path -LiteralPath $releaseGuard -PathType Leaf)) {
+            throw "missing release guard script: $releaseGuard"
+        }
+        $parseErrors = $null
+        [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path -LiteralPath $releaseGuard).Path,
+            [ref]$null,
+            [ref]$parseErrors
+        )
+        if (@($parseErrors).Count -ne 0) {
+            throw "release guard script has PowerShell syntax errors: $releaseGuard"
+        }
     }
     $recoveryRerunIndex = $retryWorkflowText.IndexOf('- name: Reject ambiguous recovery rerun')
     $recoveryCheckoutIndex = $retryWorkflowText.IndexOf('- name: Checkout')

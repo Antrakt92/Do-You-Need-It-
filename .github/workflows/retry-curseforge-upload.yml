@@ -46,6 +46,14 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ inputs.tag }}
+          persist-credentials: false
+
+      - name: Checkout pinned recovery guards
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .release-workflow-guards
+          persist-credentials: false
 
       - name: Verify exact release tag
         shell: pwsh
@@ -84,6 +92,16 @@ jobs:
             throw "Release tag commit is not reachable from origin/main"
           }
 
+          .\.release-workflow-guards\scripts\check-release-ref.ps1 `
+            -Tag $env:RELEASE_TAG `
+            -ExpectedCommit $tagCommit
+
+      - name: Verify immutable publication policy
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}
+        run: .\.release-workflow-guards\scripts\check-release-policy.ps1
+
       - name: Install check tools
         shell: pwsh
         run: .\scripts\install-check-tools.ps1 -Install
@@ -108,6 +126,10 @@ jobs:
           if (-not (Test-Path -LiteralPath $zipPath -PathType Leaf)) {
             throw "Expected package was not created: $zipPath"
           }
+          $headCommit = (git rev-parse HEAD).Trim()
+          .\.release-workflow-guards\scripts\check-release-ref.ps1 `
+            -Tag $env:RELEASE_TAG `
+            -ExpectedCommit $headCommit
 
           $releaseJson = gh release view $env:RELEASE_TAG `
             --repo $env:GITHUB_REPOSITORY `
@@ -144,8 +166,8 @@ jobs:
             throw "Recovery requires an unpublished GitHub draft for $env:RELEASE_TAG"
           }
           $matchingAssets = @($release.assets | Where-Object { $_.name -eq $zipName })
-          if ($matchingAssets.Count -ne 1) {
-            throw "GitHub draft must contain exactly one $zipName asset"
+          if (@($release.assets).Count -ne 1 -or $matchingAssets.Count -ne 1) {
+            throw "GitHub draft must contain only one $zipName asset"
           }
 
           $downloadDir = Join-Path $env:RUNNER_TEMP "github-release-asset"
@@ -181,15 +203,40 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
+          $headCommit = (git rev-parse HEAD).Trim()
+          .\.release-workflow-guards\scripts\check-release-ref.ps1 `
+            -Tag $env:RELEASE_TAG `
+            -ExpectedCommit $headCommit
           gh release edit $env:RELEASE_TAG `
             --repo $env:GITHUB_REPOSITORY `
             --draft=false
           if ($LASTEXITCODE -ne 0) {
             throw "GitHub release publication failed for $env:RELEASE_TAG"
           }
-          $release = gh release view $env:RELEASE_TAG `
-            --repo $env:GITHUB_REPOSITORY `
-            --json tagName,isDraft,isPrerelease,assets | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or $release.tagName -ne $env:RELEASE_TAG -or $release.isDraft -or $release.isPrerelease) {
-            throw "GitHub release is not a stable publication for $env:RELEASE_TAG"
-          }
+          $version = $env:RELEASE_TAG.Substring(1)
+          $zipName = "DoYouNeedIt-$version.zip"
+          $zipPath = Join-Path (Get-Location) "dist\$zipName"
+          $expectedHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedSize = (Get-Item -LiteralPath $zipPath).Length
+          $deadline = (Get-Date).AddSeconds(60)
+          do {
+            $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:RELEASE_TAG" | ConvertFrom-Json
+            $matchingAssets = @($release.assets | Where-Object { $_.name -ceq $zipName })
+            if ($LASTEXITCODE -eq 0 -and
+                $release.tag_name -ceq $env:RELEASE_TAG -and
+                $release.draft -is [bool] -and -not $release.draft -and
+                $release.prerelease -is [bool] -and -not $release.prerelease -and
+                $release.immutable -is [bool] -and $release.immutable -and
+                @($release.assets).Count -eq 1 -and
+                $matchingAssets.Count -eq 1 -and
+                [string]$matchingAssets[0].digest -ceq "sha256:$expectedHash" -and
+                [long]$matchingAssets[0].size -eq $expectedSize) {
+              .\.release-workflow-guards\scripts\check-release-ref.ps1 `
+                -Tag $env:RELEASE_TAG `
+                -ExpectedCommit $headCommit
+              Write-Host "Published immutable GitHub release matches the exact-tag package."
+              exit 0
+            }
+            Start-Sleep -Seconds 5
+          } while ((Get-Date) -lt $deadline)
+          throw "Published GitHub release did not become immutable or match the exact-tag package"
