@@ -2,20 +2,87 @@ name: Retry CurseForge Upload
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Exact existing release tag to rebuild and upload
+        required: true
+        type: string
+      recovery_mode:
+        description: Choose only a recovery state proven from the failed run and remote evidence
+        required: true
+        type: choice
+        options:
+          - upload_not_started
+          - curseforge_confirmed_accepted
+      confirm_safe_recovery:
+        description: I verified the selected state is definitive, not an uncertain upload outcome
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: dyni-release-${{ inputs.tag }}
+  cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   upload:
     # Manual-only recovery path for transient marketplace/API failures. Normal
-    # releases still go through the tag-triggered Release workflow.
+    # releases still go through the tag-triggered Release workflow. Never use
+    # mutable main or retry an upload whose remote outcome is uncertain.
+    if: ${{ inputs.confirm_safe_recovery }}
     runs-on: windows-latest
     steps:
+      - name: Reject ambiguous recovery rerun
+        if: ${{ github.run_attempt != 1 }}
+        shell: pwsh
+        run: |
+          throw "Recovery reruns are blocked because the prior upload outcome must be reassessed. Dispatch a new run with the currently proven recovery mode."
+
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
+          ref: ${{ inputs.tag }}
+
+      - name: Verify exact release tag
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v([0-9]+\.[0-9]+\.[0-9]+)$') {
+            throw "Release tag must use exact vMAJOR.MINOR.PATCH format"
+          }
+          $tagVersion = $Matches[1]
+          $tagCommit = git rev-parse "refs/tags/$env:RELEASE_TAG^{commit}"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not resolve exact release tag commit"
+          }
+          $headCommit = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not resolve checkout HEAD"
+          }
+          if ($tagCommit -ne $headCommit) {
+            throw "Checkout HEAD does not match exact tag $env:RELEASE_TAG"
+          }
+          $toc = Get-Content -LiteralPath .\DoYouNeedIt.toc -Raw
+          if ($toc -notmatch '(?m)^##\s*Version:\s*(\S+)\s*$') {
+            throw "DoYouNeedIt.toc is missing ## Version"
+          }
+          if ($Matches[1] -ne $tagVersion) {
+            throw "Tag/version mismatch: tag=$tagVersion toc=$($Matches[1])"
+          }
+
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not fetch origin/main for release ancestry check"
+          }
+          git merge-base --is-ancestor $tagCommit origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw "Release tag commit is not reachable from origin/main"
+          }
 
       - name: Install check tools
         shell: pwsh
@@ -29,8 +96,100 @@ jobs:
         shell: pwsh
         run: .\scripts\package.ps1
 
+      - name: Prepare or verify GitHub draft
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $version = $env:RELEASE_TAG.Substring(1)
+          $zipName = "DoYouNeedIt-$version.zip"
+          $zipPath = Join-Path (Get-Location) "dist\$zipName"
+          if (-not (Test-Path -LiteralPath $zipPath -PathType Leaf)) {
+            throw "Expected package was not created: $zipPath"
+          }
+
+          $releaseJson = gh release view $env:RELEASE_TAG `
+            --repo $env:GITHUB_REPOSITORY `
+            --json tagName,isDraft,isPrerelease,assets 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            $releaseData = .\scripts\upload-curseforge.ps1 `
+              -ZipPath $zipPath `
+              -DryRun | ConvertFrom-Json
+            $notesPath = Join-Path $env:RUNNER_TEMP "release-notes.md"
+            [System.IO.File]::WriteAllText(
+              $notesPath,
+              [string]$releaseData.Metadata.changelog,
+              [System.Text.UTF8Encoding]::new($false)
+            )
+            gh release create $env:RELEASE_TAG $zipPath `
+              --repo $env:GITHUB_REPOSITORY `
+              --verify-tag `
+              --draft `
+              --title "DoYouNeedIt $version" `
+              --notes-file $notesPath
+            if ($LASTEXITCODE -ne 0) {
+              throw "GitHub draft creation failed for $env:RELEASE_TAG"
+            }
+            $releaseJson = gh release view $env:RELEASE_TAG `
+              --repo $env:GITHUB_REPOSITORY `
+              --json tagName,isDraft,isPrerelease,assets
+            if ($LASTEXITCODE -ne 0) {
+              throw "GitHub draft could not be read back"
+            }
+          }
+
+          $release = $releaseJson | ConvertFrom-Json
+          if ($release.tagName -ne $env:RELEASE_TAG -or -not $release.isDraft -or $release.isPrerelease) {
+            throw "Recovery requires an unpublished GitHub draft for $env:RELEASE_TAG"
+          }
+          $matchingAssets = @($release.assets | Where-Object { $_.name -eq $zipName })
+          if ($matchingAssets.Count -ne 1) {
+            throw "GitHub draft must contain exactly one $zipName asset"
+          }
+
+          $downloadDir = Join-Path $env:RUNNER_TEMP "github-release-asset"
+          New-Item -ItemType Directory -Path $downloadDir -Force | Out-Null
+          gh release download $env:RELEASE_TAG `
+            --repo $env:GITHUB_REPOSITORY `
+            --pattern $zipName `
+            --dir $downloadDir `
+            --clobber
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub draft asset download failed for $zipName"
+          }
+          $remoteZip = Join-Path $downloadDir $zipName
+          $localHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash
+          $remoteHash = (Get-FileHash -LiteralPath $remoteZip -Algorithm SHA256).Hash
+          if ($localHash -ne $remoteHash) {
+            throw "GitHub draft asset does not match the exact-tag package"
+          }
+
       - name: Upload to CurseForge
+        if: ${{ inputs.recovery_mode == 'upload_not_started' }}
         shell: pwsh
         env:
           CURSEFORGE_API_TOKEN: ${{ secrets.CURSEFORGE_API_TOKEN }}
-        run: .\scripts\upload-curseforge.ps1
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $version = $env:RELEASE_TAG.Substring(1)
+          .\scripts\upload-curseforge.ps1 -ZipPath "dist\DoYouNeedIt-$version.zip"
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          gh release edit $env:RELEASE_TAG `
+            --repo $env:GITHUB_REPOSITORY `
+            --draft=false
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub release publication failed for $env:RELEASE_TAG"
+          }
+          $release = gh release view $env:RELEASE_TAG `
+            --repo $env:GITHUB_REPOSITORY `
+            --json tagName,isDraft,isPrerelease,assets | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $release.tagName -ne $env:RELEASE_TAG -or $release.isDraft -or $release.isPrerelease) {
+            throw "GitHub release is not a stable publication for $env:RELEASE_TAG"
+          }

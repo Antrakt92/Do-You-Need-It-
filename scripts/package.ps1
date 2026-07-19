@@ -101,13 +101,62 @@ try {
         Remove-Item -LiteralPath $zipPath -Force
     }
 
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-    [System.IO.Compression.ZipFile]::CreateFromDirectory(
-        $stagingRoot,
+    Add-Type -AssemblyName System.IO.Compression
+    $zipStream = [System.IO.File]::Open(
         $zipPath,
-        [System.IO.Compression.CompressionLevel]::Optimal,
-        $false
+        [System.IO.FileMode]::CreateNew,
+        [System.IO.FileAccess]::Write,
+        [System.IO.FileShare]::None
     )
+    try {
+        $archive = [System.IO.Compression.ZipArchive]::new(
+            $zipStream,
+            [System.IO.Compression.ZipArchiveMode]::Create,
+            $false
+        )
+        try {
+            $fixedTimestamp = [System.DateTimeOffset]::new(
+                2000,
+                1,
+                1,
+                0,
+                0,
+                0,
+                [System.TimeSpan]::Zero
+            )
+            $files = @(
+                Get-ChildItem -LiteralPath $stagingRoot -Recurse -File |
+                    Sort-Object { $_.FullName.Substring($stagingRoot.Length + 1) }
+            )
+            foreach ($file in $files) {
+                $relativePath = $file.FullName.Substring($stagingRoot.Length + 1) -replace '\\', '/'
+                $entry = $archive.CreateEntry(
+                    $relativePath,
+                    [System.IO.Compression.CompressionLevel]::Optimal
+                )
+                $entry.LastWriteTime = $fixedTimestamp
+                $sourceStream = $file.OpenRead()
+                try {
+                    $entryStream = $entry.Open()
+                    try {
+                        $sourceStream.CopyTo($entryStream)
+                    }
+                    finally {
+                        $entryStream.Dispose()
+                    }
+                }
+                finally {
+                    $sourceStream.Dispose()
+                }
+            }
+        }
+        finally {
+            $archive.Dispose()
+        }
+    }
+    finally {
+        $zipStream.Dispose()
+    }
 
     Write-Host "Created $zipPath"
 }

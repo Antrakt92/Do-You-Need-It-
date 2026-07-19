@@ -49,6 +49,68 @@ try {
         throw "version drift: TOC=$tocVersion Core=$coreVersion README=$readmeVersion"
     }
 
+    $releaseWorkflowText = Get-Content -LiteralPath .\.github\workflows\release.yml -Raw
+    if ($releaseWorkflowText -notmatch '(?m)^\s+contents:\s+write\s*$') {
+        throw "release workflow cannot publish GitHub release assets"
+    }
+    if ($releaseWorkflowText -notmatch '(?m)^\s+- name:\s+Prepare verified GitHub draft\s*$' -or
+        $releaseWorkflowText -notmatch '(?m)^\s+- name:\s+Publish GitHub release\s*$' -or
+        $releaseWorkflowText -notmatch 'GH_TOKEN:\s*\$\{\{\s*secrets\.GITHUB_TOKEN\s*\}\}' -or
+        $releaseWorkflowText -notmatch 'gh release create' -or
+        $releaseWorkflowText -notmatch '(?m)^\s+--draft\s+`\s*$' -or
+        $releaseWorkflowText -notmatch 'gh release edit' -or
+        $releaseWorkflowText -notmatch 'gh release download' -or
+        $releaseWorkflowText -notmatch 'Get-FileHash') {
+        throw "release workflow is missing verified GitHub publication"
+    }
+    $prepareIndex = $releaseWorkflowText.IndexOf('- name: Prepare verified GitHub draft')
+    $curseForgeIndex = $releaseWorkflowText.IndexOf('- name: Upload to CurseForge')
+    $publishIndex = $releaseWorkflowText.IndexOf('- name: Publish GitHub release')
+    if ($prepareIndex -lt 0 -or $curseForgeIndex -le $prepareIndex -or $publishIndex -le $curseForgeIndex) {
+        throw "release ordering must be GitHub draft, CurseForge upload, then GitHub publication"
+    }
+    $rejectRerunIndex = $releaseWorkflowText.IndexOf('- name: Reject ambiguous release rerun')
+    $checkoutIndex = $releaseWorkflowText.IndexOf('- name: Checkout')
+    if ($rejectRerunIndex -lt 0 -or $checkoutIndex -le $rejectRerunIndex) {
+        throw "release workflow must reject reruns before checkout or mutation"
+    }
+    if ($releaseWorkflowText -notmatch 'github\.run_attempt\s*!=\s*1' -or
+        $releaseWorkflowText -notmatch 'dyni-release-\$\{\{\s*github\.ref_name\s*\}\}' -or
+        $releaseWorkflowText -notmatch '\^v\(\[0-9\]\+\\\.\[0-9\]\+\\\.\[0-9\]\+\)\$' -or
+        $releaseWorkflowText -notmatch 'refs/tags/\$env:GITHUB_REF_NAME\^\{commit\}' -or
+        $releaseWorkflowText -notmatch '\$env:GITHUB_SHA' -or
+        $releaseWorkflowText -notmatch 'git merge-base --is-ancestor') {
+        throw "release workflow is missing rerun, tag provenance, or main ancestry gates"
+    }
+    if ([regex]::Matches($releaseWorkflowText, '-ZipPath\b').Count -lt 2) {
+        throw "release workflow must reuse the verified package for notes and CurseForge upload"
+    }
+
+    $retryWorkflowText = Get-Content -LiteralPath .\.github\workflows\retry-curseforge-upload.yml -Raw
+    if ($retryWorkflowText -notmatch '(?m)^\s+tag:\s*$' -or
+        $retryWorkflowText -notmatch '(?m)^\s+recovery_mode:\s*$' -or
+        $retryWorkflowText -notmatch '(?m)^\s+confirm_safe_recovery:\s*$' -or
+        $retryWorkflowText -notmatch '(?m)^\s+- upload_not_started\s*$' -or
+        $retryWorkflowText -notmatch '(?m)^\s+- curseforge_confirmed_accepted\s*$' -or
+        $retryWorkflowText -notmatch 'ref:\s*\$\{\{\s*inputs\.tag\s*\}\}' -or
+        $retryWorkflowText -notmatch 'refs/tags/\$env:RELEASE_TAG\^\{commit\}' -or
+        $retryWorkflowText -notmatch 'git rev-parse HEAD' -or
+        $retryWorkflowText -notmatch 'git merge-base --is-ancestor' -or
+        $retryWorkflowText -notmatch 'dyni-release-\$\{\{\s*inputs\.tag\s*\}\}' -or
+        $retryWorkflowText -notmatch "inputs\.recovery_mode\s*==\s*'upload_not_started'" -or
+        $retryWorkflowText -notmatch '(?m)^\s+- name:\s+Prepare or verify GitHub draft\s*$' -or
+        $retryWorkflowText -notmatch '(?m)^\s+- name:\s+Publish GitHub release\s*$' -or
+        [regex]::Matches($retryWorkflowText, '-ZipPath\b').Count -lt 2) {
+        throw "CurseForge retry workflow is not bound to an explicitly confirmed exact tag"
+    }
+    $recoveryRerunIndex = $retryWorkflowText.IndexOf('- name: Reject ambiguous recovery rerun')
+    $recoveryCheckoutIndex = $retryWorkflowText.IndexOf('- name: Checkout')
+    if ($recoveryRerunIndex -lt 0 -or
+        $recoveryCheckoutIndex -le $recoveryRerunIndex -or
+        $retryWorkflowText -notmatch 'github\.run_attempt\s*!=\s*1') {
+        throw "CurseForge recovery workflow must reject reruns before checkout or mutation"
+    }
+
     function Get-NormalizedTextFileSha256 {
         param([string]$Path)
 
@@ -92,6 +154,21 @@ try {
         $zips = @(Get-ChildItem -Path $packageTemp -Filter "DoYouNeedIt-*.zip")
         if ($zips.Count -ne 1) {
             throw "expected exactly one DoYouNeedIt package zip, found $($zips.Count)"
+        }
+
+        $repeatOut = Join-Path $packageTemp "repeat"
+        & .\scripts\package.ps1 -OutDir $repeatOut
+        if ($LASTEXITCODE -ne 0) {
+            throw "repeat package build failed with exit code $LASTEXITCODE"
+        }
+        $repeatZips = @(Get-ChildItem -Path $repeatOut -Filter "DoYouNeedIt-*.zip")
+        if ($repeatZips.Count -ne 1) {
+            throw "expected exactly one repeated package zip, found $($repeatZips.Count)"
+        }
+        $firstHash = (Get-FileHash -LiteralPath $zips[0].FullName -Algorithm SHA256).Hash
+        $repeatHash = (Get-FileHash -LiteralPath $repeatZips[0].FullName -Algorithm SHA256).Hash
+        if ($firstHash -ne $repeatHash) {
+            throw "package build is not deterministic"
         }
 
         Add-Type -AssemblyName System.IO.Compression.FileSystem
