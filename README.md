@@ -7,7 +7,8 @@ The addon focuses on quiet signal:
 - Shows every visible grouped dungeon/raid gear drop in one compact scrollable list, including own loot and bonus loot.
 - Shows the `Ask` action only on rows that look worth asking for and usable by your current character.
 - Hides currency, reagents, recipes, consumables, quest items, and other non-gear loot.
-- Shows the dropped item next to the looter's currently equipped item when inspection data is safely available, retrying briefly when inspection data is delayed.
+- Clearly labels the dropped item and the looter's currently equipped item in separate columns, using live inspection when safely available and retrying briefly when inspection data is delayed.
+- Shows an honest transfer status for every gear row: confirmed by a trade timer, likely for fresh bind-on-equip/use gear, unavailable when explicitly blocked, or unknown when WoW does not expose another player's personal-loot eligibility.
 - Pre-scans group equipment into a session cache, then shows `Cached:` equipped items if live inspection is blocked or delayed.
 - Shows real item tooltips when you hover dropped or equipped item links in the loot window.
 - Colors looter names by class when roster data is available.
@@ -39,6 +40,8 @@ Auto-whisper is off by default. When enabled, it waits 10 seconds by default bef
 
 The loot window uses one unified list. Every visible gear drop stays reviewable, and the `Ask` button appears only on rows that the addon currently considers worth asking about and usable by your current character. Bonus loot, your own loot, and other review-only drops stay visible without pointless Ask buttons. Use the gear button or `/dyni settings` to switch the same window into settings for auto-whisper, delay, whisper text, language, font, and font-size controls.
 
+The `Dropped`, `Equipped now`, and `Trade` columns keep the comparison explicit. `Trade: yes` means a trade timer was detected, while `Trade: likely` covers gear that is normally transferable until equipped or used, including personal loot whose item level is no higher than the inspected gear in the same slot. `Trade: unknown` is deliberately conservative: WoW does not expose another player's final personal-loot eligibility to addons, so the looter still needs to confirm.
+
 ## Language and Fonts
 
 Language defaults to `Auto`, which follows your WoW client locale. You can also force a locale from settings:
@@ -66,7 +69,7 @@ Font choices use bundled LibSharedMedia support plus Blizzard fallbacks. Hoverin
 After installing a new build:
 
 1. Run `/reload`.
-2. Run `/dyni status` and confirm it reports `build=0.3.1`, `session drops=...`, `all gear=...`, `cache=...`, and `layout=540x300`.
+2. Run `/dyni status` and confirm it reports `build=0.4.0`, `session drops=...`, `all gear=...`, `cache=...`, and `layout=540x300`.
 3. Run `/dyni scan` before a dungeon to pre-cache group equipment.
 4. Run `/dyni test`, hover the dropped and equipped item text, and confirm the bound test item appears in the same list without an Ask button.
 5. For live loot debugging, run `/dyni debug on` before a boss or dungeon chest and `/dyni diag` afterward. Inspect/cache problems appear as `inspect_retry`, `inspect_failed`, `scan_retry`, or `scan_failed`.

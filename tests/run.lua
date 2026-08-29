@@ -209,6 +209,20 @@ local tradeWarningGear = {
 }
 local tradeWarningAskable = Core.ClassifyTradeCandidate(tradeWarningGear, "Otherplayer", "Player")
 assertEqual(tradeWarningAskable.visible, true, "bind-on-pickup gear with trade warning is askable")
+assertEqual(Core.ResolveTradeStatus(tradeWarningGear), "trade_confirmed", "trade timer confirms transferable loot")
+assertEqual(Core.ResolveTradeStatus({ bindType = 2 }), "trade_likely", "bind-on-equip loot is likely transferable until equipped")
+assertEqual(Core.ResolveTradeStatus({ bindType = 1 }), "trade_unknown", "other-player bind-on-pickup eligibility stays unknown without a timer")
+assertEqual(Core.ResolveTradeStatus({ bindType = 4 }), "trade_no", "quest-bound loot is not transferable")
+assertEqual(Core.ResolveTradeStatus({ canTrade = false, bindType = 2 }), "trade_no", "explicit non-tradeable evidence wins over bind type")
+assertEqual(Core.IsLikelyTradeableFromItemLevels(311, { 311 }, 1), true, "same-level equipped item makes a personal drop likely tradeable")
+assertEqual(Core.IsLikelyTradeableFromItemLevels(312, { 311 }, 1), false, "lower equipped item does not prove a personal drop tradeable")
+assertEqual(Core.IsLikelyTradeableFromItemLevels(311, { 311 }, 2), nil, "two-slot items need both equipped item levels")
+assertEqual(Core.IsLikelyTradeableFromItemLevels(311, { 311, 310 }, 2), false, "a lower second slot does not prove a personal drop tradeable")
+assertEqual(Core.IsLikelyTradeableFromItemLevels(311, { 312, 311 }, 2), true, "two equal-or-higher slots make a personal drop likely tradeable")
+assertEqual(Core.GetTradeStatusText({ tradeStatusKey = "trade_confirmed" }, "enUS"), "Trade: yes", "confirmed trade status renders in English")
+assertEqual(Core.GetTradeStatusText({ tradeStatusKey = "trade_likely" }, "ruRU"), "Передача: вероятно", "likely trade status renders in Russian")
+assertEqual(Core.GetTradeStatusText({ reason = "bind_on_pickup", askable = false }, "enUS"), "Trade: unknown", "legacy bind-on-pickup rows stay honest")
+assertEqual(Core.GetTradeStatusText({ askable = true }, "enUS"), "Trade: unknown", "legacy askable rows do not invent stale transfer evidence")
 
 local unknownEquipGear = {
     link = "|cffa335ee|Hitem:19024:::::::::::::|h[Unknown Equip Chest]|h|r",
@@ -587,8 +601,10 @@ local persistedRows = Core.SnapshotRowsForSave({
         id = "pending",
         looter = "Otherplayer",
         itemLink = "|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r",
+        itemLevel = 311,
         statusText = "auto in 10s",
         equippedText = "Equipped: checking...",
+        tradeStatusKey = "trade_confirmed",
         pendingAutoWhisper = true,
         autoToken = {},
         runtimeOnly = {},
@@ -610,8 +626,10 @@ local persistedRows = Core.SnapshotRowsForSave({
 }, 10)
 assertEqual(#persistedRows, 3, "save snapshot keeps persistable rows")
 assertEqual(persistedRows[1].statusKey, "candidate", "save snapshot clears stale pending auto status key")
+assertEqual(persistedRows[1].itemLevel, 311, "save snapshot preserves clean dropped item level")
 assertEqual(persistedRows[1].statusText, nil, "save snapshot drops migrated pending auto status text")
 assertEqual(persistedRows[1].equippedText, "Equipped: unknown", "save snapshot clears stale pending inspect status")
+assertEqual(persistedRows[1].tradeStatusKey, "trade_unknown", "save snapshot does not preserve expiring transfer evidence")
 assertEqual(persistedRows[1].pendingAutoWhisper, nil, "save snapshot drops pending auto flag")
 assertEqual(persistedRows[1].autoToken, nil, "save snapshot drops runtime auto token")
 assertEqual(persistedRows[1].runtimeOnly, nil, "save snapshot drops non-primitive runtime fields")
@@ -627,9 +645,11 @@ local malformedSavedRows = Core.NormalizeSavedRows({
         looter = true,
         itemLink = 42,
         itemID = "19019",
+        itemLevel = "311",
         timestamp = "bad",
         statusText = 99,
         equippedText = true,
+        tradeStatusKey = true,
         askable = "yes",
     },
     {
@@ -642,7 +662,9 @@ assertEqual(#malformedSavedRows, 2, "malformed saved rows do not abort normaliza
 assertEqual(malformedSavedRows[1].statusText, nil, "malformed status text is dropped during row normalization")
 assertEqual(malformedSavedRows[1].statusKey, nil, "malformed status key is dropped during row normalization")
 assertEqual(malformedSavedRows[1].itemLink, nil, "malformed item link is dropped during row normalization")
+assertEqual(malformedSavedRows[1].itemLevel, nil, "malformed dropped item level is dropped during row normalization")
 assertEqual(malformedSavedRows[1].askable, nil, "malformed askable flag is dropped during row normalization")
+assertEqual(malformedSavedRows[1].tradeStatusKey, nil, "malformed trade status is dropped during row normalization")
 assertEqual(malformedSavedRows[2].itemID, nil, "infinite saved row item id is dropped during row normalization")
 assertEqual(malformedSavedRows[2].timestamp, nil, "NaN saved row timestamp is dropped during row normalization")
 local persistedHistory = Core.SnapshotHistoryForSave({
@@ -949,7 +971,7 @@ assertEqual(badNumericDiagnostic.stage, "bad_numeric", "diagnostics keep safe st
 assertEqual(badNumericDiagnostic.at, nil, "diagnostics drop NaN timestamps")
 assertEqual(badNumericDiagnostic.attempt, nil, "diagnostics drop infinite counters")
 
-assertEqual(Core.VERSION, "0.3.1", "core exposes current version")
+assertEqual(Core.VERSION, "0.4.0", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -961,7 +983,7 @@ end
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
 assertTruthy(toc:find("## Interface: 120007, 120100", 1, true), "toc interface supports current Retail and Midnight 12.1.0")
-assertTruthy(toc:find("## Version: 0.3.1", 1, true), "toc version present")
+assertTruthy(toc:find("## Version: 0.4.0", 1, true), "toc version present")
 assertTruthy(toc:find("## IconTexture: Interface\\AddOns\\DoYouNeedIt\\media\\icon.png", 1, true), "toc addon list icon present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")

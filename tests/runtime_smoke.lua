@@ -77,8 +77,18 @@ local function testSlashTestRowsAndManualWhisper()
     assertTruthy(askableRow, "test command keeps an askable row")
     assertTruthy(boundRow, "test command shows the non-askable test row")
     assertEqual(askableRow.row.looter, "Example", "test row looter visible")
+    assertEqual(h.env.DoYouNeedItFrame.columnPlayer:GetText(), "Player", "loot window labels the player column")
+    assertEqual(h.env.DoYouNeedItFrame.columnDrop:GetText(), "Dropped", "loot window labels the dropped-item column")
+    assertEqual(h.env.DoYouNeedItFrame.columnEquipped:GetText(), "Equipped now", "loot window labels the equipped-item column")
+    assertEqual(h.env.DoYouNeedItFrame.columnTrade:GetText(), "Trade", "loot window labels the transfer column")
     assertTruthy(askableRow.drop:GetText():find("Test Sword", 1, true), "test row item text visible")
     assertTruthy(askableRow.equipped:GetText():find("Worn Shortsword", 1, true), "test row equipped item visible")
+    assertEqual(askableRow.trade:GetText(), "Trade: likely", "bind-on-equip test loot shows a conservative transfer status")
+    assertEqual(boundRow.trade:GetText(), "Trade: unknown", "bind-on-pickup test loot does not claim another player's eligibility")
+    askableRow.tradeInfo:FireScript("OnEnter")
+    assertTruthy(h.env.GameTooltip:GetText():find("likely transferable", 1, true), "trade status explains why the result is only likely")
+    assertTruthy(h.env.GameTooltip:GetText():find("timer can expire", 1, true), "likely trade status keeps the timer caveat")
+    askableRow.tradeInfo:FireScript("OnLeave")
     assertEqual(askableRow.whisper:IsShown(), true, "askable test row shows Ask")
     assertEqual(boundRow.whisper:IsShown(), false, "non-askable test row hides Ask")
 
@@ -130,6 +140,9 @@ local function testLootDropLeavesEmbeddedSettingsMode()
     assertEqual(h.env.DoYouNeedItFrame:IsShown(), true, "loot drop keeps the main frame visible")
     assertEqual(h.env.DoYouNeedItSettingsFrame:IsShown(), false, "loot drop leaves embedded settings mode")
     assertEqual(#h:visibleRows(), 1, "loot drop shows the visible loot row")
+    assertEqual(h:visibleRows()[1].row.tradeStatusKey, "trade_likely", "live bind-on-equip loot keeps current transfer evidence")
+    assertEqual(h:visibleRows()[1].trade:GetText(), "Trade: likely", "live loot renders its transfer status")
+    assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].tradeStatusKey, "trade_unknown", "saved loot does not preserve expiring transfer evidence")
 end
 
 local function testOwnLootShowsInAllGearWhenPlayerNameIsUnavailable()
@@ -309,6 +322,7 @@ local function testMainWindowLayoutBoundsLongText()
         row.drop,
         row.equipped,
         row.status,
+        row.trade,
     }
     for index = 1, #fontStrings do
         assertEqual(fontStrings[index].maxLines, 1, "row font string " .. index .. " is capped to one line")
@@ -319,6 +333,7 @@ local function testMainWindowLayoutBoundsLongText()
     assertTruthy(row.drop:GetWidth() <= row.dropLink:GetWidth(), "drop hover target covers clipped drop text")
     assertTruthy(row.equipped:GetWidth() <= row.equippedLink:GetWidth(), "equipped hover target covers clipped equipped text")
     assertTruthy(row.status:GetWidth() <= 420, "status text leaves room for the Ask button column")
+    assertTruthy(row.trade:GetWidth() <= 110, "trade status stays inside the action column")
 end
 
 local function testCyrillicLootTextUsesGlyphCapableFont()
@@ -1707,6 +1722,9 @@ local function testLocalizedEquippedDisplayKeepsSavedTextStable()
     assertTruthy(askableRow, "localized test row is visible")
     assertTruthy(askableRow.equipped:GetText():find("Надето:", 1, true), "equipped display label is localized")
     assertTruthy(askableRow.equipped:GetText():find("Worn Shortsword", 1, true), "localized equipped display keeps the item link text")
+    assertEqual(h.env.DoYouNeedItFrame.columnDrop:GetText(), "Выпало", "dropped-item column label is localized")
+    assertEqual(h.env.DoYouNeedItFrame.columnEquipped:GetText(), "Надето сейчас", "equipped-item column label is localized")
+    assertEqual(askableRow.trade:GetText(), "Передача: вероятно", "trade status is localized")
     assertTruthy(askableRow.row.equippedText:find("Equipped:", 1, true), "stored equipped text remains migration-stable")
 
     local cachedLink = "|cff1eff00|Hitem:25:::::::::::::|h[Cached Worn Shortsword]|h|r"

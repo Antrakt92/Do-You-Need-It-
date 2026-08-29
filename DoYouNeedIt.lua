@@ -64,7 +64,7 @@ local ROW_DROP_WIDTH = 180
 local ROW_DROP_HOVER_WIDTH = 188
 local ROW_EQUIPPED_WIDTH = 150
 local ROW_EQUIPPED_HOVER_WIDTH = 158
-local ROW_STATUS_WIDTH = 420
+local ROW_STATUS_WIDTH = 380
 local SETTINGS_LABEL_WIDTH = 92
 local SETTINGS_CONTROL_X = 126
 local SETTINGS_DROPDOWN_WIDTH = 210
@@ -705,6 +705,21 @@ local function ApplyLooterClassColor(fontString, classToken)
     SafeCall(fontString.SetTextColor, fontString, r, g, b)
 end
 
+function Addon.ApplyTradeStatusColor(fontString, statusKey)
+    if not fontString or type(fontString.SetTextColor) ~= "function" then
+        return
+    end
+    if statusKey == "trade_confirmed" then
+        SafeCall(fontString.SetTextColor, fontString, 0.25, 1.00, 0.35, 1)
+    elseif statusKey == "trade_likely" then
+        SafeCall(fontString.SetTextColor, fontString, 0.75, 0.90, 0.25, 1)
+    elseif statusKey == "trade_no" then
+        SafeCall(fontString.SetTextColor, fontString, 1.00, 0.35, 0.30, 1)
+    else
+        SafeCall(fontString.SetTextColor, fontString, 1.00, 0.75, 0.20, 1)
+    end
+end
+
 local function EnsureRowClassToken(row)
     if type(row) ~= "table" then
         return nil
@@ -1158,7 +1173,7 @@ local function ReadItemMetadata(itemLink)
         name = CleanString(itemName),
         link = CleanString(resolvedLink),
         quality = quality,
-        itemLevel = itemLevel,
+        itemLevel = CleanNumber(itemLevel),
         classID = metadataClassID,
         subclassID = metadataSubclassID,
         equipLoc = metadataEquipLoc,
@@ -1189,16 +1204,38 @@ local function ReadEquippedLinks(unit, equipLoc)
     return links
 end
 
+function Addon.ReadItemLevel(itemLink)
+    local itemLevel
+    if C_Item and type(C_Item.GetDetailedItemLevelInfo) == "function" then
+        itemLevel = CleanNumber(SafeCall(C_Item.GetDetailedItemLevelInfo, itemLink))
+    end
+    if not itemLevel then
+        local _, _, _, fallbackItemLevel = GetItemInfoCompat(itemLink)
+        itemLevel = CleanNumber(fallbackItemLevel)
+    end
+    if not itemLevel or itemLevel <= 0 or itemLevel == math.huge or itemLevel == -math.huge then
+        return nil
+    end
+    return itemLevel
+end
+
+function Addon.ReadEquippedItemLevels(links)
+    local levels = {}
+    for index = 1, #(links or {}) do
+        local itemLevel = Addon.ReadItemLevel(links[index])
+        if itemLevel then
+            levels[#levels + 1] = itemLevel
+        end
+    end
+    return levels
+end
+
 local function FormatEquippedLinks(prefix, links)
     links = type(links) == "table" and links or {}
     if #links == 0 then
         return UNKNOWN_EQUIPPED
     end
     return prefix .. table.concat(links, " / ")
-end
-
-local function FormatEquippedText(unit, equipLoc)
-    return FormatEquippedLinks("Equipped: ", ReadEquippedLinks(unit, equipLoc))
 end
 
 local function FormatCachedEquippedTextFromLinks(links)
@@ -1480,6 +1517,9 @@ function Addon.SetLootChromeShown(shown)
 
     setShown(Addon.historyButton)
     setShown(Addon.settingsButton)
+    for index = 1, #(Addon.columnHeaders or {}) do
+        setShown(Addon.columnHeaders[index])
+    end
     if not shown then
         setShown(Addon.scrollBadge)
         setShown(Addon.scrollText)
@@ -1568,6 +1608,11 @@ local function RefreshRows()
             end
             rowFrame.drop:SetText(row.itemLink or "")
             rowFrame.equipped:SetText(DisplayEquippedText(row.equippedText))
+            local tradeStatusKey = Core.GetTradeStatusKey(row)
+            rowFrame.trade:SetText(Core.GetTradeStatusText(row, ActiveLocale()))
+            Addon.ApplyTradeStatusColor(rowFrame.trade, tradeStatusKey)
+            rowFrame.tradeInfo.tooltipText = Core.GetTradeStatusTooltip(row, ActiveLocale())
+            rowFrame.tradeInfo:Show()
             rowFrame.dropLink.itemLink = FirstItemLink(row.itemLink)
             rowFrame.equippedLink.itemLink = FirstItemLink(row.equippedText)
             rowFrame.dropLink:SetShown(rowFrame.dropLink.itemLink ~= nil)
@@ -1591,9 +1636,11 @@ local function RefreshRows()
             rowFrame.row = nil
             rowFrame.dropLink.itemLink = nil
             rowFrame.equippedLink.itemLink = nil
+            rowFrame.tradeInfo.tooltipText = nil
             rowFrame.rollIcon:Hide()
             rowFrame.dropLink:Hide()
             rowFrame.equippedLink:Hide()
+            rowFrame.tradeInfo:Hide()
             rowFrame:Hide()
         end
     end
@@ -2059,7 +2106,67 @@ local function ScheduleAutoWhisper(row)
     end)
 end
 
-local function CompleteInspectRow(row, equippedText)
+function Addon.AddRowToListOnce(list, row)
+    if type(list) ~= "table" or type(row) ~= "table" or IsRowInList(list, row) then
+        return false
+    end
+    list[#list + 1] = row
+    return true
+end
+
+function Addon.PromotePersonalLootRowFromEquipped(row, equippedLinks)
+    if type(row) ~= "table"
+        or row.askable == true
+        or row.reason ~= "bind_on_pickup"
+        or row.playerCanEquip ~= true
+        or row.unsafe == true
+    then
+        return false
+    end
+
+    local slotNames = EQUIP_LOC_SLOTS[row.equipLoc]
+    local requiredSlotCount = type(slotNames) == "table" and #slotNames or 1
+    local equippedItemLevels = Addon.ReadEquippedItemLevels(equippedLinks)
+    if Core.IsLikelyTradeableFromItemLevels(row.itemLevel, equippedItemLevels, requiredSlotCount) ~= true then
+        return false
+    end
+
+    row.askable = true
+    row.reason = "trade_candidate"
+    row.statusKey = "candidate"
+    row.statusText = nil
+    row.tradeStatusKey = "trade_likely"
+
+    local state = Addon.state
+    if IsRowInList(state.allRows, row) then
+        Addon.AddRowToListOnce(state.currentRows, row)
+    end
+    if IsRowInList(state.sessionAllRows, row) then
+        Addon.AddRowToListOnce(state.sessionRows, row)
+        local limit = state.settings and state.settings.maxSessionRows
+        while type(limit) == "number" and #state.sessionRows > limit do
+            table.remove(state.sessionRows, 1)
+        end
+    end
+    for index = 1, #(state.history or {}) do
+        local group = state.history[index]
+        if type(group) == "table" and IsRowInList(group.allRows, row) then
+            Addon.AddRowToListOnce(group.rows, row)
+        end
+    end
+
+    RecordDiagnostic("trade_likely_item_level", {
+        looter = row.looter,
+        equipLoc = row.equipLoc,
+        itemLink = row.itemLink,
+    })
+    if row.autoWhisperEligible == true then
+        ScheduleAutoWhisper(row)
+    end
+    return true
+end
+
+local function CompleteInspectRow(row, equippedText, equippedLinks)
     if not row then
         return
     end
@@ -2067,6 +2174,7 @@ local function CompleteInspectRow(row, equippedText)
     row.inspectPending = false
     row.inspectToken = nil
     row.inspectRetryCount = nil
+    Addon.PromotePersonalLootRowFromEquipped(row, equippedLinks)
     RecordDiagnostic("inspect_ready", {
         looter = row.looter,
         equipLoc = row.equipLoc,
@@ -2401,9 +2509,10 @@ CompleteActiveInspectRequest = function(guid)
                 local unit = ResolveRowUnitForRequest(request, row) or requestUnit
                 if unit then
                     CaptureEquipmentForUnit(unit, "loot_ready")
-                    local equippedText = FormatEquippedText(unit, row.equipLoc)
+                    local equippedLinks = ReadEquippedLinks(unit, row.equipLoc)
+                    local equippedText = FormatEquippedLinks("Equipped: ", equippedLinks)
                     if equippedText ~= UNKNOWN_EQUIPPED then
-                        CompleteInspectRow(row, equippedText)
+                        CompleteInspectRow(row, equippedText, equippedLinks)
                     else
                         ScheduleInspectRetry(row, "links_missing")
                     end
@@ -2454,10 +2563,11 @@ RequestInspectForRow = function(row)
     end
 
     if not active then
-        local equippedText = FormatEquippedText(unit, row.equipLoc)
+        local equippedLinks = ReadEquippedLinks(unit, row.equipLoc)
+        local equippedText = FormatEquippedLinks("Equipped: ", equippedLinks)
         if equippedText ~= UNKNOWN_EQUIPPED then
             CaptureEquipmentForUnit(unit, "loot_live")
-            CompleteInspectRow(row, equippedText)
+            CompleteInspectRow(row, equippedText, equippedLinks)
             return
         end
     end
@@ -2521,6 +2631,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
         itemLink = metadata.link or itemLink,
         equipLoc = metadata.equipLoc,
         itemID = metadata.itemID,
+        itemLevel = metadata.itemLevel,
         instanceName = context.instanceName or Addon.currentInstanceName or SafeInstanceName(),
         encounterName = context.encounterName,
         timestamp = context.timestamp or Now(),
@@ -2528,6 +2639,9 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
         reason = askable and "trade candidate" or classification.reason,
         statusKey = askable and "candidate" or (classification.reason or "not_askable"),
         equippedText = cachedEquippedText or UNKNOWN_EQUIPPED,
+        tradeStatusKey = Core.ResolveTradeStatus(metadata),
+        playerCanEquip = metadata.playerCanEquip,
+        autoWhisperEligible = context.isGroupInstance == true,
         unsafe = context.unsafe == true,
     }, askable)
     if not row then
@@ -2583,6 +2697,7 @@ local function AddTestRow()
         reason = "test row",
         statusKey = "test_row",
         equippedText = "Equipped: |cff1eff00|Hitem:25:::::::::::::|h[Worn Shortsword]|h|r",
+        tradeStatusKey = "trade_likely",
         unsafe = false,
     }, true)
     Core.AddVisibleRow(Addon.state, {
@@ -2596,6 +2711,7 @@ local function AddTestRow()
         reason = "bind_on_pickup",
         statusKey = "bind_on_pickup",
         equippedText = UNKNOWN_EQUIPPED,
+        tradeStatusKey = "trade_unknown",
         unsafe = false,
     }, false)
     Addon.selectedView = "current"
@@ -3058,9 +3174,29 @@ local function CreateRow(parent, index)
     KeepOneLine(row.status)
     RegisterFontString(row.status, 10, nil, false, true)
 
+    row.trade = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    row.trade:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -6, 2)
+    row.trade:SetWidth(110)
+    row.trade:SetJustifyH("RIGHT")
+    KeepOneLine(row.trade)
+    RegisterFontString(row.trade, 9, nil, false, true)
+
+    row.tradeInfo = CreateFrame("Button", nil, row)
+    row.tradeInfo:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -6, 1)
+    row.tradeInfo:SetSize(110, 11)
+    row.tradeInfo:SetScript("OnEnter", function(button)
+        if GameTooltip and type(button.tooltipText) == "string" and button.tooltipText ~= "" then
+            GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
+            GameTooltip:SetText(button.tooltipText)
+            GameTooltip:Show()
+        end
+    end)
+    row.tradeInfo:SetScript("OnLeave", HideItemTooltip)
+    row.tradeInfo:Hide()
+
     row.whisper = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    row.whisper:SetSize(48, 20)
-    row.whisper:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+    row.whisper:SetSize(48, 16)
+    row.whisper:SetPoint("TOPRIGHT", row, "TOPRIGHT", -6, -2)
     row.whisper:SetText("Ask")
     row.whisper:SetScript("OnClick", function(button)
         local data = button:GetParent().row
@@ -3140,6 +3276,29 @@ CreateUI = function()
     RegisterButtonFont(frame.historyButton, 11)
     Addon.historyButton = frame.historyButton
 
+    local function createColumnHeader(key, x, width, justify)
+        local label = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        label:SetPoint("TOPLEFT", frame, "TOPLEFT", x, -68)
+        label:SetWidth(width)
+        label:SetJustifyH(justify or "LEFT")
+        label:SetText(L(key))
+        label:SetTextColor(0.62, 0.67, 0.74, 1)
+        KeepOneLine(label)
+        RegisterFontString(label, 9, nil, false, true)
+        return label
+    end
+
+    frame.columnPlayer = createColumnHeader("Player", 18, ROW_LOOTER_WIDTH)
+    frame.columnDrop = createColumnHeader("Dropped", 116, ROW_DROP_WIDTH)
+    frame.columnEquipped = createColumnHeader("Equipped now", 306, ROW_EQUIPPED_WIDTH)
+    frame.columnTrade = createColumnHeader("Trade", 456, 58, "RIGHT")
+    Addon.columnHeaders = {
+        frame.columnPlayer,
+        frame.columnDrop,
+        frame.columnEquipped,
+        frame.columnTrade,
+    }
+
     frame.settingsButton = CreateFrame("Button", nil, frame)
     frame.settingsButton:SetSize(22, 22)
     frame.settingsButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -34, -8)
@@ -3168,7 +3327,7 @@ CreateUI = function()
 
     frame.scrollBadge = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     frame.scrollBadge:SetSize(76, 16)
-    frame.scrollBadge:SetPoint("TOPRIGHT", frame.historyButton, "BOTTOMRIGHT", -2, -4)
+    frame.scrollBadge:SetPoint("TOPRIGHT", frame.historyButton, "TOPRIGHT", -2, -3)
     frame.scrollBadge:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         tile = true,
@@ -3381,6 +3540,10 @@ end
 RefreshLocalization = function()
     if Addon.frame and Addon.frame.title then
         Addon.frame.title:SetText(L("Do You Need It?"))
+        Addon.frame.columnPlayer:SetText(L("Player"))
+        Addon.frame.columnDrop:SetText(L("Dropped"))
+        Addon.frame.columnEquipped:SetText(L("Equipped now"))
+        Addon.frame.columnTrade:SetText(L("Trade"))
     end
     RefreshRows()
     RefreshSettingsControls()

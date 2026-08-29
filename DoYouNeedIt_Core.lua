@@ -1,6 +1,6 @@
 local Core = {}
 
-Core.VERSION = "0.3.1"
+Core.VERSION = "0.4.0"
 
 local GLYPH_LATIN = "LATIN"
 local GLYPH_CYR = "CYR"
@@ -114,6 +114,10 @@ local LABELS_BY_LOCALE = {
         ["Auto (current: %s)"] = "Auto (current: %s)",
         ["No askable gear drops in this view."] = "No askable gear drops in this view.",
         ["No gear drops in this view."] = "No gear drops in this view.",
+        ["Player"] = "Player",
+        ["Dropped"] = "Dropped",
+        ["Equipped now"] = "Equipped now",
+        ["Trade"] = "Trade",
         ["Ask"] = "Ask",
         ["Sent"] = "Sent",
         ["Sending"] = "Sending",
@@ -124,6 +128,14 @@ local LABELS_BY_LOCALE = {
         ["Equipped: unknown"] = "Equipped: unknown",
         ["Equipped: checking..."] = "Equipped: checking...",
         ["Equipped: unavailable"] = "Equipped: unavailable",
+        ["trade_confirmed"] = "Trade: yes",
+        ["trade_likely"] = "Trade: likely",
+        ["trade_no"] = "Trade: no",
+        ["trade_unknown"] = "Trade: unknown",
+        ["trade_confirmed_help"] = "A trade timer was detected when this drop was processed. It can still expire.",
+        ["trade_likely_help"] = "The binding type or inspected slot item level indicates that this item is likely transferable. The timer can expire, and equipping or using it can bind it.",
+        ["trade_no_help"] = "The available item data says this loot cannot be transferred.",
+        ["trade_unknown_help"] = "WoW does not expose another player's personal-loot eligibility. Ask the looter to confirm.",
         ["drop_one"] = "drop",
         ["drop_few"] = "drops",
         ["drop_many"] = "drops",
@@ -175,6 +187,10 @@ local LABELS_BY_LOCALE = {
         ["Auto (current: %s)"] = "Авто (сейчас: %s)",
         ["No askable gear drops in this view."] = "Нет шмота, о котором стоит спрашивать.",
         ["No gear drops in this view."] = "Нет шмота в этом виде.",
+        ["Player"] = "Игрок",
+        ["Dropped"] = "Выпало",
+        ["Equipped now"] = "Надето сейчас",
+        ["Trade"] = "Передача",
         ["Ask"] = "Ask",
         ["Sent"] = "Отпр.",
         ["Sending"] = "Отпр...",
@@ -185,6 +201,14 @@ local LABELS_BY_LOCALE = {
         ["Equipped: unknown"] = "Надето: неизвестно",
         ["Equipped: checking..."] = "Надето: проверка...",
         ["Equipped: unavailable"] = "Надето: недоступно",
+        ["trade_confirmed"] = "Передача: да",
+        ["trade_likely"] = "Передача: вероятно",
+        ["trade_no"] = "Передача: нет",
+        ["trade_unknown"] = "Передача: неизвестно",
+        ["trade_confirmed_help"] = "При обработке дропа был обнаружен таймер передачи. Он всё равно может истечь.",
+        ["trade_likely_help"] = "Тип привязки или сравнение с надетым предметом указывает, что вещь, вероятно, можно передать. Таймер может истечь, а надевание или использование привяжет её.",
+        ["trade_no_help"] = "Доступные данные о вещи указывают, что передать её нельзя.",
+        ["trade_unknown_help"] = "WoW не раскрывает аддону возможность передачи чужого персонального лута. Нужно спросить владельца.",
         ["drop_one"] = "дроп",
         ["drop_few"] = "дропа",
         ["drop_many"] = "дропов",
@@ -316,6 +340,7 @@ local PERSISTED_ROW_KEYS = {
     itemLink = "string",
     equipLoc = "string",
     itemID = "number",
+    itemLevel = "number",
     instanceName = "string",
     encounterName = "string",
     timestamp = "number",
@@ -324,6 +349,7 @@ local PERSISTED_ROW_KEYS = {
     statusKey = "string",
     statusText = "string",
     equippedText = "string",
+    tradeStatusKey = "string",
     unsafe = "boolean",
     manualWhispered = "boolean",
     autoWhispered = "boolean",
@@ -499,6 +525,40 @@ local TRANSIENT_STATUS_KEYS = {
     auto_sending = true,
 }
 
+local TRADE_STATUS_KEYS = {
+    trade_confirmed = true,
+    trade_likely = true,
+    trade_no = true,
+    trade_unknown = true,
+}
+
+local TRADE_NO_REASON_KEYS = {
+    bonus_roll = true,
+    not_tradeable = true,
+    quest_bound = true,
+}
+
+local TRADE_UNKNOWN_REASON_KEYS = {
+    bind_on_pickup = true,
+    bind_unknown = true,
+}
+
+local function resolveTradeStatusKey(row)
+    if type(row) ~= "table" then
+        return "trade_unknown"
+    end
+    if TRADE_STATUS_KEYS[row.tradeStatusKey] then
+        return row.tradeStatusKey
+    end
+    if TRADE_NO_REASON_KEYS[row.reason] or TRADE_NO_REASON_KEYS[row.statusKey] then
+        return "trade_no"
+    end
+    if TRADE_UNKNOWN_REASON_KEYS[row.reason] or TRADE_UNKNOWN_REASON_KEYS[row.statusKey] then
+        return "trade_unknown"
+    end
+    return "trade_unknown"
+end
+
 local function resolveRowStatus(row, useFallback)
     if type(row) ~= "table" then
         return useFallback ~= false and "candidate" or nil, nil
@@ -538,6 +598,9 @@ local function snapshotRowForSave(row)
     saved.statusText = nil
     if saved.equippedText == "Equipped: checking..." then
         saved.equippedText = "Equipped: unknown"
+    end
+    if saved.tradeStatusKey == "trade_confirmed" or saved.tradeStatusKey == "trade_likely" then
+        saved.tradeStatusKey = "trade_unknown"
     end
     return saved
 end
@@ -927,6 +990,18 @@ function Core.GetRowStatusText(row, locale)
         end
     end
     return label
+end
+
+function Core.GetTradeStatusKey(row)
+    return resolveTradeStatusKey(row)
+end
+
+function Core.GetTradeStatusText(row, locale)
+    return Core.GetLocaleLabel(resolveTradeStatusKey(row), locale)
+end
+
+function Core.GetTradeStatusTooltip(row, locale)
+    return Core.GetLocaleLabel(resolveTradeStatusKey(row) .. "_help", locale)
 end
 
 function Core.GetBlizzardFonts(clientLocale)
@@ -1522,6 +1597,50 @@ function Core.ResolvePlayerCanEquip(item, playerClassToken, apiCanEquip)
 
     if type(apiCanEquip) == "boolean" then
         return apiCanEquip
+    end
+    return nil
+end
+
+function Core.ResolveTradeStatus(item)
+    if type(item) ~= "table" then
+        return "trade_unknown"
+    end
+    if item.canTrade == false or item.lootSource == "bonus_roll" then
+        return "trade_no"
+    end
+
+    local bindType = tonumber(item.bindType)
+    if bindType == 4 then
+        return "trade_no"
+    end
+    if item.canTrade == true or item.tradeTimeRemaining == true then
+        return "trade_confirmed"
+    end
+    if bindType == 0 or bindType == 2 or bindType == 3 then
+        return "trade_likely"
+    end
+    return "trade_unknown"
+end
+
+function Core.IsLikelyTradeableFromItemLevels(dropItemLevel, equippedItemLevels, requiredSlotCount)
+    local dropLevel = asNumber(dropItemLevel, nil)
+    if not dropLevel or dropLevel <= 0 or type(equippedItemLevels) ~= "table" then
+        return nil
+    end
+
+    local required = math.max(1, math.floor(asNumber(requiredSlotCount, 1)))
+    local compared = 0
+    for index = 1, #equippedItemLevels do
+        local equippedLevel = asNumber(equippedItemLevels[index], nil)
+        if equippedLevel and equippedLevel > 0 then
+            if equippedLevel < dropLevel then
+                return false
+            end
+            compared = compared + 1
+            if compared >= required then
+                return true
+            end
+        end
     end
     return nil
 end

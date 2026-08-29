@@ -473,6 +473,78 @@ local function testInstanceChangeCancelsPendingInspectBeforeHistory()
     assertEqual(h.env.DoYouNeedItDB.history[1].allRows[1].equippedText, "Equipped: unknown", "saved history also clears stale inspect-pending text")
 end
 
+local function testSameItemLevelPersonalLootBecomesAskableAfterInspect()
+    local h = newLoadedHarness()
+    local dropped = h:addItem(21101, {
+        name = "Pendant of Malefic Fury",
+        equipLoc = "INVTYPE_NECK",
+        classID = 4,
+        subclassID = 0,
+        quality = 4,
+        bindType = 1,
+        itemLevel = 311,
+        equippable = true,
+        usable = true,
+    })
+    local equipped = h:addItem(21102, {
+        name = "Strand of Warding Fangs",
+        equipLoc = "INVTYPE_NECK",
+        classID = 4,
+        subclassID = 0,
+        quality = 4,
+        bindType = 1,
+        itemLevel = 311,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fireLoot("Otherplayer", dropped)
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "personal neck drop is visible while trade eligibility is unknown")
+    assertEqual(rows[1].row.askable, false, "personal neck drop starts non-askable before inspect")
+    assertEqual(rows[1].whisper:IsShown(), false, "Ask stays hidden before equal-level evidence")
+
+    h:setInventoryLink("party1", "NeckSlot", equipped)
+    h:fire("INSPECT_READY", "PartyGUID1")
+
+    rows = h:visibleRows()
+    assertEqual(rows[1].row.askable, true, "equal-level equipped neck promotes the personal drop to askable")
+    assertEqual(rows[1].row.tradeStatusKey, "trade_likely", "equal-level equipped neck marks transfer as likely")
+    assertEqual(rows[1].whisper:IsShown(), true, "Ask appears after equal-level evidence")
+    assertEqual(#h.env.DoYouNeedItDB.sessionRows, 1, "promoted personal drop is saved with askable session rows")
+
+    local higherDropHarness = newLoadedHarness()
+    local higherDrop = higherDropHarness:addItem(21103, {
+        name = "Higher Pendant",
+        equipLoc = "INVTYPE_NECK",
+        classID = 4,
+        subclassID = 0,
+        quality = 4,
+        bindType = 1,
+        itemLevel = 312,
+        equippable = true,
+        usable = true,
+    })
+    local lowerEquipped = higherDropHarness:addItem(21104, {
+        name = "Lower Strand",
+        equipLoc = "INVTYPE_NECK",
+        classID = 4,
+        subclassID = 0,
+        quality = 4,
+        bindType = 1,
+        itemLevel = 311,
+        equippable = true,
+        usable = true,
+    })
+    higherDropHarness:fireLoot("Otherplayer", higherDrop)
+    higherDropHarness:setInventoryLink("party1", "NeckSlot", lowerEquipped)
+    higherDropHarness:fire("INSPECT_READY", "PartyGUID1")
+    local higherRows = higherDropHarness:visibleRows()
+    assertEqual(higherRows[1].row.askable, false, "higher personal drop stays non-askable after inspect")
+    assertEqual(higherRows[1].row.tradeStatusKey, "trade_unknown", "higher personal drop keeps unknown transfer status")
+    assertEqual(higherRows[1].whisper:IsShown(), false, "Ask stays hidden when item-level evidence is insufficient")
+end
+
 testDifferentGuidLootInspectsAreSerialized()
 testSameGuidLootInspectsCoalesce()
 testInspectTimeoutClearsOwnedInspectState()
@@ -492,5 +564,6 @@ testClearDropsCachedFallbackForFutureLoot()
 testRosterUpdateDropsCachedFallbackForChangedIdentity()
 testStaleScanReadyDoesNotCacheReplacementUnit()
 testInstanceChangeCancelsPendingInspectBeforeHistory()
+testSameItemLevelPersonalLootBecomesAskableAfterInspect()
 
 print("runtime inspect ok")

@@ -1,10 +1,20 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 - 29-Aug-2026 — Clear loot comparison and transfer status
+
+### Added
+
+- **Every gear row now shows an honest transfer status** — a detected trade timer confirms transfer, fresh bind-on-equip/use gear is marked likely, explicit restrictions show no, and personal-loot eligibility hidden by WoW stays unknown.
 
 ### Improved
 
+- **Dropped and currently equipped gear are easier to distinguish** — the loot window now has separate `Dropped`, `Equipped now`, and `Trade` column labels with localized English and Russian text.
+- **Personal loot is reconsidered after inspection** — if a bind-on-pickup drop is no higher item level than the looter's inspected gear in the same slot, the row becomes likely transferable and shows the `Ask` action.
 - **Raid loot scrolling now uses a readable header badge** — the visible row range moved out of the lower window border and stays hidden in settings mode.
+
+### Updated
+
+- **Packaged for the current Retail / Midnight `12.1.0` client.**
 
 ## 0.3.1 - 05-Jul-2026 — Raid loot stability
 
