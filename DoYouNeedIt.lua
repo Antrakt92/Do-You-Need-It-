@@ -1155,6 +1155,25 @@ local function TooltipHasTradeTimer(itemLink)
     return false
 end
 
+local function ReadAccountBinding(itemLink)
+    if type(itemLink) ~= "string" or itemLink == "" or not C_Item then
+        return false, false
+    end
+
+    -- WHY: warband-until-equipped gear reports the same bind type as ordinary BoE;
+    -- these hyperlink-safe APIs distinguish it even when the item is not in our bags.
+    local isAccountBound = false
+    if type(C_Item.IsItemBindToAccount) == "function" then
+        isAccountBound = CleanBoolean(SafeCall(C_Item.IsItemBindToAccount, itemLink)) == true
+    end
+
+    local isAccountBoundUntilEquipped = false
+    if type(C_Item.IsItemBindToAccountUntilEquip) == "function" then
+        isAccountBoundUntilEquipped = CleanBoolean(SafeCall(C_Item.IsItemBindToAccountUntilEquip, itemLink)) == true
+    end
+    return isAccountBound, isAccountBoundUntilEquipped
+end
+
 local function ReadItemMetadata(itemLink)
     local itemID, itemType, itemSubType, itemEquipLoc, icon, classID, subclassID = GetItemInfoInstantCompat(itemLink)
     local itemName, resolvedLink, quality, itemLevel, requiredLevel, itemTypeText, itemSubTypeText, stackCount,
@@ -1163,6 +1182,7 @@ local function ReadItemMetadata(itemLink)
     local metadataClassID = detailedClassID or classID
     local metadataSubclassID = detailedSubclassID or subclassID
     local metadataEquipLoc = CleanString(equipLoc) or CleanString(itemEquipLoc)
+    local isAccountBound, isAccountBoundUntilEquipped = ReadAccountBinding(itemLink)
 
     return Core.BuildItemMetadata(itemLink, {
         itemID = itemID,
@@ -1179,6 +1199,8 @@ local function ReadItemMetadata(itemLink)
         equipLoc = metadataEquipLoc,
         bindType = bindType,
         tradeTimeRemaining = TooltipHasTradeTimer(itemLink),
+        isAccountBound = isAccountBound,
+        isAccountBoundUntilEquipped = isAccountBoundUntilEquipped,
         playerCanEquip = CanPlayerEquipItem(itemLink, metadataClassID, metadataSubclassID, metadataEquipLoc),
         isCraftingReagent = isCraftingReagent == true,
     })

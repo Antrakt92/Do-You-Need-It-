@@ -836,6 +836,16 @@ function Harness.new(options)
             local info = self.items[itemID] or {}
             return info.usable ~= false
         end,
+        IsItemBindToAccount = function(itemLink)
+            local itemID = linkItemID(itemLink)
+            local info = self.items[itemID] or {}
+            return info.bindToAccount == true
+        end,
+        IsItemBindToAccountUntilEquip = function(itemLink)
+            local itemID = linkItemID(itemLink)
+            local info = self.items[itemID] or {}
+            return info.bindToAccountUntilEquip == true
+        end,
         CreateFromItemID = function(itemID)
             return {
                 ContinueOnItemLoad = function(_, callback)

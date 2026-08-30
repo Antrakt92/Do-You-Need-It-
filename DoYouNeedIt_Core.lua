@@ -1,6 +1,6 @@
 local Core = {}
 
-Core.VERSION = "0.4.0"
+Core.VERSION = "0.4.1"
 
 local GLYPH_LATIN = "LATIN"
 local GLYPH_CYR = "CYR"
@@ -536,6 +536,7 @@ local TRADE_NO_REASON_KEYS = {
     bonus_roll = true,
     not_tradeable = true,
     quest_bound = true,
+    warband_bound = true,
 }
 
 local TRADE_UNKNOWN_REASON_KEYS = {
@@ -1509,6 +1510,8 @@ function Core.BuildItemMetadata(itemLink, instant, detailed)
         equipLoc = equipLoc,
         bindType = detailed.bindType,
         tradeTimeRemaining = detailed.tradeTimeRemaining == true,
+        isAccountBound = detailed.isAccountBound == true,
+        isAccountBoundUntilEquipped = detailed.isAccountBoundUntilEquipped == true,
         playerCanEquip = playerCanEquip,
         isCraftingReagent = detailed.isCraftingReagent == true,
     }
@@ -1608,6 +1611,9 @@ function Core.ResolveTradeStatus(item)
     if item.canTrade == false or item.lootSource == "bonus_roll" then
         return "trade_no"
     end
+    if item.isAccountBound == true or item.isAccountBoundUntilEquipped == true then
+        return "trade_no"
+    end
 
     local bindType = tonumber(item.bindType)
     if bindType == 4 then
@@ -1658,6 +1664,9 @@ function Core.ClassifyTradeCandidate(item, looter, playerName, settings)
     end
     if item.canTrade == false then
         return { visible = false, reason = "not_tradeable" }
+    end
+    if item.isAccountBound == true or item.isAccountBoundUntilEquipped == true then
+        return { visible = false, reason = "warband_bound" }
     end
     local bindType = tonumber(item.bindType)
     if bindType == nil and item.tradeTimeRemaining ~= true and item.canTrade ~= true then

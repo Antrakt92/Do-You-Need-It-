@@ -145,6 +145,53 @@ local function testLootDropLeavesEmbeddedSettingsMode()
     assertEqual(h.env.DoYouNeedItDB.sessionAllRows[1].tradeStatusKey, "trade_unknown", "saved loot does not preserve expiring transfer evidence")
 end
 
+local function testWarbandUntilEquippedLootIsNotAskable()
+    local h = Harness.new()
+    h.units.player.classToken = "PRIEST"
+    h:loadAddon()
+
+    local item = h:addItem(268257, {
+        name = "Caustic Chain-Wrapped Sash",
+        equipLoc = "INVTYPE_WAIST",
+        classID = 4,
+        subclassID = 1,
+        quality = 4,
+        itemLevel = 298,
+        bindType = 2,
+        bindToAccountUntilEquip = true,
+        equippable = true,
+        usable = true,
+    })
+    local equipped = h:addItem(268258, {
+        name = "Girdle of Pestilent Growth",
+        equipLoc = "INVTYPE_WAIST",
+        classID = 4,
+        subclassID = 1,
+        quality = 4,
+        itemLevel = 298,
+        bindType = 1,
+        equippable = true,
+        usable = true,
+    })
+
+    h:fireLoot("Otherplayer", item)
+
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "warband-until-equipped gear stays visible for review")
+    assertEqual(rows[1].row.askable, false, "warband-until-equipped gear is not askable")
+    assertEqual(rows[1].row.reason, "warband_bound", "warband-until-equipped row keeps an explicit reason")
+    assertEqual(rows[1].row.tradeStatusKey, "trade_no", "warband-until-equipped gear is marked non-transferable")
+    assertEqual(rows[1].trade:GetText(), "Trade: no", "warband-until-equipped gear renders the non-transferable status")
+    assertEqual(rows[1].whisper:IsShown(), false, "warband-until-equipped gear hides Ask")
+
+    h:setInventoryLink("party1", "WaistSlot", equipped)
+    h:fire("INSPECT_READY", "PartyGUID1")
+    rows = h:visibleRows()
+    assertEqual(rows[1].row.askable, false, "equal equipped item level cannot promote warband gear")
+    assertEqual(rows[1].row.tradeStatusKey, "trade_no", "inspect keeps warband gear non-transferable")
+    assertEqual(rows[1].whisper:IsShown(), false, "inspect cannot reveal Ask for warband gear")
+end
+
 local function testOwnLootShowsInAllGearWhenPlayerNameIsUnavailable()
     local h = Harness.new()
     h.units.player = nil
@@ -2044,6 +2091,7 @@ testLoadAndSettings()
 testSlashTestRowsAndManualWhisper()
 testLootSlashCommandsLeaveEmbeddedSettingsMode()
 testLootDropLeavesEmbeddedSettingsMode()
+testWarbandUntilEquippedLootIsNotAskable()
 testOwnLootShowsInAllGearWhenPlayerNameIsUnavailable()
 testOpenWorldLootDoesNotAutoShowWindow()
 testLeavingSettingsClosesSharedDropdown()

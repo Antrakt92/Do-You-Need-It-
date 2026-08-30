@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1 - 30-Aug-2026 — Correct warband transfer status
+
+### Fixed
+
+- **Warbound and account-bound gear is no longer presented as transferable** — these drops show `Trade: no` without an `Ask` action, and equipment inspection cannot promote them to likely transferable.
+
 ## 0.4.0 - 29-Aug-2026 — Clear loot comparison and transfer status
 
 ### Added

@@ -214,6 +214,19 @@ assertEqual(Core.ResolveTradeStatus({ bindType = 2 }), "trade_likely", "bind-on-
 assertEqual(Core.ResolveTradeStatus({ bindType = 1 }), "trade_unknown", "other-player bind-on-pickup eligibility stays unknown without a timer")
 assertEqual(Core.ResolveTradeStatus({ bindType = 4 }), "trade_no", "quest-bound loot is not transferable")
 assertEqual(Core.ResolveTradeStatus({ canTrade = false, bindType = 2 }), "trade_no", "explicit non-tradeable evidence wins over bind type")
+local warbandGear = {
+    link = "|cffa335ee|Hitem:268257:::::::::::::|h[Caustic Chain-Wrapped Sash]|h|r",
+    quality = 4,
+    classID = 4,
+    equipLoc = "INVTYPE_WAIST",
+    bindType = 2,
+    isAccountBoundUntilEquipped = true,
+    playerCanEquip = true,
+}
+local warbandNotAskable = Core.ClassifyTradeCandidate(warbandGear, "Otherplayer", "Player")
+assertEqual(warbandNotAskable.visible, false, "warband-until-equipped gear is not askable")
+assertEqual(warbandNotAskable.reason, "warband_bound", "warband-until-equipped rejection is explicit")
+assertEqual(Core.ResolveTradeStatus(warbandGear), "trade_no", "warband-until-equipped gear is not transferable to another player")
 assertEqual(Core.IsLikelyTradeableFromItemLevels(311, { 311 }, 1), true, "same-level equipped item makes a personal drop likely tradeable")
 assertEqual(Core.IsLikelyTradeableFromItemLevels(312, { 311 }, 1), false, "lower equipped item does not prove a personal drop tradeable")
 assertEqual(Core.IsLikelyTradeableFromItemLevels(311, { 311 }, 2), nil, "two-slot items need both equipped item levels")
@@ -909,6 +922,7 @@ local metadata = Core.BuildItemMetadata("|cff0070dd|Hitem:19019:::::::::::::|h[T
     classID = 2,
     subclassID = 7,
     bindType = 1,
+    isAccountBoundUntilEquipped = true,
     playerCanEquip = false,
     isCraftingReagent = false,
 })
@@ -918,6 +932,7 @@ assertEqual(metadata.itemLevel, 42, "metadata maps item level from detailed info
 assertEqual(metadata.equipLoc, "INVTYPE_WEAPON", "metadata maps equip location")
 assertEqual(metadata.classID, 2, "metadata maps class id")
 assertEqual(metadata.playerCanEquip, false, "metadata maps player equip usability")
+assertEqual(metadata.isAccountBoundUntilEquipped, true, "metadata keeps warband-until-equipped evidence")
 
 local missingMetadata = Core.BuildItemMetadata("|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r", {
     itemID = 19019,
@@ -971,7 +986,7 @@ assertEqual(badNumericDiagnostic.stage, "bad_numeric", "diagnostics keep safe st
 assertEqual(badNumericDiagnostic.at, nil, "diagnostics drop NaN timestamps")
 assertEqual(badNumericDiagnostic.attempt, nil, "diagnostics drop infinite counters")
 
-assertEqual(Core.VERSION, "0.4.0", "core exposes current version")
+assertEqual(Core.VERSION, "0.4.1", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -983,7 +998,7 @@ end
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
 assertTruthy(toc:find("## Interface: 120007, 120100", 1, true), "toc interface supports current Retail and Midnight 12.1.0")
-assertTruthy(toc:find("## Version: 0.4.0", 1, true), "toc version present")
+assertTruthy(toc:find("## Version: 0.4.1", 1, true), "toc version present")
 assertTruthy(toc:find("## IconTexture: Interface\\AddOns\\DoYouNeedIt\\media\\icon.png", 1, true), "toc addon list icon present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")
