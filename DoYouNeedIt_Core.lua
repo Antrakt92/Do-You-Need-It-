@@ -1029,13 +1029,7 @@ function Core.FontSupports(fontPath, glyph, clientLocale)
         return glyph == GLYPH_LATIN
     end
 
-    local frizKey = Core.FontPathKey(DEFAULT_FONT)
-    local entry
-    if key == frizKey then
-        entry = clientLocale == "ruRU" and { GLYPH_LATIN, GLYPH_CYR } or { GLYPH_LATIN }
-    else
-        entry = FONT_GLYPH_SUPPORT[key]
-    end
+    local entry = FONT_GLYPH_SUPPORT[key]
     if not entry then
         local lowerName = (fontPath:match("[^\\/]+$") or fontPath):lower()
         for index = 1, #FONT_GLYPH_PATTERNS do

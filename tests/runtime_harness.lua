@@ -743,7 +743,7 @@ function Harness.new(options)
         return self.now
     end
     env.GetLocale = function()
-        return "enUS"
+        return self.options.locale or "enUS"
     end
     env.GetInstanceInfo = function()
         return self.instanceName, self.instanceType

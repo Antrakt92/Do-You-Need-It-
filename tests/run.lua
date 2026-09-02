@@ -78,7 +78,7 @@ assertEqual(Core.FontPathKey("Fonts/ARIALN.TTF"), "fonts\\arialn.ttf", "font pat
 assertEqual(Core.SameFontPath("Fonts/ARIALN.TTF", "fonts\\arialn.ttf"), true, "font path comparison is normalized")
 assertEqual(Core.FontSupports("Fonts\\ARIALN.TTF", "CYR", "enUS"), true, "Arial Narrow supports Cyrillic on western clients")
 assertEqual(Core.FontSupports("Fonts\\FRIZQT__.TTF", "CYR", "enUS"), false, "Friz does not guarantee Cyrillic on western clients")
-assertEqual(Core.FontSupports("Fonts\\FRIZQT__.TTF", "CYR", "ruRU"), true, "Friz supports Cyrillic on ruRU clients")
+assertEqual(Core.FontSupports("Fonts\\FRIZQT__.TTF", "CYR", "ruRU"), false, "Friz does not guarantee Cyrillic on ruRU clients")
 assertEqual(Core.GetTextGlyphRequirement("Otherplayer"), nil, "latin-only text does not request a dynamic glyph fallback")
 assertEqual(Core.GetTextGlyphRequirement("Игрок"), "CYR", "cyrillic text requests a dynamic glyph fallback")
 assertEqual(Core.ResolveFontSize(11, 14), 13, "font size slider scales body text relative to default")
