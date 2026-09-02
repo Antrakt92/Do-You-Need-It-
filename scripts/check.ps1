@@ -2,6 +2,7 @@ $ErrorActionPreference = "Stop"
 
 Push-Location (Split-Path -Parent $PSScriptRoot)
 try {
+    & .\tests\release_ref.ps1
     & lua5.1 tests\run.lua
     if ($LASTEXITCODE -ne 0) {
         throw "lua5.1 tests\run.lua failed with exit code $LASTEXITCODE"

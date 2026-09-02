@@ -38,10 +38,12 @@ foreach ($line in $lines) {
     $refs[$name] = @($refs[$name]) + $sha
 }
 
-if (@($refs[$directRef]).Count -ne 1 -or @($refs[$peeledRef]).Count -gt 1) {
+if (-not $refs.ContainsKey($directRef) -or $refs[$directRef].Count -ne 1 -or
+    ($refs.ContainsKey($peeledRef) -and $refs[$peeledRef].Count -ne 1)) {
     throw "Remote release tag is missing or ambiguous: $Tag"
 }
-$actualCommit = if (@($refs[$peeledRef]).Count -eq 1) {
+# A lightweight tag has no peeled ref; @($null) would misleadingly count as one.
+$actualCommit = if ($refs.ContainsKey($peeledRef)) {
     [string]$refs[$peeledRef][0]
 } else {
     [string]$refs[$directRef][0]
