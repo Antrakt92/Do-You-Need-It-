@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.2 - 02-Sep-2026 — Quieter and more reliable equipment checks
+
+### Fixed
+
+- Equipment scans now wait for combat to end instead of repeatedly scheduling blocked work.
+- Loot inspection no longer exhausts its retries during a long fight and resumes after combat.
+- Clearing a run cancels old delayed scans and combat-end callbacks without disturbing newer loot.
+
 ## 0.4.1 - 30-Aug-2026 — Correct warband transfer status
 
 ### Fixed

@@ -545,6 +545,173 @@ local function testSameItemLevelPersonalLootBecomesAskableAfterInspect()
     assertEqual(higherRows[1].whisper:IsShown(), false, "Ask stays hidden when item-level evidence is insufficient")
 end
 
+local function testLootInspectWaitsForCombatWithoutUsingRetries()
+    local h = newLoadedHarness()
+    h:slash("clear")
+    local combat = true
+    h.env.InCombatLockdown = function() return combat end
+    local item = addWeapon(h, 21901, "Combat Drop")
+    h:fireLoot("Otherplayer", item)
+    local row = h:visibleRows()[1].row
+    assertEqual(#h.timers, 0, "combat loot inspect parks without timers")
+    assertEqual(row.inspectRetryCount, nil, "combat wait does not spend the inspect retry budget")
+    assertEqual(#h.notifyInspectCalls, 0, "combat loot cannot issue NotifyInspect")
+    combat = false
+    h:fire("PLAYER_REGEN_ENABLED")
+    assertEqual(#h.notifyInspectCalls, 1, "combat-end resumes loot even with an empty scan queue")
+    h:setInventoryLink("party1", "MainHandSlot", "|cff1eff00|Hitem:25:::::::::::::|h[Combat Equipped Sword]|h|r")
+    h:fire("INSPECT_READY", "PartyGUID1")
+    assertTruthy(row.equippedText:find("Combat Equipped Sword", 1, true), "resumed loot receives equipment")
+end
+
+local function testLongCombatDoesNotExhaustLootInspection()
+    local h = newLoadedHarness()
+    h:slash("clear")
+    local combat = true
+    h.env.InCombatLockdown = function() return combat end
+    h:fireLoot("Otherplayer", addWeapon(h, 21908, "Long Fight Sword"))
+    local row = h:visibleRows()[1].row
+    h:runTimers(nil, 50)
+    assertEqual(row.inspectRetryCount, nil, "a long fight must not exhaust loot inspection")
+    assertEqual(#h.timers, 0, "long combat has no remaining polling timers")
+    combat = false
+    h:fire("PLAYER_REGEN_ENABLED")
+    assertEqual(#h.notifyInspectCalls, 1, "long-fight loot still inspects after combat")
+end
+
+local function testEquipmentScanParksDuringCombat()
+    local h = Harness.new()
+    local combat = true
+    h.env.InCombatLockdown = function() return combat end
+    h:loadAddon()
+    h:runTimers(nil, 20)
+    assertEqual(#h.timers, 0, "combat scan waits for the regen event without polling")
+    assertEqual(#h.notifyInspectCalls, 0, "combat scan never inspects")
+    combat = false
+    h:fire("PLAYER_REGEN_ENABLED")
+    h:runNextTimer(1.1)
+    assertEqual(#h.notifyInspectCalls, 1, "parked scan resumes after combat")
+
+    h:slash("clear")
+    h:runTimers(nil, 20)
+    combat = true
+    h:fire("PLAYER_REGEN_ENABLED")
+    assertEqual(#h.timers, 0, "empty queue does not start a combat retry loop")
+end
+
+local function testCombatParksAnAlreadyScheduledLootRetry()
+    local h = newLoadedHarness()
+    h:slash("clear")
+    local combat = false
+    h.env.InCombatLockdown = function() return combat end
+    h:fireLoot("Otherplayer", addWeapon(h, 21902, "Retry Combat Drop"))
+    local row = h:visibleRows()[1].row
+    h:runNextTimer(0.8)
+    assertEqual(row.inspectRetryCount, 1, "real timeout spends one retry")
+    combat = true
+    h:runNextTimer(0.8)
+    assertEqual(row.inspectRetryCount, 1, "queued retry reaching combat preserves its budget")
+    assertEqual(#h.timers, 0, "queued retry parks instead of scheduling more combat timers")
+    combat = false
+    h:fire("PLAYER_REGEN_ENABLED")
+    assertEqual(#h.notifyInspectCalls, 2, "parked retry resumes once after combat")
+end
+
+local function testCombatLootWakeupIsBoundedAndCancellationSafe()
+    local h = newLoadedHarness()
+    h:slash("clear")
+    local combat = true
+    h.env.InCombatLockdown = function() return combat end
+    h:fireLoot("Otherplayer", addWeapon(h, 21903, "Cleared Combat Drop"))
+    for _ = 1, 20 do h:fire("PLAYER_REGEN_ENABLED") end
+    assertEqual(#h.timers, 1, "lagging regen events share one pending wakeup")
+    local staleTimer = table.remove(h.timers, 1)
+    h:slash("clear")
+    h:fireLoot("Secondplayer", addWeapon(h, 21904, "Current Combat Drop"))
+    h:fire("PLAYER_REGEN_ENABLED")
+    combat = false
+    staleTimer.callback()
+    assertEqual(#h.notifyInspectCalls, 0, "old wakeup cannot consume a replacement loot queue")
+    assertEqual(#h.timers, 1, "old wakeup leaves the current callback intact")
+    h:runNextTimer(0.25)
+    assertEqual(#h.notifyInspectCalls, 1, "current wakeup resumes exactly once")
+    assertEqual(h.notifyInspectCalls[1], "party2", "cleared loot was not resurrected")
+
+    local blocked = newLoadedHarness()
+    blocked:slash("clear")
+    blocked.env.InCombatLockdown = function() return true end
+    blocked:fireLoot("Otherplayer", addWeapon(blocked, 21905, "Long Combat Drop"))
+    blocked:fire("PLAYER_REGEN_ENABLED")
+    assertEqual(blocked:runTimers(nil, 20), 3, "loot-only wakeup has the same three-retry budget")
+    assertEqual(#blocked.timers, 0, "loot-only wakeup cannot poll forever")
+    assertEqual(blocked:visibleRows()[1].row.inspectRetryCount, nil, "API lag does not spend loot retries")
+end
+
+local function testSameLooterCombatRowsShareOneResumedInspect()
+    local h = newLoadedHarness()
+    h:slash("clear")
+    local combat = true
+    h.env.InCombatLockdown = function() return combat end
+    h:fireLoot("Otherplayer", addWeapon(h, 21906, "First Combat Sword"))
+    h:fireLoot("Otherplayer", addWeapon(h, 21907, "Second Combat Sword"))
+    assertEqual(#h.timers, 0, "multiple combat drops remain timer-free")
+    combat = false
+    h:fire("PLAYER_REGEN_ENABLED")
+    assertEqual(#h.notifyInspectCalls, 1, "same-looter parked rows coalesce after combat")
+    h:setInventoryLink("party1", "MainHandSlot", "|cff1eff00|Hitem:25:::::::::::::|h[Shared Combat Sword]|h|r")
+    h:fire("INSPECT_READY", "PartyGUID1")
+    for _, frame in ipairs(h:visibleRows()) do
+        assertTruthy(frame.row.equippedText:find("Shared Combat Sword", 1, true), "each coalesced row receives equipment")
+    end
+end
+
+local function testClearedScanTimerCannotConsumeReplacementQueue()
+    local h = Harness.new()
+    h:loadAddon()
+    local staleTimer = table.remove(h.timers, 1)
+    assertTruthy(staleTimer, "initial scan timer exists")
+    h:slash("clear")
+    h:slash("scan")
+    local readsBefore = #h.inventoryReadCalls
+    local timersBefore = #h.timers
+    staleTimer.callback()
+    assertEqual(#h.inventoryReadCalls, readsBefore, "cleared callback cannot read replacement roster")
+    assertEqual(#h.timers, timersBefore, "cleared callback cannot fork replacement scan timers")
+    h:runNextTimer(0)
+    assertTruthy(#h.inventoryReadCalls > readsBefore, "current scan timer still runs")
+end
+
+local function testCombatEndStateLagRecoversBoundedly()
+    local h = Harness.new()
+    local combat = true
+    h.env.InCombatLockdown = function() return combat end
+    h:loadAddon()
+    h:runTimers(nil, 20)
+    h:fire("PLAYER_REGEN_ENABLED")
+    assertEqual(#h.timers, 1, "combat end with a lagging API schedules a bounded retry")
+    combat = false
+    h:runNextTimer(0.25)
+    h:runNextTimer(1.1)
+    assertEqual(#h.notifyInspectCalls, 1, "lagging combat end eventually resumes inspection")
+
+    local blocked = Harness.new()
+    blocked.env.InCombatLockdown = function() return true end
+    blocked:loadAddon()
+    blocked:runTimers(nil, 20)
+    blocked:fire("PLAYER_REGEN_ENABLED")
+    assertEqual(blocked:runTimers(nil, 20), 3, "combat-end recovery has a three-retry budget")
+    assertEqual(#blocked.timers, 0, "persistent combat cannot restart polling")
+    assertEqual(#blocked.notifyInspectCalls, 0, "recovery never bypasses combat lockdown")
+end
+
+testLongCombatDoesNotExhaustLootInspection()
+testLootInspectWaitsForCombatWithoutUsingRetries()
+testCombatParksAnAlreadyScheduledLootRetry()
+testCombatLootWakeupIsBoundedAndCancellationSafe()
+testSameLooterCombatRowsShareOneResumedInspect()
+testCombatEndStateLagRecoversBoundedly()
+testEquipmentScanParksDuringCombat()
+testClearedScanTimerCannotConsumeReplacementQueue()
 testDifferentGuidLootInspectsAreSerialized()
 testSameGuidLootInspectsCoalesce()
 testInspectTimeoutClearsOwnedInspectState()

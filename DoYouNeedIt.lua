@@ -9,6 +9,7 @@ local Addon = {
     inspectActive = nil,
     inspectByGuid = {},
     inspectGeneration = 0,
+    combatInspectRows = {},
     equipmentCache = {},
     equipmentScanQueue = {},
     equipmentScanScheduled = false,
@@ -1304,7 +1305,10 @@ local function ScheduleEquipmentScan(delay)
         return
     end
     Addon.equipmentScanScheduled = true
+    local generation = Addon.inspectGeneration or 0
     C_Timer.After(delay or EQUIPMENT_SCAN_DELAY, function()
+        -- A cleared scan must not consume a newer queue or clear its timer flag.
+        if generation ~= (Addon.inspectGeneration or 0) then return end
         Addon.equipmentScanScheduled = false
         if StartEquipmentScan then
             StartEquipmentScan()
@@ -1431,13 +1435,16 @@ local function QueueEquipmentScan(source, quiet)
 end
 
 StartEquipmentScan = function()
-    if Addon.inspectActive then
-        ScheduleEquipmentScan(EQUIPMENT_SCAN_DELAY)
+    if #Addon.equipmentScanQueue == 0 then
         return
     end
     if InCombatLockdown and InCombatLockdown() then
         RecordDiagnostic("scan_deferred", { reason = "combat_lockdown" })
-        ScheduleEquipmentScan(3)
+        -- The shared combat-end wakeup resumes scans and loot without polling.
+        return
+    end
+    if Addon.inspectActive then
+        ScheduleEquipmentScan(EQUIPMENT_SCAN_DELAY)
         return
     end
 
@@ -2192,6 +2199,7 @@ local function CompleteInspectRow(row, equippedText, equippedLinks)
     if not row then
         return
     end
+    Addon.combatInspectRows[row] = nil
     row.equippedText = equippedText
     row.inspectPending = false
     row.inspectToken = nil
@@ -2207,6 +2215,7 @@ local function FailInspectRow(row, reason)
     if not row then
         return
     end
+    Addon.combatInspectRows[row] = nil
     row.inspectPending = false
     row.inspectToken = nil
     if IsCachedEquippedText(row.equippedText) then
@@ -2228,12 +2237,23 @@ local function ScheduleInspectRetry(row, reason)
     end
 
     if not IsRowStillTracked(row) then
+        Addon.combatInspectRows[row] = nil
         row.inspectPending = false
         row.inspectToken = nil
         return false
     end
 
     row.inspectPending = false
+    if InCombatLockdown and InCombatLockdown() then
+        -- Combat duration is not an inspection failure and must not spend retries.
+        row.inspectToken = nil
+        Addon.combatInspectRows[row] = true
+        if not IsCachedEquippedText(row.equippedText) then
+            row.equippedText = EQUIPPED_PENDING
+        end
+        return true
+    end
+    Addon.combatInspectRows[row] = nil
     local attempt = (row.inspectRetryCount or 0) + 1
     row.inspectRetryCount = attempt
     if attempt > MAX_INSPECT_RETRIES then
@@ -2437,6 +2457,8 @@ end
 
 local function CancelAllInspectWork()
     Addon.inspectGeneration = (Addon.inspectGeneration or 0) + 1
+    Addon.combatInspectRows = {}
+    Addon.combatInspectResumeToken = nil
     local hadActive = Addon.inspectActive ~= nil
     Addon.inspectActive = nil
     Addon.inspectQueue = {}
@@ -2553,6 +2575,7 @@ CompleteActiveInspectRequest = function(guid)
 end
 
 RequestInspectForRow = function(row)
+    if type(row) == "table" then Addon.combatInspectRows[row] = nil end
     if not IsRowStillTracked(row) then
         if type(row) == "table" then
             row.inspectPending = false
@@ -2601,6 +2624,35 @@ RequestInspectForRow = function(row)
     row.inspectToken = nil
     QueueInspectRequest(guid, unit, { row = row }, true)
     StartNextInspectRequest()
+end
+
+Addon.ResumeInspectWorkAfterCombat = function(retries)
+    if InCombatLockdown and InCombatLockdown() then
+        if retries > 0 and not Addon.combatInspectResumeToken
+            and (next(Addon.combatInspectRows) or #Addon.equipmentScanQueue > 0) then
+            local token = {}
+            local generation = Addon.inspectGeneration
+            Addon.combatInspectResumeToken = token
+            -- The regen event may precede the API flip. Both queues share one budget.
+            C_Timer.After(0.25, function()
+                if Addon.combatInspectResumeToken ~= token
+                    or Addon.inspectGeneration ~= generation then return end
+                Addon.combatInspectResumeToken = nil
+                Addon.ResumeInspectWorkAfterCombat(retries - 1)
+            end)
+        end
+        return
+    end
+    Addon.combatInspectResumeToken = nil
+    local rows = Addon.combatInspectRows
+    Addon.combatInspectRows = {}
+    for row in pairs(rows) do RequestInspectForRow(row) end
+    StartNextInspectRequest()
+    StartEquipmentScan()
+    if next(rows) then
+        SaveDB()
+        RefreshRows()
+    end
 end
 
 local function AddTradeCandidate(looter, itemLink, metadata, context)
@@ -4422,6 +4474,8 @@ local function Initialize()
     Addon.inspectActive = nil
     Addon.inspectByGuid = {}
     Addon.inspectGeneration = 0
+    Addon.combatInspectRows = {}
+    Addon.combatInspectResumeToken = nil
     Addon.pendingItems = {}
     Addon.lootGeneration = 0
     Addon.recentLootKeys = {}
@@ -4504,7 +4558,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         BuildRoster()
         QueueEquipmentScan("entering_world", true)
     elseif event == "PLAYER_REGEN_ENABLED" then
-        StartEquipmentScan()
+        Addon.ResumeInspectWorkAfterCombat(3)
     elseif event == "CHALLENGE_MODE_START" then
         Addon.challengeCompletedAt = nil
         Addon.challengeFinalizeToken = nil
