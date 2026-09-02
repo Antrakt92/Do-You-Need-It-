@@ -421,6 +421,44 @@ local function testCyrillicLootTextUsesGlyphCapableFont()
     assertEqual(h.env.DoYouNeedItFrame.title.font, "Fonts\\FRIZQT__.TTF", "main title keeps the selected Friz font")
 end
 
+local function testRussianClientSettingsUseGlyphCapableFont()
+    local h = Harness.new({
+        locale = "ruRU",
+        db = {
+            settings = {
+                font = "Fonts\\FRIZQT__.TTF",
+            },
+        },
+    })
+    h:loadAddon()
+    h:slash("settings")
+
+    local frame = h.env.DoYouNeedItSettingsFrame
+    local expectedFont = "Fonts\\ARIALN.TTF"
+    assertEqual(h.env.DoYouNeedItDB.settings.font, expectedFont, "Russian client replaces Latin-only saved Friz font")
+    assertEqual(frame.title:GetText(), "Настройки", "Russian client localizes settings title")
+
+    local cyrillicControls = {
+        frame.title,
+        frame.back:GetFontString(),
+        frame.autoCheckLabel,
+        frame.delayLabel,
+        frame.whisperLabel,
+        frame.languageLabel,
+        frame.fontLabel,
+        frame.fontSizeLabel,
+        frame.whisperResetButton:GetFontString(),
+        frame.delaySlider.Low,
+        frame.delaySlider.High,
+        frame.fontSizeSlider.Low,
+        frame.fontSizeSlider.High,
+        h.env.DoYouNeedItLanguageDropdown.Text,
+    }
+    for index = 1, #cyrillicControls do
+        assertEqual(cyrillicControls[index].font, expectedFont, "Russian settings control " .. index .. " uses a Cyrillic-capable font")
+    end
+end
+
 local function testLootLooterNameUsesClassColor()
     local h = Harness.new()
     h:loadAddon()
@@ -2101,6 +2139,7 @@ testManualWhisperFailureLeavesRowRetryable()
 testClearCancelsDeferredManualWhisper()
 testMainWindowLayoutBoundsLongText()
 testCyrillicLootTextUsesGlyphCapableFont()
+testRussianClientSettingsUseGlyphCapableFont()
 testLootLooterNameUsesClassColor()
 testInstanceChangeCompletesCurrentGroup()
 testInstanceChangeHistoryTitleUsesActiveLocale()

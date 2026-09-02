@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Russian client settings now replace the Latin-only Friz font with a Cyrillic-capable fallback instead of rendering localized labels as squares.
+
 ## 0.4.2 - 02-Sep-2026 — Quieter and more reliable equipment checks
 
 ### Fixed
