@@ -70,6 +70,16 @@ function FrameMethods:ClearAllPoints()
     self.points = {}
 end
 
+function FrameMethods:GetPoint()
+    local point = self.points and self.points[1]
+    if not point then return nil end
+    return point[1], point[2] or self.harness.env.UIParent, point[3] or point[1], point[4] or 0, point[5] or 0
+end
+
+function FrameMethods:SetUserPlaced(value)
+    self.userPlaced = value == true
+end
+
 function FrameMethods:SetAllPoints(parent)
     self.allPoints = parent or true
 end
@@ -743,7 +753,7 @@ function Harness.new(options)
         return self.now
     end
     env.GetLocale = function()
-        return "enUS"
+        return self.options.locale or "enUS"
     end
     env.GetInstanceInfo = function()
         return self.instanceName, self.instanceType
@@ -846,7 +856,10 @@ function Harness.new(options)
             local info = self.items[itemID] or {}
             return info.bindToAccountUntilEquip == true
         end,
-        CreateFromItemID = function(itemID)
+    }
+    env.Item = {
+        CreateFromItemID = function(owner, itemID)
+            assert(owner == env.Item, "Item factory requires its receiver")
             return {
                 ContinueOnItemLoad = function(_, callback)
                     env.C_Timer.After(0, function()

@@ -1,6 +1,6 @@
 local Core = {}
 
-Core.VERSION = "0.4.2"
+Core.VERSION = "0.5.0"
 
 local GLYPH_LATIN = "LATIN"
 local GLYPH_CYR = "CYR"
@@ -11,6 +11,9 @@ local GLYPH_HANT = "HANT"
 local DEFAULT_FONT = "Fonts\\FRIZQT__.TTF"
 local DEFAULT_WHISPER_TEMPLATE = "Hey, do you need {item}?"
 local MAX_WHISPER_TEMPLATE_LENGTH = 160
+local MAX_CHAT_VISIBLE_BYTES = 255
+local MAX_CHAT_INVISIBLE_BYTES = 1023
+local MAX_CHAT_BYTES = 1280
 
 Core.DEFAULT_WHISPER_TEMPLATE = DEFAULT_WHISPER_TEMPLATE
 Core.MAX_WHISPER_TEMPLATE_LENGTH = MAX_WHISPER_TEMPLATE_LENGTH
@@ -52,6 +55,7 @@ addFontGlyphSupport("Fonts\\bHEI01B.ttf", { GLYPH_HANT })
 addFontGlyphSupport("Fonts\\bKAI00M.ttf", { GLYPH_HANT })
 addFontGlyphSupport("Fonts\\bLEI00D.ttf", { GLYPH_HANT })
 addFontGlyphSupport("Fonts\\FRIZQT___CYR.TTF", { GLYPH_CYR })
+addFontGlyphSupport("Fonts\\FRIZQT__.TTF", { GLYPH_LATIN })
 addFontGlyphSupport("Fonts\\K_Damage.TTF", { GLYPH_CYR, GLYPH_HANGUL })
 addFontGlyphSupport("Fonts\\K_Pagetext.TTF", { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANGUL })
 addFontGlyphSupport("Fonts\\MORPHEUS.TTF", { GLYPH_LATIN })
@@ -110,6 +114,15 @@ local LABELS_BY_LOCALE = {
         ["Font:"] = "Font:",
         ["Font Size:"] = "Font Size:",
         ["Whisper text:"] = "Whisper text:",
+        ["Whispers"] = "Whispers",
+        ["Appearance"] = "Appearance",
+        ["Use {item} for the dropped item."] = "Use {item} for the dropped item.",
+        ["Only eligible new drops. Off by default."] = "Only eligible new drops. Off by default.",
+        ["Waiting for group loot"] = "Waiting for group loot",
+        ["Gear from your dungeon or raid will appear here."] = "Gear from your dungeon or raid will appear here.",
+        ["Scroll to review older drops"] = "Scroll to review older drops",
+        ["Reset Position"] = "Reset Position",
+        ["New loot"] = "New loot",
         ["Reset"] = "Reset",
         ["Auto (current: %s)"] = "Auto (current: %s)",
         ["No askable gear drops in this view."] = "No askable gear drops in this view.",
@@ -149,6 +162,10 @@ local LABELS_BY_LOCALE = {
         ["auto_pending"] = "auto in %ds",
         ["whisper failed"] = "whisper failed",
         ["whisper_failed"] = "whisper failed",
+        ["whisper_too_long"] = "shorten whisper text",
+        ["whisper_too_long_help"] = "The whisper is too long after adding the item link. Shorten the text in Settings or use fewer {item} placeholders.",
+        ["whisper_invalid"] = "check whisper text",
+        ["whisper_invalid_help"] = "Remove line breaks or control characters from the whisper text in Settings.",
         ["test row"] = "test row",
         ["test_row"] = "test row",
         ["bind_on_pickup"] = "bind on pickup",
@@ -183,6 +200,15 @@ local LABELS_BY_LOCALE = {
         ["Font:"] = "Шрифт:",
         ["Font Size:"] = "Размер шрифта:",
         ["Whisper text:"] = "Текст виспера:",
+        ["Whispers"] = "Висперы",
+        ["Appearance"] = "Оформление",
+        ["Use {item} for the dropped item."] = "{item} заменяется ссылкой на выпавший предмет.",
+        ["Only eligible new drops. Off by default."] = "Только подходящий новый лут. По умолчанию выключено.",
+        ["Waiting for group loot"] = "Ждём групповой лут",
+        ["Gear from your dungeon or raid will appear here."] = "Здесь появится экипировка из вашего подземелья или рейда.",
+        ["Scroll to review older drops"] = "Прокрутите список, чтобы увидеть прошлый лут",
+        ["Reset Position"] = "Сброс позиции",
+        ["New loot"] = "Новый лут",
         ["Reset"] = "Сброс",
         ["Auto (current: %s)"] = "Авто (сейчас: %s)",
         ["No askable gear drops in this view."] = "Нет шмота, о котором стоит спрашивать.",
@@ -222,6 +248,10 @@ local LABELS_BY_LOCALE = {
         ["auto_pending"] = "авто через %dс",
         ["whisper failed"] = "виспер не отправлен",
         ["whisper_failed"] = "виспер не отправлен",
+        ["whisper_too_long"] = "сократите текст виспера",
+        ["whisper_too_long_help"] = "После добавления ссылки на предмет виспер слишком длинный. Сократите текст в настройках или используйте меньше вставок {item}.",
+        ["whisper_invalid"] = "проверьте текст виспера",
+        ["whisper_invalid_help"] = "Уберите переносы строк и управляющие символы из текста виспера в настройках.",
         ["test row"] = "тест",
         ["test_row"] = "тест",
         ["bind_on_pickup"] = "персональный",
@@ -354,6 +384,8 @@ local PERSISTED_ROW_KEYS = {
     manualWhispered = "boolean",
     autoWhispered = "boolean",
     askable = "boolean",
+    isAccountBound = "boolean",
+    isAccountBoundUntilEquipped = "boolean",
 }
 
 local PERSISTED_GROUP_KEYS = {
@@ -449,17 +481,49 @@ function Core.FormatWhisperMessage(template, itemLink)
     local message = Core.NormalizeWhisperTemplate(template)
     local itemText = type(itemLink) == "string" and itemLink or ""
     if message:find("{item}", 1, true) then
-        return (message:gsub("{item}", function()
+        message = message:gsub("{item}", function()
             return itemText
-        end))
+        end)
+    elseif itemText ~= "" then
+        message = message .. (message:match("%s$") and "" or " ") .. itemText
     end
-    if itemText == "" then
-        return message
+
+    if message:find("%c") then
+        return nil, "whisper_invalid"
     end
-    if message:match("%s$") then
-        return message .. itemText
+    if #message > MAX_CHAT_BYTES then
+        return nil, "whisper_too_long"
     end
-    return message .. " " .. itemText
+    -- Match Blizzard's chat edit-box budgets without clipping UTF-8 or links.
+    local visible, invisible, index = 0, 0, 1
+    while index <= #message do
+        local pair = message:sub(index, index + 1)
+        local _, linkEnd, label = message:find("^|Hitem:%d+:[^|]*|h([^|]*)|h", index)
+        if not linkEnd then
+            _, linkEnd, label = message:find("^|Hitem:%d+|h([^|]*)|h", index)
+        end
+        if pair == "||" then
+            visible = visible + 2
+            index = index + 2
+        elseif linkEnd then
+            visible = visible + #label
+            invisible = invisible + linkEnd - index + 1 - #label
+            index = linkEnd + 1
+        elseif message:find("^|c%x%x%x%x%x%x%x%x", index) then
+            invisible = invisible + 10
+            index = index + 10
+        elseif pair == "|r" then
+            invisible = invisible + 2
+            index = index + 2
+        else
+            visible = visible + 1
+            index = index + 1
+        end
+    end
+    if visible > MAX_CHAT_VISIBLE_BYTES or invisible > MAX_CHAT_INVISIBLE_BYTES then
+        return nil, "whisper_too_long"
+    end
+    return message
 end
 
 local function copyList(list)
@@ -1029,13 +1093,7 @@ function Core.FontSupports(fontPath, glyph, clientLocale)
         return glyph == GLYPH_LATIN
     end
 
-    local frizKey = Core.FontPathKey(DEFAULT_FONT)
-    local entry
-    if key == frizKey then
-        entry = clientLocale == "ruRU" and { GLYPH_LATIN, GLYPH_CYR } or { GLYPH_LATIN }
-    else
-        entry = FONT_GLYPH_SUPPORT[key]
-    end
+    local entry = FONT_GLYPH_SUPPORT[key]
     if not entry then
         local lowerName = (fontPath:match("[^\\/]+$") or fontPath):lower()
         for index = 1, #FONT_GLYPH_PATTERNS do
@@ -1146,8 +1204,9 @@ function Core.SnapshotHistoryForSave(history, limit, rowLimit, mergeWindow, loca
                     endedAt = savedGroup.endedAt,
                     mergeWindow = mergeWindow,
                 }) then
-                    latest.rows = appendUniqueRows(latest.rows, savedGroup.rows)
-                    latest.allRows = appendUniqueRows(latest.allRows, savedGroup.allRows)
+                    -- History groups arrive newest first; row lists remain oldest first.
+                    latest.rows = appendUniqueRows(savedGroup.rows, latest.rows, true)
+                    latest.allRows = appendUniqueRows(savedGroup.allRows, latest.allRows, true)
                     pruneListStart(latest.rows, perGroupRowLimit)
                     pruneListStart(latest.allRows, perGroupRowLimit)
                     local latestStartedAt = tonumber(latest.startedAt)
@@ -1547,6 +1606,13 @@ function Core.FirstRowEncounterName(rows)
     return nil
 end
 
+function Core.IsHiddenLootRow(row)
+    return type(row) == "table" and (
+        row.isAccountBound == true or row.isAccountBoundUntilEquipped == true
+        or row.reason == "warband_bound" or row.statusKey == "warband_bound"
+    )
+end
+
 function Core.ClassifyGearLoot(item, looter, settings)
     settings = Core.NormalizeSettings(settings or {})
 
@@ -1561,6 +1627,9 @@ function Core.ClassifyGearLoot(item, looter, settings)
     end
     if item.isCraftingReagent == true then
         return { visible = false, reason = "crafting_reagent" }
+    end
+    if Core.IsHiddenLootRow(item) then
+        return { visible = false, reason = "warband_bound" }
     end
     if not isVisibleQuality(item.quality, settings.minQuality) then
         return { visible = false, reason = "low_quality" }
@@ -1713,8 +1782,33 @@ function Core.AddVisibleRow(state, row, askable)
         saved[key] = value
     end
     if saved.id == nil then
-        saved.id = "row" .. tostring(state.nextRowID or 1)
-        state.nextRowID = (state.nextRowID or 1) + 1
+        -- Saved rows survive reload while the runtime sequence starts over.
+        local usedIDs = {}
+        local function rememberIDs(rows)
+            for index = 1, #(rows or {}) do
+                local existing = rows[index]
+                if type(existing) == "table" and type(existing.id) == "string" then
+                    usedIDs[existing.id] = true
+                end
+            end
+        end
+        rememberIDs(state.currentRows)
+        rememberIDs(state.allRows)
+        rememberIDs(state.sessionRows)
+        rememberIDs(state.sessionAllRows)
+        for index = 1, #(state.history or {}) do
+            local group = state.history[index]
+            if type(group) == "table" then
+                rememberIDs(group.rows)
+                rememberIDs(group.allRows)
+            end
+        end
+        local nextID = state.nextRowID or 1
+        repeat
+            saved.id = "row" .. tostring(nextID)
+            nextID = nextID + 1
+        until not usedIDs[saved.id]
+        state.nextRowID = nextID
     end
     saved.askable = askable ~= false
 
@@ -1774,16 +1868,15 @@ local function rowMergeKey(row)
     if type(row) ~= "table" then
         return nil
     end
-    if type(row.id) == "string" and row.id ~= "" then
-        return "id\031" .. row.id
-    end
+    local id = type(row.id) == "string" and row.id or ""
     local itemID = tonumber(row.itemID) or Core.ExtractItemID(row.itemLink)
-    return tostring(row.looter or "") .. "\031"
+    -- Older saved groups can reuse an ID across reloads for different drops.
+    return id .. "\031" .. tostring(row.looter or "") .. "\031"
         .. tostring(itemID or row.itemLink or "") .. "\031"
         .. tostring(row.timestamp or "")
 end
 
-appendUniqueRows = function(target, rows)
+appendUniqueRows = function(target, rows, preferIncoming)
     target = type(target) == "table" and target or {}
     if type(rows) ~= "table" then
         return target
@@ -1793,7 +1886,7 @@ appendUniqueRows = function(target, rows)
     for index = 1, #target do
         local key = rowMergeKey(target[index])
         if key then
-            seen[key] = true
+            seen[key] = index
         end
     end
     for index = 1, #rows do
@@ -1801,7 +1894,9 @@ appendUniqueRows = function(target, rows)
         local key = rowMergeKey(row)
         if key and not seen[key] then
             target[#target + 1] = row
-            seen[key] = true
+            seen[key] = #target
+        elseif key and preferIncoming then
+            target[seen[key]] = row
         end
     end
     return target
@@ -1901,7 +1996,7 @@ function Core.GetAutoWhisperDecision(settings, row)
     if type(row) ~= "table" then
         return { shouldSchedule = false, reason = "missing_row" }
     end
-    if row.askable == false then
+    if row.askable == false or Core.IsHiddenLootRow(row) then
         return { shouldSchedule = false, reason = "not_askable" }
     end
     if row.unsafe == true then
@@ -1926,7 +2021,7 @@ function Core.GetWhisperButtonState(_selectedTab, selectedView, row)
         enabled = false,
         text = "Ask",
     }
-    if selectedView ~= "current" or type(row) ~= "table" or row.askable == false then
+    if selectedView ~= "current" or type(row) ~= "table" or row.askable == false or Core.IsHiddenLootRow(row) then
         return state
     end
 

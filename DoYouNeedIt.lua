@@ -55,6 +55,7 @@ end
 
 local WINDOW_WIDTH = 540
 local WINDOW_HEIGHT = 300
+local SETTINGS_WINDOW_HEIGHT = 420
 local ROW_WIDTH = 510
 local ROW_HEIGHT = 30
 local ROW_START_Y = -82
@@ -342,7 +343,7 @@ local function SafeSelfLootLooterName()
     return L("You")
 end
 
-local function RegisterFontString(fontString, size, flags, stable, dynamic)
+local function RegisterFontString(fontString, size, flags, stable, dynamic, maxSize)
     if not fontString then
         return
     end
@@ -352,6 +353,7 @@ local function RegisterFontString(fontString, size, flags, stable, dynamic)
         flags = flags,
         stable = stable == true,
         dynamic = dynamic == true,
+        maxSize = maxSize,
     }
     if ApplyCurrentFont then
         ApplyCurrentFont()
@@ -367,10 +369,10 @@ local function KeepOneLine(fontString)
     SafeCall(fontString.SetNonSpaceWrap, fontString, false)
 end
 
-local function RegisterButtonFont(button, size, flags, stable)
+local function RegisterButtonFont(button, size, flags, stable, maxSize)
     if button and type(button.GetFontString) == "function" then
         local fontString = button:GetFontString()
-        RegisterFontString(fontString, size, flags, stable)
+        RegisterFontString(fontString, size, flags, stable, nil, maxSize)
         KeepOneLine(fontString)
     end
 end
@@ -491,7 +493,9 @@ ApplyCurrentFont = function()
                     font = dynamicFallbacks[cacheKey]
                 end
             end
-            SafeCall(entry.fontString.SetFont, entry.fontString, font, Core.ResolveFontSize(entry.size, selectedSize), entry.flags)
+            local size = Core.ResolveFontSize(entry.size, selectedSize)
+            if entry.maxSize then size = math.min(size, entry.maxSize) end
+            SafeCall(entry.fontString.SetFont, entry.fontString, font, size, entry.flags)
         end
     end
 end
@@ -896,6 +900,12 @@ function Addon.CleanupRecentLootKeys(now)
     end
 end
 
+function Addon.RememberLootKeys(looter, itemLink, timestamp)
+    local itemID = Core.ExtractItemID(itemLink)
+    Addon.recentLootKeys["link\031" .. looter .. "\031" .. itemLink] = timestamp
+    if itemID then Addon.recentLootKeys["item\031" .. looter .. "\031" .. tostring(itemID)] = timestamp end
+end
+
 function Addon.ShouldSkipDuplicateLoot(looter, itemLink)
     if type(looter) ~= "string" or looter == "" or type(itemLink) ~= "string" or itemLink == "" then
         return false
@@ -910,10 +920,7 @@ function Addon.ShouldSkipDuplicateLoot(looter, itemLink)
         return true, itemID
     end
 
-    Addon.recentLootKeys[linkKey] = now
-    if itemKey then
-        Addon.recentLootKeys[itemKey] = now
-    end
+    Addon.RememberLootKeys(looter, itemLink, now)
     return false, itemID
 end
 
@@ -1040,11 +1047,11 @@ end
 
 local function RequestItemLoad(itemLink, callback)
     local itemID = Core.ExtractItemID(itemLink)
-    if not itemID or not C_Item or type(C_Item.CreateFromItemID) ~= "function" then
+    if not itemID or type(Item) ~= "table" or type(Item.CreateFromItemID) ~= "function" then
         return false
     end
 
-    local item = SafeCall(C_Item.CreateFromItemID, itemID)
+    local item = SafeCall(Item.CreateFromItemID, Item, itemID)
     if type(item) ~= "table" or type(item.ContinueOnItemLoad) ~= "function" then
         return false
     end
@@ -1194,7 +1201,7 @@ local function ReadItemMetadata(itemLink)
         name = CleanString(itemName),
         link = CleanString(resolvedLink),
         quality = quality,
-        itemLevel = CleanNumber(itemLevel),
+        itemLevel = Addon.ReadItemLevel(itemLink),
         classID = metadataClassID,
         subclassID = metadataSubclassID,
         equipLoc = metadataEquipLoc,
@@ -1475,11 +1482,16 @@ StartEquipmentScan = function()
 end
 
 local function RowsForSelectedView()
+    if Addon.selectedView == "current" and Addon.demoRows then
+        return Addon.demoRows
+    end
     local function unifiedRows(allRows, askableRows)
-        if type(allRows) == "table" and #allRows > 0 then
-            return allRows
+        local visible = {}
+        local rows = type(allRows) == "table" and #allRows > 0 and allRows or askableRows or {}
+        for _, row in ipairs(rows) do
+            if not Core.IsHiddenLootRow(row) then visible[#visible + 1] = row end
         end
-        return askableRows or {}
+        return visible
     end
 
     if Addon.selectedView == "session" then
@@ -1502,6 +1514,54 @@ local function RowsForSelectedView()
     return unifiedRows(Addon.state.allRows, Addon.state.currentRows)
 end
 
+function Addon.LootRowMetrics()
+    local size = Addon.state and Addon.state.settings.fontSize or 12
+    local body = Core.ResolveFontSize(11, size)
+    local detail = Core.ResolveFontSize(10, size)
+    local height = math.max(ROW_HEIGHT, body + detail + 6)
+    local stride = height + 4
+    local startY = ROW_START_Y - math.max(0, size - 12) * 2
+    local count = math.min(MAX_VISIBLE_ROWS, math.floor((WINDOW_HEIGHT + startY - 8) / stride))
+    return height, stride, math.max(1, count), body, startY
+end
+
+function Addon.GetVisibleRowCount()
+    local _, _, count = Addon.LootRowMetrics()
+    return count
+end
+
+function Addon.CaptureReadingPosition()
+    local rows = RowsForSelectedView()
+    local offset = Addon.rowScrollOffset or 0
+    return {
+        view = Addon.selectedView,
+        group = Addon.selectedHistoryIndex and Addon.state.history[Addon.selectedHistoryIndex],
+        offset = offset,
+        anchor = offset > 0 and rows[#rows - offset] or nil,
+    }
+end
+
+function Addon.RestoreReadingPosition(saved, newLoot)
+    Addon.selectedView = saved.view
+    if saved.view == "history" then
+        Addon.selectedHistoryIndex = nil
+        for index, group in ipairs(Addon.state.history) do
+            if group == saved.group then Addon.selectedHistoryIndex = index; break end
+        end
+        if not Addon.selectedHistoryIndex then Addon.selectedView = "session" end
+    end
+    Addon.rowScrollOffset = saved.offset
+    if saved.anchor then
+        local rows = RowsForSelectedView()
+        for index, row in ipairs(rows) do
+            if row == saved.anchor then Addon.rowScrollOffset = #rows - index; break end
+        end
+    end
+    if newLoot and (saved.view ~= "current" or saved.offset > 0) then
+        Addon.newLootPending = true
+    end
+end
+
 local function NewestRowsWindow(rows)
     local result = {}
     if type(rows) ~= "table" then
@@ -1510,7 +1570,8 @@ local function NewestRowsWindow(rows)
     end
 
     local rowCount = #rows
-    local maxOffset = math.max(0, rowCount - MAX_VISIBLE_ROWS)
+    local _, _, visibleCount = Addon.LootRowMetrics()
+    local maxOffset = math.max(0, rowCount - visibleCount)
     local offset = math.floor(tonumber(Addon.rowScrollOffset) or 0)
     if offset < 0 then
         offset = 0
@@ -1524,7 +1585,7 @@ local function NewestRowsWindow(rows)
         local row = rows[index]
         if type(row) == "table" then
             result[#result + 1] = row
-            if #result >= MAX_VISIBLE_ROWS then
+            if #result >= visibleCount then
                 break
             end
         end
@@ -1546,6 +1607,10 @@ function Addon.SetLootChromeShown(shown)
 
     setShown(Addon.historyButton)
     setShown(Addon.settingsButton)
+    if Addon.newLootButton then
+        if shown and Addon.newLootPending then Addon.newLootButton:Show()
+        else Addon.newLootButton:Hide() end
+    end
     for index = 1, #(Addon.columnHeaders or {}) do
         setShown(Addon.columnHeaders[index])
     end
@@ -1555,14 +1620,30 @@ function Addon.SetLootChromeShown(shown)
     end
 end
 
+function Addon.HideRowTooltip(rowFrame)
+    if not GameTooltip or not rowFrame then
+        return
+    end
+    for _, owner in ipairs({ rowFrame.dropLink, rowFrame.equippedLink, rowFrame.equippedLink2, rowFrame.tradeInfo }) do
+        if CleanBoolean(SafeCall(GameTooltip.IsOwned, GameTooltip, owner)) == true then
+            HideItemTooltip()
+            return
+        end
+    end
+end
+
 function Addon.HideLootRows()
     for index = 1, MAX_VISIBLE_ROWS do
         if Addon.rowFrames[index] then
+            Addon.HideRowTooltip(Addon.rowFrames[index])
             Addon.rowFrames[index]:Hide()
         end
     end
     if Addon.emptyText then
         Addon.emptyText:Hide()
+    end
+    if Addon.emptyHelp then
+        Addon.emptyHelp:Hide()
     end
     if Addon.scrollBadge then
         Addon.scrollBadge:Hide()
@@ -1593,6 +1674,32 @@ local function RefreshRows()
 
     local rows = RowsForSelectedView()
     local displayRows, offset, _, rowCount = NewestRowsWindow(rows)
+    if Addon.newLootPending then
+        local current = Addon.state.allRows or {}
+        if #current == 0 and Addon.currentHistoryFallbackGroup then
+            current = Addon.currentHistoryFallbackGroup.allRows or Addon.currentHistoryFallbackGroup.rows or {}
+        end
+        local hasVisible = false
+        for _, row in ipairs(current) do
+            if not Core.IsHiddenLootRow(row) then hasVisible = true; break end
+        end
+        if not hasVisible or (Addon.selectedView == "current" and offset == 0) then
+            Addon.newLootPending = false
+            Addon.newLootButton:Hide()
+        end
+    end
+    local rowHeight, rowStride, visibleCount, bodyHeight, rowStartY = Addon.LootRowMetrics()
+    local extraSize = math.max(0, Addon.state.settings.fontSize - 12)
+    Addon.historyButton:SetHeight(math.max(22, bodyHeight + 6))
+    local badgeWidth = math.max(76, bodyHeight * 7)
+    Addon.scrollBadge:SetSize(badgeWidth, math.max(16, bodyHeight + 3))
+    Addon.historyButton:GetFontString():SetWidth(HEADER_HISTORY_WIDTH - badgeWidth - 24)
+    Addon.newLootButton:SetHeight(math.max(22, bodyHeight + 3))
+    Addon.newLootButton:SetWidth(math.max(100, bodyHeight * 6))
+    for _, header in ipairs(Addon.columnHeaders) do
+        header:ClearAllPoints()
+        header:SetPoint("TOPLEFT", Addon.frame, "TOPLEFT", header.columnX, -68 - extraSize)
+    end
 
     local title = L("Current")
     if Addon.selectedView == "session" then
@@ -1603,7 +1710,7 @@ local function RefreshRows()
     end
     Addon.historyButton:SetText(title)
     if Addon.scrollText then
-        if rowCount > MAX_VISIBLE_ROWS then
+        if rowCount > visibleCount then
             local newestPosition = rowCount - offset
             local oldestPosition = math.max(1, newestPosition - #displayRows + 1)
             Addon.scrollText:SetText(tostring(oldestPosition) .. "-" .. tostring(newestPosition) .. " / " .. tostring(rowCount))
@@ -1621,8 +1728,26 @@ local function RefreshRows()
     for index = 1, MAX_VISIBLE_ROWS do
         local rowFrame = Addon.rowFrames[index]
         local row = displayRows[index]
+        local firstEquipped, secondEquipped = Addon.EquippedItemLinks(row and row.equippedText)
+        if rowFrame.row ~= row or not row
+            or rowFrame.dropLink.itemLink ~= FirstItemLink(row.itemLink)
+            or rowFrame.equippedLink.itemLink ~= firstEquipped
+            or rowFrame.equippedLink2.itemLink ~= secondEquipped
+            or rowFrame.tradeInfo.tooltipText ~= Core.GetTradeStatusTooltip(row, ActiveLocale())
+        then
+            Addon.HideRowTooltip(rowFrame)
+        end
         if row then
             rowFrame.row = row
+            rowFrame:ClearAllPoints()
+            rowFrame:SetPoint("TOPLEFT", Addon.frame, "TOPLEFT", 10, rowStartY - ((index - 1) * rowStride))
+            rowFrame:SetHeight(rowHeight)
+            rowFrame.looter:SetHeight(bodyHeight)
+            rowFrame.dropLink:SetHeight(bodyHeight + 3)
+            rowFrame.equippedLink:SetHeight(bodyHeight + 3)
+            rowFrame.equippedLink2:SetHeight(bodyHeight + 3)
+            rowFrame.whisper:SetHeight(math.max(16, bodyHeight + 3))
+            rowFrame.tradeInfo:SetHeight(Core.ResolveFontSize(9, Addon.state.settings.fontSize) + 2)
             rowFrame.looter:SetText(row.looter or "?")
             ApplyLooterClassColor(rowFrame.looter, EnsureRowClassToken(row))
             rowFrame.drop:ClearAllPoints()
@@ -1636,21 +1761,39 @@ local function RefreshRows()
                 rowFrame.drop:SetWidth(ROW_DROP_WIDTH)
             end
             rowFrame.drop:SetText(row.itemLink or "")
-            rowFrame.equipped:SetText(DisplayEquippedText(row.equippedText))
+            if secondEquipped then
+                local prefix = IsCachedEquippedText(row.equippedText) and DisplayEquippedText("Cached: ") or ""
+                rowFrame.equipped:SetText(prefix .. firstEquipped)
+                rowFrame.equipped:SetWidth((ROW_EQUIPPED_WIDTH - 8) / 2)
+                rowFrame.equippedLink:SetWidth((ROW_EQUIPPED_WIDTH - 8) / 2 + 2)
+                rowFrame.equipped2:SetText(secondEquipped)
+                rowFrame.equipped2:Show()
+                rowFrame.equippedDivider:Show()
+            else
+                rowFrame.equipped:SetText(DisplayEquippedText(row.equippedText))
+                rowFrame.equipped:SetWidth(ROW_EQUIPPED_WIDTH)
+                rowFrame.equippedLink:SetWidth(ROW_EQUIPPED_HOVER_WIDTH)
+                rowFrame.equipped2:Hide()
+                rowFrame.equippedDivider:Hide()
+            end
             local tradeStatusKey = Core.GetTradeStatusKey(row)
             rowFrame.trade:SetText(Core.GetTradeStatusText(row, ActiveLocale()))
             Addon.ApplyTradeStatusColor(rowFrame.trade, tradeStatusKey)
             rowFrame.tradeInfo.tooltipText = Core.GetTradeStatusTooltip(row, ActiveLocale())
             rowFrame.tradeInfo:Show()
             rowFrame.dropLink.itemLink = FirstItemLink(row.itemLink)
-            rowFrame.equippedLink.itemLink = FirstItemLink(row.equippedText)
+            rowFrame.equippedLink.itemLink = firstEquipped
+            rowFrame.equippedLink2.itemLink = secondEquipped
             rowFrame.dropLink:SetShown(rowFrame.dropLink.itemLink ~= nil)
             rowFrame.equippedLink:SetShown(rowFrame.equippedLink.itemLink ~= nil)
+            rowFrame.equippedLink2:SetShown(secondEquipped ~= nil)
             rowFrame.status:SetText(Core.GetRowStatusText(row, ActiveLocale()))
             local whisperState = Core.GetWhisperButtonState(nil, Addon.selectedView, row)
+            rowFrame.accent:SetColorTexture(whisperState.enabled and 0.22 or 0.22, whisperState.enabled and 0.68 or 0.28, whisperState.enabled and 0.88 or 0.34, whisperState.enabled and 0.85 or 0.35)
+            rowFrame.status:SetTextColor(0.64, 0.70, 0.77, 1)
             if whisperState.visible then
                 rowFrame.whisper:SetText(L(whisperState.text))
-                if whisperState.enabled then
+                if whisperState.enabled and not row.isTest then
                     rowFrame.whisper:Enable()
                 else
                     rowFrame.whisper:Disable()
@@ -1665,10 +1808,14 @@ local function RefreshRows()
             rowFrame.row = nil
             rowFrame.dropLink.itemLink = nil
             rowFrame.equippedLink.itemLink = nil
+            rowFrame.equippedLink2.itemLink = nil
             rowFrame.tradeInfo.tooltipText = nil
             rowFrame.rollIcon:Hide()
             rowFrame.dropLink:Hide()
             rowFrame.equippedLink:Hide()
+            rowFrame.equippedLink2:Hide()
+            rowFrame.equipped2:Hide()
+            rowFrame.equippedDivider:Hide()
             rowFrame.tradeInfo:Hide()
             rowFrame:Hide()
         end
@@ -1679,11 +1826,14 @@ local function RefreshRows()
     if #rows == 0 then
         Addon.emptyText:SetText(L("No gear drops in this view."))
         Addon.emptyText:Show()
+        Addon.emptyHelp:SetText(L("Gear from your dungeon or raid will appear here."))
+        Addon.emptyHelp:Show()
         if Addon.scrollText then
             Addon.scrollText:Hide()
         end
     else
         Addon.emptyText:Hide()
+        Addon.emptyHelp:Hide()
     end
     if RefreshSettingsControls then
         RefreshSettingsControls()
@@ -1852,7 +2002,7 @@ local function RefreshCharacterStorageFromPlayerIdentity()
 end
 
 local function SendWhisper(row, isAuto)
-    if not row or not row.looter or not row.itemLink then
+    if not row or row.isTest or not row.looter or not row.itemLink then
         return
     end
     if row.manualWhispered == true or row.autoWhispered == true or row.whisperInFlight == true then
@@ -1861,11 +2011,21 @@ local function SendWhisper(row, isAuto)
 
     row.pendingAutoWhisper = false
     row.autoToken = nil
-    local message = Core.FormatWhisperMessage(Addon.state.settings.whisperTemplate, row.itemLink)
+    local message, messageError = Core.FormatWhisperMessage(Addon.state.settings.whisperTemplate, row.itemLink)
+    if not message then
+        row.statusKey = messageError
+        row.statusSeconds = nil
+        row.statusText = nil
+        Print(L(messageError .. "_help"))
+        SaveDB()
+        RefreshRows()
+        return
+    end
     local target = row.looter
     local token = {}
     row.whisperInFlight = true
     row.whisperToken = token
+    row.whisperIsAuto = isAuto == true
     row.statusKey = isAuto and "auto_sending" or "sending"
     row.statusSeconds = nil
     row.statusText = nil
@@ -1878,7 +2038,22 @@ local function SendWhisper(row, isAuto)
         if not IsRowStillTracked(row) then
             row.whisperInFlight = false
             row.whisperToken = nil
+            row.whisperIsAuto = nil
             return
+        end
+
+        if isAuto then
+            -- Party tokens can be reused before the roster event reaches us.
+            BuildRoster()
+            if not Addon.IsGroupInstanceContext() or not ResolveUnitForName(target) then
+                row.whisperInFlight = false
+                row.whisperToken = nil
+                row.whisperIsAuto = nil
+                row.statusKey = "candidate"
+                SaveDB()
+                RefreshRows()
+                return
+            end
         end
 
         local sendFn = SendChatMessage
@@ -1893,6 +2068,7 @@ local function SendWhisper(row, isAuto)
 
         row.whisperInFlight = false
         row.whisperToken = nil
+        row.whisperIsAuto = nil
         if ok then
             if isAuto then
                 row.autoWhispered = true
@@ -1914,10 +2090,18 @@ local function SendWhisper(row, isAuto)
     SaveDB()
 end
 
-local function CancelPendingAuto(row)
+local function CancelPendingAuto(row, cancelManual)
     if row then
         row.pendingAutoWhisper = false
         row.autoToken = nil
+        if row.whisperInFlight == true and (row.whisperIsAuto == true or cancelManual == true) then
+            row.whisperInFlight = false
+            row.whisperToken = nil
+            row.whisperIsAuto = nil
+            row.statusKey = "candidate"
+            row.statusSeconds = nil
+            row.statusText = nil
+        end
         if row.statusKey == "auto_pending" or (row.statusText and row.statusText:find("auto in", 1, true)) then
             row.statusKey = "candidate"
             row.statusSeconds = nil
@@ -2018,6 +2202,7 @@ function Addon.UpdateTrackedLootLink(row, itemLink, source)
     if itemID then
         row.itemID = itemID
     end
+    Addon.RevalidateTrackedLootMetadata(row)
     return true
 end
 
@@ -2028,42 +2213,46 @@ function Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
     end
 
     local itemID = Core.ExtractItemID(itemLink)
-    local row = Addon.FindTrackedLootRow(looter, itemLink) or Addon.FindTrackedLootRowByItemID(looter, itemID)
+    local now = context.timestamp or Now()
+    -- Delayed source events may update fresh history, but must not rewrite an older run.
+    local row = Addon.FindTrackedLootRowMatching(looter, function(candidate)
+        return candidate.lootGeneration == (Addon.lootGeneration or 0)
+            and type(candidate.timestamp) == "number"
+            and now >= candidate.timestamp and now - candidate.timestamp <= ENCOUNTER_LOOT_GRACE
+            and (candidate.lootSource ~= "bonus_roll"
+                or now - (candidate.bonusConfirmedAt or candidate.timestamp) <= Addon.recentLootDedupeSeconds)
+            and (not context.instanceName or candidate.instanceName == context.instanceName)
+            and (not context.encounterName or not candidate.encounterName or candidate.encounterName == context.encounterName)
+            and (candidate.itemLink == itemLink or (itemID and candidate.itemID == itemID))
+    end)
     if not row then
         return false
     end
 
+    local reading = Addon.CaptureReadingPosition()
     Addon.UpdateTrackedLootLink(row, itemLink, source)
     CancelPendingAuto(row)
     row.whisperInFlight = false
     row.whisperToken = nil
+    row.whisperIsAuto = nil
+    row.bonusConfirmedAt = row.bonusConfirmedAt or now
+    -- All event sources share the first confirmation window; repeats must not extend it.
+    Addon.RememberLootKeys(looter, itemLink, row.bonusConfirmedAt)
     row.lootSource = "bonus_roll"
     row.askable = false
     row.reason = "bonus_roll"
     row.statusKey = "bonus_roll"
     row.statusSeconds = nil
     row.statusText = nil
-    Addon.RemoveRowFromList(Addon.state.currentRows, row)
-    Addon.RemoveRowFromList(Addon.state.sessionRows, row)
-    local history = Addon.state.history
-    if type(history) == "table" then
-        for index = 1, #history do
-            local group = history[index]
-            if type(group) == "table" then
-                Addon.RemoveRowFromList(group.rows, row)
-            end
-        end
-    end
+    Addon.SyncRowAskability(row, false)
 
     RecordDiagnostic("bonus_loot_upgrade", {
         looter = looter,
         itemLink = itemLink,
         source = source or "unknown",
     })
-    Addon.selectedView = "current"
-    Addon.selectedHistoryIndex = nil
-    Addon.rowScrollOffset = 0
-    Addon.EnterLootMode()
+    Addon.RestoreReadingPosition(reading, false)
+    if Addon.contentMode ~= "settings" then Addon.EnterLootMode() end
     SaveDB()
     RefreshRows()
     if not Addon.ScheduleChallengeHistoryFinalizeIfRecent(context.source or source or "bonus_loot_upgrade") then
@@ -2143,6 +2332,80 @@ function Addon.AddRowToListOnce(list, row)
     return true
 end
 
+function Addon.SyncRowAskability(row, askable)
+    row.askable = askable == true
+    local state = Addon.state
+    local function sync(allRows, rows, limit)
+        if row.askable and IsRowInList(allRows, row) then
+            Addon.AddRowToListOnce(rows, row)
+            while type(limit) == "number" and #rows > limit do table.remove(rows, 1) end
+        elseif not row.askable then
+            Addon.RemoveRowFromList(rows, row)
+        end
+    end
+    sync(state.allRows, state.currentRows)
+    sync(state.sessionAllRows, state.sessionRows, state.settings.maxSessionRows)
+    for _, group in ipairs(state.history or {}) do
+        if type(group) == "table" then sync(group.allRows, group.rows) end
+    end
+end
+
+function Addon.RevalidateTrackedLootMetadata(row)
+    CancelPendingAuto(row, true)
+    Addon.SyncRowAskability(row, false)
+    row.itemLevel = nil
+    row.playerCanEquip = nil
+    row.tradeStatusKey = "trade_unknown"
+    row.reason = "not_askable"
+    row.statusKey = "not_askable"
+    row.statusSeconds = nil
+    row.statusText = nil
+    row.inspectPending = false
+    row.inspectToken = nil
+    row.inspectRetryCount = nil
+    Addon.combatInspectRows[row] = nil
+    local token, generation, itemLink = {}, Addon.lootGeneration, row.itemLink
+    row.metadataToken = token
+    local attempts = 0
+    local function refresh()
+        if row.metadataToken ~= token or Addon.lootGeneration ~= generation
+            or row.itemLink ~= itemLink or not IsRowStillTracked(row) then return end
+        local metadata = ReadItemMetadata(itemLink)
+        if not metadata then
+            attempts = attempts + 1
+            if attempts <= MAX_ITEM_RETRIES then
+                C_Timer.After(ITEM_RETRY_DELAY, refresh)
+            else
+                row.metadataToken = nil
+            end
+            return
+        end
+        row.metadataToken = nil
+        metadata.lootSource = row.lootSource
+        local classification = Core.ClassifyTradeCandidate(metadata, row.looter, SafePlayerName(), Addon.state.settings)
+        if row.unsafe or row.isSelfLoot then
+            classification = { visible = false, reason = row.isSelfLoot and "self_loot" or "looter_unresolved" }
+        end
+        row.itemLevel = Addon.ReadItemLevel(itemLink)
+        row.equipLoc = metadata.equipLoc
+        row.playerCanEquip = metadata.playerCanEquip
+        row.isAccountBound = metadata.isAccountBound
+        row.isAccountBoundUntilEquipped = metadata.isAccountBoundUntilEquipped
+        row.tradeStatusKey = Core.ResolveTradeStatus(metadata)
+        row.reason = classification.visible and "trade_candidate" or classification.reason
+        row.statusKey = classification.visible and "candidate" or classification.reason
+        if row.autoWhispered then row.statusKey = "auto_sent"
+        elseif row.manualWhispered then row.statusKey = "sent" end
+        Addon.SyncRowAskability(row, classification.visible)
+        if not row.unsafe and not row.isSelfLoot then RequestInspectForRow(row) end
+        if row.askable and row.autoWhisperEligible then ScheduleAutoWhisper(row) end
+        SaveDB()
+        RefreshRows()
+    end
+    -- A detailed chat link can change bonus levels even when the base item is cached.
+    refresh()
+end
+
 function Addon.PromotePersonalLootRowFromEquipped(row, equippedLinks)
     if type(row) ~= "table"
         or row.askable == true
@@ -2166,23 +2429,7 @@ function Addon.PromotePersonalLootRowFromEquipped(row, equippedLinks)
     row.statusText = nil
     row.tradeStatusKey = "trade_likely"
 
-    local state = Addon.state
-    if IsRowInList(state.allRows, row) then
-        Addon.AddRowToListOnce(state.currentRows, row)
-    end
-    if IsRowInList(state.sessionAllRows, row) then
-        Addon.AddRowToListOnce(state.sessionRows, row)
-        local limit = state.settings and state.settings.maxSessionRows
-        while type(limit) == "number" and #state.sessionRows > limit do
-            table.remove(state.sessionRows, 1)
-        end
-    end
-    for index = 1, #(state.history or {}) do
-        local group = state.history[index]
-        if type(group) == "table" and IsRowInList(group.allRows, row) then
-            Addon.AddRowToListOnce(group.rows, row)
-        end
-    end
+    Addon.SyncRowAskability(row, true)
 
     RecordDiagnostic("trade_likely_item_level", {
         looter = row.looter,
@@ -2698,6 +2945,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
         })
     end
 
+    local reading = Addon.CaptureReadingPosition()
     local cachedEquippedText = Core.GetCachedEquippedText(Addon.equipmentCache, looter, metadata.equipLoc, Now(), EQUIPMENT_CACHE_MAX_AGE)
     local row = Core.AddVisibleRow(Addon.state, {
         looter = looter,
@@ -2715,6 +2963,8 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
         equippedText = cachedEquippedText or UNKNOWN_EQUIPPED,
         tradeStatusKey = Core.ResolveTradeStatus(metadata),
         playerCanEquip = metadata.playerCanEquip,
+        isAccountBound = metadata.isAccountBound,
+        isAccountBoundUntilEquipped = metadata.isAccountBoundUntilEquipped,
         autoWhisperEligible = context.isGroupInstance == true,
         unsafe = context.unsafe == true,
     }, askable)
@@ -2726,6 +2976,9 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
         })
         return false
     end
+    row.lootGeneration = context.generation or Addon.lootGeneration or 0
+    if row.lootSource == "bonus_roll" then row.bonusConfirmedAt = row.timestamp end
+    row.isSelfLoot = context.isSelfLoot == true
 
     RecordDiagnostic("row_added", {
         looter = looter,
@@ -2742,11 +2995,12 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
     if askable and context.isGroupInstance == true then
         ScheduleAutoWhisper(row)
     end
-    Addon.selectedView = "current"
-    Addon.selectedHistoryIndex = nil
-    Addon.rowScrollOffset = 0
+    Addon.demoRows = nil
     Addon.currentHistoryFallbackGroup = nil
-    Addon.EnterLootMode()
+    Addon.RestoreReadingPosition(reading, true)
+    if Addon.contentMode ~= "settings" then
+        Addon.EnterLootMode()
+    end
     SaveDB()
     RefreshRows()
     if not Addon.ScheduleChallengeHistoryFinalizeIfRecent(context.source or "post_challenge_loot") then
@@ -2760,7 +3014,10 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
 end
 
 local function AddTestRow()
-    local row = Core.AddVisibleRow(Addon.state, {
+    -- Keep examples outside live state so they never enter history or chat.
+    local demoState = Core.CreateState(Addon.state.settings)
+    local row = Core.AddVisibleRow(demoState, {
+        isTest = true,
         looter = "Example",
         itemLink = "|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r",
         equipLoc = "INVTYPE_WEAPON",
@@ -2774,7 +3031,8 @@ local function AddTestRow()
         tradeStatusKey = "trade_likely",
         unsafe = false,
     }, true)
-    Core.AddVisibleRow(Addon.state, {
+    Core.AddVisibleRow(demoState, {
+        isTest = true,
         looter = "Example",
         itemLink = "|cffa335ee|Hitem:19020:::::::::::::|h[Bound Test Chest]|h|r",
         equipLoc = "INVTYPE_CHEST",
@@ -2788,6 +3046,7 @@ local function AddTestRow()
         tradeStatusKey = "trade_unknown",
         unsafe = false,
     }, false)
+    Addon.demoRows = demoState.allRows
     Addon.selectedView = "current"
     Addon.selectedHistoryIndex = nil
     Addon.rowScrollOffset = 0
@@ -2946,20 +3205,28 @@ local function MergeDuplicatePendingLoot(looter, itemLink, context, source)
             and Core.ExtractItemID(bucket.itemLink or pendingLink) == itemID
             and PendingBucketHasLooter(bucket, looter, generation)
         then
-            local existing = Addon.pendingItems[itemLink]
-            if type(existing) == "table" and existing ~= bucket then
-                local waiters = type(bucket.waiters) == "table" and bucket.waiters or {}
-                for index = 1, #waiters do
-                    Core.AddPendingItemWaiter(Addon.pendingItems, itemLink, waiters[index])
+            if source ~= "chat" then
+                UpdatePendingWaiterContext(bucket, looter, context)
+                if not ProcessPendingItem(pendingLink, bucket) then
+                    SchedulePendingItemRetry(pendingLink, bucket, 0)
                 end
-                Addon.pendingItems[pendingLink] = nil
-                bucket = existing
-            else
-                Addon.pendingItems[pendingLink] = nil
-                bucket.itemLink = itemLink
-                Addon.pendingItems[itemLink] = bucket
+                return true
             end
-
+            -- A shared generic link can have multiple looters with distinct bonus variants.
+            local remaining, target = {}, nil
+            for index = 1, #bucket.waiters do
+                local waiter = bucket.waiters[index]
+                if waiter.looter == looter and (generation == nil or waiter.generation == generation) then
+                    target = Core.AddPendingItemWaiter(Addon.pendingItems, itemLink, waiter)
+                else
+                    remaining[#remaining + 1] = waiter
+                end
+            end
+            bucket.waiters = remaining
+            if #remaining == 0 then
+                Addon.pendingItems[pendingLink] = nil
+            end
+            bucket = target
             bucket.retryToken = nil
             UpdatePendingWaiterContext(bucket, looter, context)
             RecordDiagnostic("pending_duplicate_loot", {
@@ -3020,6 +3287,9 @@ function Addon.HandleResolvedLoot(looter, itemLink, context, source)
     if context.skipDuplicateLoot ~= true then
         local duplicate, duplicateItemID = Addon.ShouldSkipDuplicateLoot(looter, itemLink)
         if duplicate then
+            if MergeDuplicatePendingLoot(looter, itemLink, context, source) then
+                return
+            end
             if Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
                 or Addon.UpgradePendingLootToBonus(looter, itemLink, context, source)
             then
@@ -3098,6 +3368,7 @@ function Addon.CompleteCurrentGroup(encounterName)
     if not Addon.state or (#Addon.state.currentRows == 0 and #(Addon.state.allRows or {}) == 0) then
         return
     end
+    local reading = Addon.CaptureReadingPosition()
     Addon.currentHistoryFallbackGroup = Core.CompleteCurrentGroup(Addon.state, {
         instanceName = Addon.currentInstanceName or SafeInstanceName(),
         encounterName = encounterName or Addon.currentEncounterName or Core.FirstRowEncounterName(Addon.state.currentRows) or Core.FirstRowEncounterName(Addon.state.allRows),
@@ -3106,22 +3377,28 @@ function Addon.CompleteCurrentGroup(encounterName)
         endedAt = Now(),
         mergeWindow = ENCOUNTER_LOOT_GRACE,
     })
-    Addon.selectedView = "current"
-    Addon.selectedHistoryIndex = nil
-    Addon.rowScrollOffset = 0
+    Addon.RestoreReadingPosition(reading, false)
     Addon.challengeFinalizeToken = nil
     Addon.recentEncounterFinalizeToken = nil
-    Addon.EnterLootMode()
+    if Addon.contentMode ~= "settings" then
+        Addon.EnterLootMode()
+    end
     SaveDB()
     RefreshRows()
 end
 
 local function SelectView(view, historyIndex)
+    Addon.demoRows = nil
     Addon.selectedView = view
     Addon.selectedHistoryIndex = historyIndex
     Addon.rowScrollOffset = 0
+    if view == "current" then Addon.newLootPending = false end
     Addon.EnterLootMode()
     RefreshRows()
+end
+
+function Addon.ShowNewLoot()
+    SelectView("current")
 end
 
 local function CycleHistoryView()
@@ -3179,6 +3456,33 @@ local function OpenHistoryMenu(owner)
     end
 end
 
+function Addon.EquippedItemLinks(text)
+    text = CleanString(text)
+    local first = FirstItemLink(text)
+    if not first then
+        return nil, nil
+    end
+    local _, finish = text:find(first, 1, true)
+    return first, finish and FirstItemLink(text:sub(finish + 1)) or nil
+end
+
+function Addon.StyleButton(button, accent)
+    button:SetNormalTexture("")
+    button:SetPushedTexture("")
+    button:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+    })
+    button:SetBackdropColor(accent and 0.08 or 0.075, accent and 0.23 or 0.095, accent and 0.31 or 0.125, 1)
+    SafeCall(button.SetBackdropBorderColor, button, 0.22, accent and 0.48 or 0.29, accent and 0.60 or 0.37, 0.8)
+    button:SetHighlightTexture("Interface\\Buttons\\WHITE8X8", "ADD")
+    local highlight = button:GetHighlightTexture()
+    if highlight then
+        highlight:SetVertexColor(0.18, 0.36, 0.48, 0.22)
+    end
+end
+
 local function CreateRow(parent, index)
     local row = CreateFrame("Frame", nil, parent)
     row:SetSize(ROW_WIDTH, ROW_HEIGHT)
@@ -3186,10 +3490,19 @@ local function CreateRow(parent, index)
 
     row.bg = row:CreateTexture(nil, "BACKGROUND")
     row.bg:SetAllPoints()
-    row.bg:SetColorTexture(0.08, 0.08, 0.09, index % 2 == 0 and 0.75 or 0.55)
+    row.bg:SetColorTexture(0.085, 0.108, 0.14, index % 2 == 0 and 0.92 or 0.65)
+    row.accent = row:CreateTexture(nil, "ARTWORK")
+    row.accent:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+    row.accent:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 0)
+    row.accent:SetWidth(2)
+    row.rule = row:CreateTexture(nil, "BORDER")
+    row.rule:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 2, 0)
+    row.rule:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", 0, 0)
+    row.rule:SetHeight(1)
+    row.rule:SetColorTexture(0.25, 0.32, 0.40, 0.22)
 
     row.looter = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    row.looter:SetPoint("LEFT", row, "LEFT", 8, 8)
+    row.looter:SetPoint("TOPLEFT", row, "TOPLEFT", 8, -2)
     row.looter:SetWidth(ROW_LOOTER_WIDTH)
     row.looter:SetJustifyH("LEFT")
     KeepOneLine(row.looter)
@@ -3209,7 +3522,7 @@ local function CreateRow(parent, index)
     row.rollIcon:Hide()
 
     row.dropLink = CreateFrame("Button", nil, row)
-    row.dropLink:SetPoint("LEFT", row.looter, "RIGHT", 6, 0)
+    row.dropLink:SetPoint("TOPLEFT", row, "TOPLEFT", 104, -1)
     row.dropLink:SetSize(ROW_DROP_HOVER_WIDTH, ROW_HEIGHT)
     row.dropLink:RegisterForClicks("AnyUp")
     row.dropLink:SetScript("OnEnter", function(button)
@@ -3229,7 +3542,7 @@ local function CreateRow(parent, index)
     RegisterFontString(row.equipped, 11, nil, false, true)
 
     row.equippedLink = CreateFrame("Button", nil, row)
-    row.equippedLink:SetPoint("LEFT", row.drop, "RIGHT", 8, 0)
+    row.equippedLink:SetPoint("TOPLEFT", row, "TOPLEFT", 294, -1)
     row.equippedLink:SetSize(ROW_EQUIPPED_HOVER_WIDTH, ROW_HEIGHT)
     row.equippedLink:RegisterForClicks("AnyUp")
     row.equippedLink:SetScript("OnEnter", function(button)
@@ -3240,6 +3553,31 @@ local function CreateRow(parent, index)
         OpenItemLink(button, button.itemLink)
     end)
     row.equippedLink:Hide()
+
+    row.equipped2 = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    row.equipped2:SetPoint("LEFT", row.equipped, "RIGHT", 8, 0)
+    row.equipped2:SetWidth((ROW_EQUIPPED_WIDTH - 8) / 2)
+    row.equipped2:SetJustifyH("LEFT")
+    KeepOneLine(row.equipped2)
+    RegisterFontString(row.equipped2, 11, nil, false, true)
+    row.equipped2:Hide()
+    row.equippedDivider = row:CreateTexture(nil, "ARTWORK")
+    row.equippedDivider:SetPoint("LEFT", row.equipped, "RIGHT", 3, 0)
+    row.equippedDivider:SetSize(1, 10)
+    row.equippedDivider:SetColorTexture(0.45, 0.55, 0.66, 0.5)
+    row.equippedDivider:Hide()
+    row.equippedLink2 = CreateFrame("Button", nil, row)
+    row.equippedLink2:SetPoint("TOPLEFT", row, "TOPLEFT", 294 + (ROW_EQUIPPED_WIDTH - 8) / 2 + 8, -1)
+    row.equippedLink2:SetSize((ROW_EQUIPPED_WIDTH - 8) / 2 + 2, ROW_HEIGHT)
+    row.equippedLink2:RegisterForClicks("AnyUp")
+    row.equippedLink2:SetScript("OnEnter", function(button)
+        ShowItemTooltip(button, button.itemLink)
+    end)
+    row.equippedLink2:SetScript("OnLeave", HideItemTooltip)
+    row.equippedLink2:SetScript("OnClick", function(button)
+        OpenItemLink(button, button.itemLink)
+    end)
+    row.equippedLink2:Hide()
 
     row.status = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     row.status:SetPoint("TOPLEFT", row.looter, "BOTTOMLEFT", 0, -2)
@@ -3268,10 +3606,11 @@ local function CreateRow(parent, index)
     row.tradeInfo:SetScript("OnLeave", HideItemTooltip)
     row.tradeInfo:Hide()
 
-    row.whisper = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    row.whisper = CreateFrame("Button", nil, row, "UIPanelButtonTemplate,BackdropTemplate")
     row.whisper:SetSize(48, 16)
     row.whisper:SetPoint("TOPRIGHT", row, "TOPRIGHT", -6, -2)
     row.whisper:SetText("Ask")
+    Addon.StyleButton(row.whisper, true)
     row.whisper:SetScript("OnClick", function(button)
         local data = button:GetParent().row
         if data then
@@ -3279,10 +3618,45 @@ local function CreateRow(parent, index)
             SendWhisper(data, false)
         end
     end)
-    RegisterButtonFont(row.whisper, 11)
+    -- Keep transient Sending/Sent labels readable inside the compact action column.
+    RegisterButtonFont(row.whisper, 11, nil, nil, 12)
 
     row:Hide()
     return row
+end
+
+function Addon.NormalizeWindowPosition(value)
+    if type(value) ~= "table" then return nil end
+    local anchors = { CENTER = true, TOP = true, BOTTOM = true, LEFT = true, RIGHT = true,
+        TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true }
+    local point, relativePoint = CleanString(value.point), CleanString(value.relativePoint)
+    local x, y = CleanNumber(value.x), CleanNumber(value.y)
+    if not point or not relativePoint or not anchors[point] or not anchors[relativePoint]
+        or not x or not y or x ~= x or y ~= y
+        or math.abs(x) > 10000 or math.abs(y) > 10000 then return nil end
+    return { point = point, relativePoint = relativePoint, x = x, y = y }
+end
+
+function Addon.SaveWindowPosition()
+    if not Addon.frame or type(DoYouNeedItDB) ~= "table" then return end
+    local point, relative, relativePoint, x, y = SafeCall(Addon.frame.GetPoint, Addon.frame)
+    if relative and relative ~= UIParent then return end
+    local position = Addon.NormalizeWindowPosition({ point = point, relativePoint = relativePoint, x = x, y = y })
+    if position then DoYouNeedItDB.windowPosition = position end
+end
+
+function Addon.RestoreWindowPosition()
+    if not Addon.frame then return end
+    local position = Addon.NormalizeWindowPosition(DoYouNeedItDB and DoYouNeedItDB.windowPosition)
+        or { point = "CENTER", relativePoint = "CENTER", x = 0, y = 0 }
+    Addon.frame:ClearAllPoints()
+    Addon.frame:SetPoint(position.point, UIParent, position.relativePoint, position.x, position.y)
+    Addon.frame:SetUserPlaced(true)
+end
+
+function Addon.ResetWindowPosition()
+    DoYouNeedItDB.windowPosition = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 0 }
+    Addon.RestoreWindowPosition()
 end
 
 CreateUI = function()
@@ -3294,11 +3668,17 @@ CreateUI = function()
     frame:SetSize(WINDOW_WIDTH, WINDOW_HEIGHT)
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("DIALOG")
+    frame:SetClampedToScreen(true)
+    UISpecialFrames = UISpecialFrames or {}
+    table.insert(UISpecialFrames, "DoYouNeedItFrame")
     frame:EnableMouse(true)
     frame:SetMovable(true)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    frame:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        Addon.SaveWindowPosition()
+    end)
     if frame.EnableMouseWheel then
         frame:EnableMouseWheel(true)
     end
@@ -3308,7 +3688,7 @@ CreateUI = function()
             return
         end
         local rows = RowsForSelectedView()
-        if #rows <= MAX_VISIBLE_ROWS then
+        if #rows <= Addon.GetVisibleRowCount() then
             Addon.rowScrollOffset = 0
             RefreshRows()
             return
@@ -3318,40 +3698,72 @@ CreateUI = function()
     end)
     frame:SetScript("OnHide", function()
         if type(Addon.EnterLootMode) == "function" then
+            Addon.HideLootRows()
             Addon.EnterLootMode()
         else
             Addon.contentMode = "loot"
         end
     end)
     frame:SetBackdrop({
-        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true,
-        tileSize = 16,
-        edgeSize = 16,
-        insets = { left = 4, right = 4, top = 4, bottom = 4 },
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
     })
+    frame:SetBackdropColor(0.035, 0.047, 0.065, 0.98)
+    SafeCall(frame.SetBackdropBorderColor, frame, 0.23, 0.31, 0.40, 0.95)
+    frame.headerBackground = frame:CreateTexture(nil, "BACKGROUND")
+    frame.headerBackground:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
+    frame.headerBackground:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
+    frame.headerBackground:SetHeight(34)
+    frame.headerBackground:SetColorTexture(0.075, 0.105, 0.145, 1)
+    frame.headerAccent = frame:CreateTexture(nil, "ARTWORK")
+    frame.headerAccent:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -34)
+    frame.headerAccent:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -34)
+    frame.headerAccent:SetHeight(1)
+    frame.headerAccent:SetColorTexture(0.22, 0.62, 0.82, 0.55)
 
     frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -14)
-    frame.title:SetWidth(210)
+    frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -10)
+    frame.title:SetWidth(286)
     frame.title:SetJustifyH("LEFT")
     KeepOneLine(frame.title)
     frame.title:SetText(L("Do You Need It?"))
-    RegisterFontString(frame.title, 16, "OUTLINE")
+    frame.title:SetTextColor(0.86, 0.94, 1, 1)
+    RegisterFontString(frame.title, 16)
 
-    frame.historyButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.historyButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate,BackdropTemplate")
     frame.historyButton:SetSize(HEADER_HISTORY_WIDTH, 22)
     frame.historyButton:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -42)
     frame.historyButton:SetText(L("Current"))
+    Addon.StyleButton(frame.historyButton, false)
+    local historyText = frame.historyButton:GetFontString()
+    historyText:ClearAllPoints()
+    historyText:SetPoint("LEFT", frame.historyButton, "LEFT", 10, 0)
+    historyText:SetWidth(HEADER_HISTORY_WIDTH - 100)
+    historyText:SetJustifyH("LEFT")
     frame.historyButton:SetScript("OnClick", function(button)
         OpenHistoryMenu(button)
     end)
     RegisterButtonFont(frame.historyButton, 11)
     Addon.historyButton = frame.historyButton
 
+    frame.newLootButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate,BackdropTemplate")
+    frame.newLootButton:SetSize(100, 22)
+    frame.newLootButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -65, -7)
+    frame.newLootButton:SetText(L("New loot"))
+    Addon.StyleButton(frame.newLootButton, true)
+    RegisterButtonFont(frame.newLootButton, 11)
+    frame.newLootButton:SetScript("OnClick", function()
+        if type(Addon.ShowNewLoot) == "function" then
+            Addon.ShowNewLoot()
+        end
+    end)
+    frame.newLootButton:Hide()
+    Addon.newLootButton = frame.newLootButton
+
     local function createColumnHeader(key, x, width, justify)
         local label = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        label.columnX = x
         label:SetPoint("TOPLEFT", frame, "TOPLEFT", x, -68)
         label:SetWidth(width)
         label:SetJustifyH(justify or "LEFT")
@@ -3394,10 +3806,21 @@ CreateUI = function()
     frame.close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
 
     frame.emptyText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisable")
-    frame.emptyText:SetPoint("CENTER", frame, "CENTER", 0, 0)
+    frame.emptyText:SetPoint("CENTER", frame, "CENTER", 0, 2)
+    frame.emptyText:SetWidth(470)
+    frame.emptyText:SetJustifyH("CENTER")
     frame.emptyText:SetText(L("No gear drops in this view."))
     RegisterFontString(frame.emptyText, 12)
     Addon.emptyText = frame.emptyText
+
+    frame.emptyHelp = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    frame.emptyHelp:SetPoint("TOP", frame.emptyText, "BOTTOM", 0, -12)
+    frame.emptyHelp:SetWidth(470)
+    frame.emptyHelp:SetJustifyH("CENTER")
+    frame.emptyHelp:SetTextColor(0.50, 0.59, 0.69, 1)
+    frame.emptyHelp:SetText(L("Gear from your dungeon or raid will appear here."))
+    RegisterFontString(frame.emptyHelp, 11, nil, false, true)
+    Addon.emptyHelp = frame.emptyHelp
 
     frame.scrollBadge = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     frame.scrollBadge:SetSize(76, 16)
@@ -3408,7 +3831,7 @@ CreateUI = function()
         tileSize = 8,
         insets = { left = 0, right = 0, top = 0, bottom = 0 },
     })
-    frame.scrollBadge:SetBackdropColor(0, 0, 0, 0.55)
+    frame.scrollBadge:SetBackdropColor(0.10, 0.16, 0.21, 1)
     frame.scrollBadge:Hide()
     Addon.scrollBadge = frame.scrollBadge
 
@@ -3425,6 +3848,7 @@ CreateUI = function()
     end
 
     Addon.frame = frame
+    Addon.RestoreWindowPosition()
     frame:Hide()
     RefreshRows()
 end
@@ -3546,11 +3970,54 @@ local function RefreshFontWarning()
     end
 end
 
+function Addon.LayoutSettings()
+    local frame = Addon.settingsFrame
+    if not frame then
+        return
+    end
+    local size = Addon.state.settings.fontSize
+    local extra = math.max(0, size - 12)
+    local height = SETTINGS_WINDOW_HEIGHT + extra * 13
+    frame:SetHeight(height - 66)
+    if Addon.contentMode == "settings" then
+        Addon.frame:SetHeight(height)
+    end
+    local function place(control, x, y)
+        control:ClearAllPoints()
+        control:SetPoint("TOPLEFT", frame, "TOPLEFT", x, -y)
+    end
+    place(frame.whispersHeading, 10, 38)
+    place(frame.autoCheck, 4, 56 + extra)
+    place(frame.delayLabel, 10, 94 + extra * 2)
+    place(frame.delaySlider, SETTINGS_CONTROL_X, 98 + extra * 2)
+    place(frame.whisperLabel, 10, 133 + extra * 4)
+    place(frame.whisperEditBox, SETTINGS_CONTROL_X, 130 + extra * 4)
+    place(frame.whisperHelp, SETTINGS_CONTROL_X, 158 + extra * 5)
+    place(frame.appearanceHeading, 10, 190 + extra * 6)
+    place(frame.appearanceRule, 10, 181 + extra * 6)
+    place(frame.languageLabel, 10, 215 + extra * 7)
+    place(frame.languageDropdown, SETTINGS_CONTROL_X - 16, 211 + extra * 7)
+    place(frame.fontLabel, 10, 256 + extra * 9)
+    place(frame.fontDropdown, SETTINGS_CONTROL_X - 16, 252 + extra * 9)
+    place(frame.fontSizeLabel, 10, 297 + extra * 11)
+    place(frame.fontSizeSlider, SETTINGS_CONTROL_X, 301 + extra * 11)
+    place(frame.fontWarning, 10, 336 + extra * 12)
+    frame.whisperEditBox:SetHeight(math.max(22, size + 8))
+    frame.whisperResetButton:SetHeight(math.max(22, size + 8))
+    frame.back:SetHeight(math.max(22, size + 6))
+    frame.resetPosition:SetHeight(math.max(22, size + 6))
+end
+
 RefreshSettingsControls = function()
     if not Addon.settingsFrame or not Addon.state then
         return
     end
     local settings = Addon.state.settings
+    Addon.LayoutSettings()
+    Addon.settingsFrame.whispersHeading:SetText(L("Whispers"))
+    Addon.settingsFrame.appearanceHeading:SetText(L("Appearance"))
+    Addon.settingsFrame.whisperHelp:SetText(L("Use {item} for the dropped item."))
+    Addon.settingsFrame.resetPosition:SetText(L("Reset Position"))
     if Addon.settingsTitle then
         Addon.settingsTitle:SetText(L("Settings"))
     end
@@ -4006,6 +4473,9 @@ function Addon.EnterLootMode()
         CancelSettingsPreview()
     end
     Addon.contentMode = "loot"
+    if Addon.frame then
+        Addon.frame:SetHeight(WINDOW_HEIGHT)
+    end
     if Addon.settingsFrame and Addon.settingsFrame:IsShown() then
         Addon.settingsFrame:Hide()
     end
@@ -4026,19 +4496,23 @@ CreateSettingsUI = function()
     end
 
     local frame = CreateFrame("Frame", "DoYouNeedItSettingsFrame", Addon.frame)
-    frame:SetSize(508, 232)
+    frame:SetSize(508, SETTINGS_WINDOW_HEIGHT - 66)
     frame:SetPoint("TOPLEFT", Addon.frame, "TOPLEFT", 16, -50)
     frame:SetFrameLevel((Addon.frame and Addon.frame:GetFrameLevel() or 0) + 5)
     frame:EnableMouse(true)
     frame:SetScript("OnHide", function()
         Addon.CommitFocusedWhisperTemplate()
+        if GameTooltip and CleanBoolean(SafeCall(GameTooltip.IsOwned, GameTooltip, frame.autoCheck)) == true then
+            HideItemTooltip()
+        end
         HideFontPicker()
         CancelSettingsPreview()
     end)
 
-    frame.back = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.back = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate,BackdropTemplate")
     frame.back:SetSize(70, 22)
     frame.back:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 2)
+    Addon.StyleButton(frame.back, false)
     frame.back:SetScript("OnClick", function()
         Addon.CloseSettings()
     end)
@@ -4053,8 +4527,43 @@ CreateSettingsUI = function()
     RegisterFontString(frame.title, 16, "OUTLINE", true)
     Addon.settingsTitle = frame.title
 
+    frame.resetPosition = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate,BackdropTemplate")
+    frame.resetPosition:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, 2)
+    frame.resetPosition:SetSize(132, 22)
+    frame.resetPosition:SetText(L("Reset Position"))
+    Addon.StyleButton(frame.resetPosition, false)
+    RegisterButtonFont(frame.resetPosition, 11, nil, true)
+    frame.resetPosition:SetScript("OnClick", function()
+        if type(Addon.ResetWindowPosition) == "function" then
+            Addon.ResetWindowPosition()
+        end
+    end)
+
+    local function sectionLabel(key)
+        local text = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        text:SetWidth(470)
+        text:SetText(L(key))
+        text:SetTextColor(0.36, 0.76, 0.92, 1)
+        text:SetJustifyH("LEFT")
+        KeepOneLine(text)
+        RegisterFontString(text, 10, nil, true)
+        return text
+    end
+    frame.whispersHeading = sectionLabel("Whispers")
+    frame.appearanceHeading = sectionLabel("Appearance")
+    frame.appearanceRule = frame:CreateTexture(nil, "BACKGROUND")
+    frame.appearanceRule:SetSize(488, 1)
+    frame.appearanceRule:SetColorTexture(0.26, 0.34, 0.42, 0.55)
+    frame.whisperHelp = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    frame.whisperHelp:SetWidth(370)
+    frame.whisperHelp:SetJustifyH("LEFT")
+    frame.whisperHelp:SetTextColor(0.51, 0.61, 0.70, 1)
+    frame.whisperHelp:SetText(L("Use {item} for the dropped item."))
+    KeepOneLine(frame.whisperHelp)
+    RegisterFontString(frame.whisperHelp, 10, nil, true)
+
     frame.headerRule = frame:CreateTexture(nil, "BACKGROUND")
-    frame.headerRule:SetColorTexture(1, 0.82, 0, 0.20)
+    frame.headerRule:SetColorTexture(0.26, 0.34, 0.42, 0.55)
     frame.headerRule:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -28)
     frame.headerRule:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, -28)
     frame.headerRule:SetHeight(1)
@@ -4066,6 +4575,14 @@ CreateSettingsUI = function()
     frame.autoCheck:SetScript("OnClick", function(check)
         SetAutoWhisper(check:GetChecked() == true)
     end)
+    frame.autoCheck:SetScript("OnEnter", function(check)
+        if GameTooltip then
+            GameTooltip:SetOwner(check, "ANCHOR_RIGHT")
+            GameTooltip:SetText(L("Only eligible new drops. Off by default."))
+            GameTooltip:Show()
+        end
+    end)
+    frame.autoCheck:SetScript("OnLeave", HideItemTooltip)
     Addon.autoCheck = frame.autoCheck
 
     frame.autoCheckLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -4153,9 +4670,10 @@ CreateSettingsUI = function()
     RegisterFontString(frame.whisperEditBox, 12, nil, true)
     Addon.whisperEditBox = frame.whisperEditBox
 
-    frame.whisperResetButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.whisperResetButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate,BackdropTemplate")
     frame.whisperResetButton:SetPoint("LEFT", frame.whisperEditBox, "RIGHT", 8, 0)
     frame.whisperResetButton:SetSize(58, 22)
+    Addon.StyleButton(frame.whisperResetButton, false)
     frame.whisperResetButton:SetScript("OnClick", function()
         Addon.whisperTemplateFocused = false
         SetWhisperTemplate(nil)
@@ -4251,7 +4769,7 @@ CreateSettingsUI = function()
     Addon.fontSizeValue = frame.fontSizeValue
 
     frame.fontWarning = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    frame.fontWarning:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -248)
+    frame.fontWarning:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -304)
     frame.fontWarning:SetWidth(460)
     frame.fontWarning:SetJustifyH("LEFT")
     KeepOneLine(frame.fontWarning)
@@ -4270,13 +4788,14 @@ OpenSettings = function()
     CreateUI()
     CreateSettingsUI()
     Addon.contentMode = "settings"
+    Addon.frame:SetHeight(SETTINGS_WINDOW_HEIGHT)
     Addon.frame:Show()
     Addon.settingsFrame:Show()
     RefreshRows()
     RefreshSettingsControls()
 end
 
-local function CancelAllPendingAuto()
+local function CancelAllPendingAuto(cancelManual)
     if type(Addon.state) ~= "table" then
         return
     end
@@ -4290,7 +4809,7 @@ local function CancelAllPendingAuto()
             local row = list[index]
             if type(row) == "table" and not seen[row] then
                 seen[row] = true
-                CancelPendingAuto(row)
+                CancelPendingAuto(row, cancelManual)
             end
         end
     end
@@ -4364,8 +4883,11 @@ local function HandleSlash(message)
         end
     elseif command == "delay" then
         SetDelay(rest)
+    elseif command == "resetpos" then
+        Addon.ResetWindowPosition()
     elseif command == "clear" then
-        CancelAllPendingAuto()
+        Addon.demoRows = nil
+        CancelAllPendingAuto(true)
         InvalidatePendingLoot()
         CancelAllInspectWork()
         Addon.equipmentCache = {}
@@ -4374,6 +4896,7 @@ local function HandleSlash(message)
         Addon.state.sessionRows = {}
         Addon.state.sessionAllRows = {}
         Addon.selectedView = "current"
+        Addon.newLootPending = false
         Addon.selectedHistoryIndex = nil
         Addon.currentHistoryFallbackGroup = nil
         Addon.EnterLootMode()
@@ -4439,7 +4962,7 @@ local function HandleSlash(message)
             .. ", font=" .. tostring(FindFontName(Addon.state.settings.font))
             .. ", layout=540x300")
     else
-        Print("commands: /dyni, /dyni settings, /dyni test, /dyni scan, /dyni auto on|off, /dyni delay <seconds>, /dyni clear, /dyni history, /dyni debug on|off, /dyni diag, /dyni status")
+        Print("commands: /dyni, /dyni settings, /dyni resetpos, /dyni test, /dyni scan, /dyni auto on|off, /dyni delay <seconds>, /dyni clear, /dyni history, /dyni debug on|off, /dyni diag, /dyni status")
     end
 end
 
@@ -4531,11 +5054,13 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             Initialize()
         end
     elseif event == "PLAYER_LOGOUT" then
+        Addon.SaveWindowPosition()
         if Addon.state and (#Addon.state.currentRows > 0 or #(Addon.state.allRows or {}) > 0) then
             Addon.CompleteCurrentGroup(Addon.currentEncounterName)
         end
         SaveDB()
     elseif event == "PLAYER_ENTERING_WORLD" then
+        Addon.demoRows = nil
         RefreshCharacterStorageFromPlayerIdentity()
         local instanceName = SafeInstanceName()
         local instanceChanged = Addon.currentInstanceName and Addon.currentInstanceName ~= instanceName

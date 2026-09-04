@@ -33,6 +33,15 @@ local function findVisibleAskableRow(rows)
     end)
 end
 
+local function addLiveWhisperFixture(h, includeBound)
+    local item = h:addItem(23901, { name = "Whisper Fixture Sword", bindType = 2 })
+    h:fireLoot("Otherplayer", item)
+    if includeBound then
+        local bound = h:addItem(23902, { name = "Bound Fixture Chest", equipLoc = "INVTYPE_CHEST", classID = 4, subclassID = 4, bindType = 1 })
+        h:fireLoot("Otherplayer", bound)
+    end
+end
+
 local function testLoadAndSettings()
     local h = Harness.new()
     h:loadAddon()
@@ -94,8 +103,14 @@ local function testSlashTestRowsAndManualWhisper()
 
     askableRow.whisper:FireScript("OnClick")
     h:runTimers(0)
-    assertEqual(#h.sentMessages, 1, "manual Ask sends one whisper")
-    assertEqual(h.sentMessages[1].target, "Example", "manual Ask whispers the row looter")
+    assertEqual(#h.sentMessages, 0, "demonstration never sends a real whisper")
+    assertEqual(askableRow.whisper:IsEnabled(), false, "demo Ask is visibly disabled")
+    addLiveWhisperFixture(h)
+    askableRow = findVisibleAskableRow(h:visibleRows())
+    askableRow.whisper:FireScript("OnClick")
+    h:runTimers(0)
+    assertEqual(#h.sentMessages, 1, "real loot manual Ask sends one whisper")
+    assertEqual(h.sentMessages[1].target, "Otherplayer-Ravencrest", "manual Ask whispers the real row looter")
     assertEqual(h.sentMessages[1].message, "Hey, do you need " .. askableRow.row.itemLink .. "?", "manual Ask uses the default whisper template")
     assertEqual(askableRow.row.manualWhispered, true, "manual Ask marks row sent")
 end
@@ -119,7 +134,7 @@ local function testLootSlashCommandsLeaveEmbeddedSettingsMode()
     assertEqual(h.env.DoYouNeedItFrame.historyButton:IsShown(), true, "history command restores the history selector")
 end
 
-local function testLootDropLeavesEmbeddedSettingsMode()
+local function testLootDropPreservesEmbeddedSettingsMode()
     local h = Harness.new()
     h:loadAddon()
     h:slash("settings")
@@ -138,7 +153,8 @@ local function testLootDropLeavesEmbeddedSettingsMode()
     h:fireLoot("Otherplayer", item)
 
     assertEqual(h.env.DoYouNeedItFrame:IsShown(), true, "loot drop keeps the main frame visible")
-    assertEqual(h.env.DoYouNeedItSettingsFrame:IsShown(), false, "loot drop leaves embedded settings mode")
+    assertEqual(h.env.DoYouNeedItSettingsFrame:IsShown(), true, "loot drop keeps settings open")
+    h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
     assertEqual(#h:visibleRows(), 1, "loot drop shows the visible loot row")
     assertEqual(h:visibleRows()[1].row.tradeStatusKey, "trade_likely", "live bind-on-equip loot keeps current transfer evidence")
     assertEqual(h:visibleRows()[1].trade:GetText(), "Trade: likely", "live loot renders its transfer status")
@@ -177,19 +193,13 @@ local function testWarbandUntilEquippedLootIsNotAskable()
     h:fireLoot("Otherplayer", item)
 
     local rows = h:visibleRows()
-    assertEqual(#rows, 1, "warband-until-equipped gear stays visible for review")
-    assertEqual(rows[1].row.askable, false, "warband-until-equipped gear is not askable")
-    assertEqual(rows[1].row.reason, "warband_bound", "warband-until-equipped row keeps an explicit reason")
-    assertEqual(rows[1].row.tradeStatusKey, "trade_no", "warband-until-equipped gear is marked non-transferable")
-    assertEqual(rows[1].trade:GetText(), "Trade: no", "warband-until-equipped gear renders the non-transferable status")
-    assertEqual(rows[1].whisper:IsShown(), false, "warband-until-equipped gear hides Ask")
+    assertEqual(#rows, 0, "warband-until-equipped gear does not clutter the loot window")
+    assertEqual(#(h.env.DoYouNeedItDB.sessionAllRows or {}), 0, "new warband gear is filtered before persistence")
 
     h:setInventoryLink("party1", "WaistSlot", equipped)
     h:fire("INSPECT_READY", "PartyGUID1")
     rows = h:visibleRows()
-    assertEqual(rows[1].row.askable, false, "equal equipped item level cannot promote warband gear")
-    assertEqual(rows[1].row.tradeStatusKey, "trade_no", "inspect keeps warband gear non-transferable")
-    assertEqual(rows[1].whisper:IsShown(), false, "inspect cannot reveal Ask for warband gear")
+    assertEqual(#rows, 0, "equal equipped item level cannot restore filtered warband gear")
 end
 
 local function testOwnLootShowsInAllGearWhenPlayerNameIsUnavailable()
@@ -302,7 +312,7 @@ local function testCustomWhisperTemplateIsUsedForManualAsk()
         },
     })
     h:loadAddon()
-    h:slash("test")
+    addLiveWhisperFixture(h)
 
     local rows = h:visibleRows()
     local askableRow = findVisibleAskableRow(rows)
@@ -318,7 +328,7 @@ local function testManualWhisperFailureLeavesRowRetryable()
     local h = Harness.new()
     h.failWhisper = true
     h:loadAddon()
-    h:slash("test")
+    addLiveWhisperFixture(h)
 
     local rows = h:visibleRows()
     local askableRow = findVisibleAskableRow(rows)
@@ -335,7 +345,7 @@ end
 local function testClearCancelsDeferredManualWhisper()
     local h = Harness.new()
     h:loadAddon()
-    h:slash("test")
+    addLiveWhisperFixture(h)
 
     local rows = h:visibleRows()
     local askableRow = findVisibleAskableRow(rows)
@@ -452,7 +462,7 @@ end
 local function testInstanceChangeCompletesCurrentGroup()
     local h = Harness.new()
     h:loadAddon()
-    h:slash("test")
+    addLiveWhisperFixture(h, true)
 
     h.instanceName = "Halls of Infusion"
     h:fire("PLAYER_ENTERING_WORLD")
@@ -470,7 +480,7 @@ local function testInstanceChangeHistoryTitleUsesActiveLocale()
         },
     })
     h:loadAddon()
-    h:slash("test")
+    addLiveWhisperFixture(h, true)
 
     h.instanceName = "Halls of Infusion"
     h:fire("PLAYER_ENTERING_WORLD")
@@ -2090,7 +2100,7 @@ end
 testLoadAndSettings()
 testSlashTestRowsAndManualWhisper()
 testLootSlashCommandsLeaveEmbeddedSettingsMode()
-testLootDropLeavesEmbeddedSettingsMode()
+testLootDropPreservesEmbeddedSettingsMode()
 testWarbandUntilEquippedLootIsNotAskable()
 testOwnLootShowsInAllGearWhenPlayerNameIsUnavailable()
 testOpenWorldLootDoesNotAutoShowWindow()

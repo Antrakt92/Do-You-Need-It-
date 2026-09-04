@@ -15,6 +15,15 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "lua5.1 tests\runtime_inspect.lua failed with exit code $LASTEXITCODE"
     }
+    foreach ($regression in @(
+        'runtime_item_regressions.lua', 'runtime_loot_regressions.lua', 'runtime_ui_regressions.lua',
+        'runtime_navigation.lua', 'runtime_policy_regressions.lua', 'runtime_filters.lua'
+    )) {
+        & lua5.1 (Join-Path tests $regression)
+        if ($LASTEXITCODE -ne 0) {
+            throw "lua5.1 tests\$regression failed with exit code $LASTEXITCODE"
+        }
+    }
     & luac5.1 -p `
         libs\LibStub\LibStub.lua `
         libs\CallbackHandler-1.0\CallbackHandler-1.0.lua `

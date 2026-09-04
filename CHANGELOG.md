@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.0 - 05-Sep-2026 — Clearer loot, quieter requests
+
+### Improved
+
+- A refreshed loot window uses clearer rows, transfer colors, and separate Whispers and Appearance settings. Larger fonts get more room and fewer rows per page.
+- Warband and account-bound items stay out of the loot list. Unknown personal-loot eligibility remains visible, and existing saved records are preserved.
+- New drops no longer interrupt settings drafts or your place in history. Use **New loot** to jump back when ready.
+- Each compared ring, trinket, or weapon has its own tooltip and click target.
+- The window remembers its position, stays on screen, and closes with Escape. Use **Reset Position** in settings or `/dyni resetpos` to center it.
+
+### Fixed
+
+- Preserve new loot after reloading and retain the newest drops when history fills up.
+- Load delayed item information reliably, keep each looter's item variant separate, and recheck Ask eligibility when a more detailed link arrives.
+- Cancel queued automatic whispers when disabled, cleared, or the looter leaves the group. Oversized or invalid custom messages show an explanation without cutting item links.
+- Repeated late bonus-loot events no longer duplicate drops or rewrite older history.
+- Russian settings replace Latin-only fonts with a Cyrillic-capable fallback.
+- Dismiss stale tooltips when scrolling or closing their controls. Local test examples never send whispers or enter real loot history.
+
 ## 0.4.2 - 02-Sep-2026 — Quieter and more reliable equipment checks
 
 ### Fixed

@@ -56,6 +56,36 @@ assertEqual(badNumericSettings.fontSize, 12, "NaN font size resets to default")
 assertEqual(Core.FormatWhisperMessage("Need {item}?", "|cffa335ee|Hitem:123::::::::|h[Test Item]|h|r"), "Need |cffa335ee|Hitem:123::::::::|h[Test Item]|h|r?", "whisper formatter replaces item placeholder")
 assertEqual(Core.FormatWhisperMessage("Need?", "|cffa335ee|Hitem:123::::::::|h[Test Item]|h|r"), "Need? |cffa335ee|Hitem:123::::::::|h[Test Item]|h|r", "whisper formatter appends item link when placeholder is missing")
 assertEqual(Core.FormatWhisperMessage(string.rep("x", 157) .. "{item}", "|cffa335ee|Hitem:123::::::::|h[Test Item]|h|r"), string.rep("x", 157) .. " |cffa335ee|Hitem:123::::::::|h[Test Item]|h|r", "whisper formatter avoids sending a partial item placeholder")
+do
+    local link = "|cffa335ee|Hitem:123::::::::|h[Предмет]|h|r"
+    local message, reason = Core.FormatWhisperMessage(string.rep("{item}", 26), link)
+    assertEqual(message, nil, "expanded repeated hyperlinks cannot exceed chat budgets")
+    assertEqual(reason, "whisper_too_long", "oversized whisper gives an actionable validation result")
+
+    local visibleLimitLink = "|cffa335ee|Hitem:123::::::::|h[" .. string.rep("Ж", 124) .. "]|h|r"
+    local exactMessage = "Need " .. visibleLimitLink
+    assertEqual(Core.FormatWhisperMessage("Need {item}", visibleLimitLink), exactMessage, "255 visible UTF-8 bytes preserve the complete item hyperlink")
+    assertEqual(Core.FormatWhisperMessage("Needs {item}", visibleLimitLink), nil, "256 visible bytes are rejected without cutting UTF-8")
+
+    local hiddenLimitLink = "|cffa335ee|Hitem:123:" .. string.rep(":", 996) .. "|h[]|h|r"
+    assertEqual(#hiddenLimitLink - 2, 1023, "hidden-byte fixture reaches Blizzard's invisible-byte budget")
+    assertEqual(Core.FormatWhisperMessage("Need {item}", hiddenLimitLink), "Need " .. hiddenLimitLink, "long hyperlink payload inside invisible-byte budget remains intact")
+    assertEqual(Core.FormatWhisperMessage("Need {item}", hiddenLimitLink:gsub("123:", "123::")), nil, "1024 invisible bytes are rejected")
+
+    local boundaryLink = hiddenLimitLink:gsub("%[%]", "[" .. string.rep("Ж", 124) .. "]")
+    local boundaryMessage = Core.FormatWhisperMessage("Need {item}", boundaryLink)
+    assertEqual(#boundaryMessage, 1278, "combined visible and hidden limits retain the complete formatted message")
+
+    local invalid, invalidReason = Core.FormatWhisperMessage("Need\000{item}", link)
+    assertEqual(invalid, nil, "embedded NUL cannot truncate a whisper before its item")
+    assertEqual(invalidReason, "whisper_invalid", "invalid control characters have a validation reason")
+    assertEqual(Core.FormatWhisperMessage("Need\n{item}", link), nil, "multiline control characters are rejected")
+    assertEqual(Core.FormatWhisperMessage("{item}", string.rep("|Hitem:", 37)), nil, "unfinished hyperlinks count as visible text")
+    assertEqual(Core.FormatWhisperMessage("{item}", string.rep("||cffffffff", 24)), nil, "escaped pipes do not create invisible-byte bypasses")
+    assertEqual(Core.FormatWhisperMessage("{item}", "|Hitem:" .. string.rep("x", 260) .. "|h[]|h"), nil, "nonnumeric item markup cannot hide oversized text")
+    assertEqual(Core.FormatWhisperMessage("Need {item}", "|Hitem:123|h[Item]|h"), "Need |Hitem:123|h[Item]|h", "complete compact item links remain supported")
+    assertEqual(Core.FormatWhisperMessage("Need {item}", link), "Need " .. link, "validation leaves valid Cyrillic links unchanged")
+end
 local repairedDelay = Core.NormalizeSettings({ minDelay = 50, maxDelay = 3, autoDelay = 10 })
 assertEqual(repairedDelay.minDelay, 3, "invalid min delay resets to default")
 assertEqual(repairedDelay.maxDelay, 30, "invalid max delay resets to default")
@@ -78,7 +108,11 @@ assertEqual(Core.FontPathKey("Fonts/ARIALN.TTF"), "fonts\\arialn.ttf", "font pat
 assertEqual(Core.SameFontPath("Fonts/ARIALN.TTF", "fonts\\arialn.ttf"), true, "font path comparison is normalized")
 assertEqual(Core.FontSupports("Fonts\\ARIALN.TTF", "CYR", "enUS"), true, "Arial Narrow supports Cyrillic on western clients")
 assertEqual(Core.FontSupports("Fonts\\FRIZQT__.TTF", "CYR", "enUS"), false, "Friz does not guarantee Cyrillic on western clients")
-assertEqual(Core.FontSupports("Fonts\\FRIZQT__.TTF", "CYR", "ruRU"), true, "Friz supports Cyrillic on ruRU clients")
+assertEqual(Core.FontSupports("Fonts\\FRIZQT__.TTF", "CYR", "ruRU"), false, "western Friz path does not gain Cyrillic glyphs from client locale")
+assertEqual(Core.FontSupports("Fonts\\FRIZQT___CYR.TTF", "CYR", "ruRU"), true, "Cyrillic Friz path provides Cyrillic glyphs")
+assertEqual(Core.FindCompatibleFont("Fonts\\FRIZQT__.TTF", "CYR", {
+    { path = "Fonts\\FRIZQT__.TTF" }, { path = "Fonts\\ARIALN.TTF" },
+}, "ruRU"), "Fonts\\ARIALN.TTF", "Russian client repairs a western font path with a glyph-capable fallback")
 assertEqual(Core.GetTextGlyphRequirement("Otherplayer"), nil, "latin-only text does not request a dynamic glyph fallback")
 assertEqual(Core.GetTextGlyphRequirement("Игрок"), "CYR", "cyrillic text requests a dynamic glyph fallback")
 assertEqual(Core.ResolveFontSize(11, 14), 13, "font size slider scales body text relative to default")
@@ -227,6 +261,26 @@ local warbandNotAskable = Core.ClassifyTradeCandidate(warbandGear, "Otherplayer"
 assertEqual(warbandNotAskable.visible, false, "warband-until-equipped gear is not askable")
 assertEqual(warbandNotAskable.reason, "warband_bound", "warband-until-equipped rejection is explicit")
 assertEqual(Core.ResolveTradeStatus(warbandGear), "trade_no", "warband-until-equipped gear is not transferable to another player")
+assertEqual(Core.ClassifyGearLoot(warbandGear, "Otherplayer").visible, false, "warband-until-equipped gear is hidden from the loot list")
+assertEqual(Core.ClassifyGearLoot(warbandGear, "Otherplayer").reason, "warband_bound", "hidden warband loot retains a diagnostic reason")
+do
+    local accountGear = {}
+    for key, value in pairs(warbandGear) do accountGear[key] = value end
+    accountGear.isAccountBoundUntilEquipped = nil
+    accountGear.isAccountBound = true
+    assertEqual(Core.ClassifyGearLoot(accountGear, "Otherplayer").visible, false, "already account-bound gear is hidden too")
+    assertEqual(Core.IsHiddenLootRow(accountGear), true, "live account-bound metadata hides its row")
+    assertEqual(Core.IsHiddenLootRow({ reason = "warband_bound" }), true, "legacy stored warband reason hides its row")
+    assertEqual(Core.IsHiddenLootRow({ statusKey = "warband_bound" }), true, "legacy stored warband status hides its row")
+    assertEqual(Core.IsHiddenLootRow({ tradeStatusKey = "trade_unknown" }), false, "unknown bindings remain visible")
+    assertEqual(Core.IsHiddenLootRow({ tradeStatusKey = "trade_no", reason = "bonus_roll" }), false, "other nontradeable gear remains reviewable")
+    assertEqual(Core.GetWhisperButtonState(nil, "current", { askable = true, reason = "warband_bound" }).visible, false, "legacy hidden warband rows cannot expose Ask")
+    assertEqual(Core.GetAutoWhisperDecision({ autoWhisper = true }, { askable = true, reason = "warband_bound" }).shouldSchedule, false, "hidden warband evidence blocks automatic scheduling")
+    local saved = Core.SnapshotRowsForSave({ accountGear, { isAccountBoundUntilEquipped = true, reason = "warband_bound" } })
+    assertEqual(#saved, 2, "visibility filtering never erases stored history")
+    assertEqual(saved[1].isAccountBound, true, "account binding evidence survives save")
+    assertEqual(saved[2].isAccountBoundUntilEquipped, true, "warband-until-equipped evidence survives save")
+end
 assertEqual(Core.IsLikelyTradeableFromItemLevels(311, { 311 }, 1), true, "same-level equipped item makes a personal drop likely tradeable")
 assertEqual(Core.IsLikelyTradeableFromItemLevels(312, { 311 }, 1), false, "lower equipped item does not prove a personal drop tradeable")
 assertEqual(Core.IsLikelyTradeableFromItemLevels(311, { 311 }, 2), nil, "two-slot items need both equipped item levels")
@@ -449,6 +503,59 @@ assertEqual(#mergeState.history, 1, "matching recent history groups are merged")
 assertEqual(#mergedGroup.rows, 1, "merged group keeps askable rows filtered")
 assertEqual(#mergedGroup.allRows, 2, "merged group keeps late all-gear rows")
 assertEqual(mergedGroup.title, "Dungeon - Merge Boss (2 drops)", "merged group title updates the drop count")
+
+do
+    local beforeReload = Core.CreateState({})
+    local first = Core.AddVisibleRow(beforeReload, { looter = "First", itemID = 100, timestamp = 100 })
+    Core.CompleteCurrentGroup(beforeReload, {
+        instanceName = "Dungeon", encounterName = "Reload Boss", endedAt = 100, mergeWindow = 60,
+    })
+    local afterReload = Core.CreateState({})
+    afterReload.history = Core.SnapshotHistoryForSave(beforeReload.history)
+    afterReload.sessionAllRows = Core.NormalizeSavedRows(beforeReload.sessionAllRows)
+    local second = Core.AddVisibleRow(afterReload, { looter = "Second", itemID = 200, timestamp = 110 })
+    local completed = Core.CompleteCurrentGroup(afterReload, {
+        instanceName = "Dungeon", encounterName = "Reload Boss", endedAt = 110, mergeWindow = 60,
+    })
+    assertEqual(#completed.allRows, 2, "history keeps a fresh drop after reload within the same boss merge window")
+    assertTruthy(second.id ~= first.id, "new row identity does not collide with persisted history")
+    assertEqual(completed.allRows[2].looter, "Second", "reload history merge retains the new looter")
+end
+
+do
+    local newest = { id = "newest", looter = "Third", itemID = 300, timestamp = 102 }
+    local middle = { id = "middle", looter = "Second", itemID = 200, timestamp = 101 }
+    local oldest = { id = "oldest", looter = "First", itemID = 100, timestamp = 100 }
+    local merged = Core.SnapshotHistoryForSave({
+        { instanceName = "Dungeon", encounterName = "Boss", endedAt = 102, rows = { newest }, allRows = { newest } },
+        { instanceName = "Dungeon", encounterName = "Boss", endedAt = 101, rows = { oldest, middle }, allRows = { oldest, middle } },
+    }, 10, 2, 60)
+    assertEqual(#merged, 1, "adjacent saved boss groups merge")
+    assertEqual(merged[1].rows[1].id, "middle", "saved history cap removes oldest askable loot")
+    assertEqual(merged[1].allRows[2].id, "newest", "saved history cap preserves newest gear")
+    assertEqual(Core.GetNewestRowsFirst(merged[1].allRows)[1].id, "newest", "merged history displays newest loot first")
+
+    local repeated = Core.SnapshotHistoryForSave({
+        { instanceName = "Dungeon", encounterName = "Boss", endedAt = 102, rows = {
+            { id = "repeat", itemID = 100, timestamp = 100, manualWhispered = true, statusKey = "sent" },
+        } },
+        { instanceName = "Dungeon", encounterName = "Boss", endedAt = 100, rows = {
+            { id = "repeat", itemID = 100, timestamp = 100, statusKey = "candidate" },
+        } },
+    }, 10, 50, 60)
+    assertEqual(#repeated[1].allRows, 1, "the same saved drop still merges once")
+    assertEqual(repeated[1].allRows[1].manualWhispered, true, "history merge preserves the newest whisper result")
+
+    local colliding = Core.SnapshotHistoryForSave({
+        { instanceName = "Dungeon", encounterName = "Boss", endedAt = 102, rows = {
+            { id = "row1", looter = "Second", itemID = 200, timestamp = 102 },
+        } },
+        { instanceName = "Dungeon", encounterName = "Boss", endedAt = 100, rows = {
+            { id = "row1", looter = "First", itemID = 100, timestamp = 100 },
+        } },
+    }, 10, 50, 60)
+    assertEqual(#colliding[1].allRows, 2, "legacy repeated row IDs preserve distinct saved drops")
+end
 
 Core.AddVisibleRow(mergeState, {
     id = "merge-later-row",
@@ -986,7 +1093,7 @@ assertEqual(badNumericDiagnostic.stage, "bad_numeric", "diagnostics keep safe st
 assertEqual(badNumericDiagnostic.at, nil, "diagnostics drop NaN timestamps")
 assertEqual(badNumericDiagnostic.attempt, nil, "diagnostics drop infinite counters")
 
-assertEqual(Core.VERSION, "0.4.2", "core exposes current version")
+assertEqual(Core.VERSION, "0.5.0", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -998,7 +1105,7 @@ end
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
 assertTruthy(toc:find("## Interface: 120007, 120100", 1, true), "toc interface supports current Retail and Midnight 12.1.0")
-assertTruthy(toc:find("## Version: 0.4.2", 1, true), "toc version present")
+assertTruthy(toc:find("## Version: 0.5.0", 1, true), "toc version present")
 assertTruthy(toc:find("## IconTexture: Interface\\AddOns\\DoYouNeedIt\\media\\icon.png", 1, true), "toc addon list icon present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")
