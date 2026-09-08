@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 - 08-Sep-2026 — Reliable comparisons and settings
 
 ### Fixed
 
