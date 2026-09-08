@@ -401,7 +401,116 @@ local function testSettingsResetPositionPersists()
     assertEqual(frame.points[1][5], 0, "centered vertical position survives reload")
 end
 
+local function testRussianClientSettingsUseGlyphCapableFont()
+    local h = Harness.new({
+        locale = "ruRU",
+        db = { settings = { font = "Fonts\\FRIZQT__.TTF" } },
+    })
+    h:loadAddon()
+    h:slash("settings")
+    local settings = h.env.DoYouNeedItSettingsFrame
+    local expectedFont = "Fonts\\ARIALN.TTF"
+    assertEqual(h.env.DoYouNeedItDB.settings.font, expectedFont, "Russian client repairs a Latin-only saved font")
+    assertEqual(settings.title:GetText(), "Настройки", "Russian client localizes the settings title")
+    for _, control in ipairs({
+        settings.title, settings.back:GetFontString(), settings.resetPosition:GetFontString(),
+        settings.autoCheckLabel, settings.delayLabel, settings.whisperLabel,
+        settings.languageLabel, settings.fontLabel, settings.fontSizeLabel,
+        settings.whisperResetButton:GetFontString(), settings.delaySlider.Low,
+        settings.delaySlider.High, settings.fontSizeSlider.Low, settings.fontSizeSlider.High,
+        settings.languageDropdown.Text, settings.whispersHeading, settings.appearanceHeading,
+        settings.whisperHelp,
+    }) do
+        assertEqual(control.font, expectedFont, "localized settings text uses a Cyrillic-capable font: " .. control:GetText())
+    end
+end
+
+local function testLargeFontPickerRowsFitText()
+    local fonts = {}
+    for index = 1, 48 do
+        fonts[index] = { name = "Test Font " .. index, path = "Interface\\AddOns\\TestFonts\\Font" .. index .. ".ttf" }
+    end
+    local h = Harness.new({ lsmFonts = fonts })
+    h:loadAddon()
+    h:slash("settings")
+    local first
+    for _, size in ipairs({ 24, 8, 24 }) do
+        h.env.DoYouNeedItSettingsFrame.fontSizeSlider:SetValue(size)
+        h.env.DoYouNeedItFontDropdown.Button:FireScript("OnClick")
+        local picker = h.env.DoYouNeedItFontPicker
+        local current = h:findFrame(function(frame) return frame.fontName == "Friz Quadrata TT" end, picker)
+        assertTruthy(current and current.text, "font picker exposes the first option")
+        if first then assertEqual(current, first, "font picker reuses existing option frames after size changes") end
+        first = current
+        assertEqual(first.text.fontSize, size, "font picker respects the configured font size")
+        assertTruthy(first.text.fontSize + 4 <= first:GetHeight(), "font picker row accommodates large text and vertical padding")
+        local nextRow = h:findFrame(function(frame) return frame.fontName == "Test Font 1" end, picker)
+        assertTruthy(nextRow and nextRow.points[1][3] < first.points[1][3], "custom fonts extend the grid to another row")
+        assertTruthy(first.points[1][3] - nextRow.points[1][3] >= first:GetHeight(), "font picker row spacing accommodates text height")
+        assertTruthy(picker:GetHeight() <= 340, "large text keeps the picker viewport compact and scrollable")
+        local last = h:findFrame(function(frame) return frame.fontName == "Test Font 48" end, picker)
+        local content = h.env.DoYouNeedItFontPickerContent
+        assertTruthy(content:GetHeight() > picker:GetHeight(), "long font list has scrollable content")
+        assertTruthy(-last.points[1][3] + last:GetHeight() <= content:GetHeight(), "last font remains inside scrollable content")
+        picker:Hide()
+    end
+end
+
+local function testSettingsGearTooltipDismissalIsOwnerScoped()
+    for _, close in ipairs({ "settings", "main" }) do
+        local h, tooltip = tooltipHarness(0)
+        local main = h.env.DoYouNeedItFrame
+        main.settingsButton:FireScript("OnEnter")
+        assertEqual(tooltip:GetOwner(), main.settingsButton, "settings gear owns its help tooltip")
+        if close == "settings" then
+            main.settingsButton:FireScript("OnClick")
+        else
+            main:Hide()
+        end
+        assertEqual(tooltip:IsShown(), false, close .. " dismisses help for the hidden gear button")
+
+        h:slash("")
+        main.settingsButton:FireScript("OnEnter")
+        local externalOwner = h:newFrame("Button", nil, h.env.UIParent)
+        tooltip:SetOwner(externalOwner, "ANCHOR_RIGHT")
+        tooltip:SetText("Other window help")
+        tooltip:Show()
+        if close == "settings" then
+            h:slash("settings")
+        else
+            main:Hide()
+        end
+        assertEqual(tooltip:IsShown(), true, close .. " preserves another window's help")
+        assertEqual(tooltip:GetOwner(), externalOwner, close .. " preserves another window's tooltip ownership")
+    end
+end
+
+local function testNewLootShortcutFollowsLanguageChanges()
+    local h = tooltipHarness(8)
+    h:slash("history")
+    addRealGear(h, 22450)
+    assertEqual(h.env.DoYouNeedItFrame.newLootButton:IsShown(), true, "historical reader has a new loot shortcut")
+    for _, option in ipairs({ { "ruRU", "Новый лут" }, { "enUS", "New loot" } }) do
+        h:slash("settings")
+        h.dropdownAdds = {}
+        h.env.DoYouNeedItLanguageDropdown.initialize()
+        local selected
+        for _, entry in ipairs(h.dropdownAdds) do
+            if entry.value == option[1] then selected = entry; break end
+        end
+        assertTruthy(selected, "requested language appears in the settings picker")
+        selected.func()
+        h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
+        assertEqual(h.env.DoYouNeedItFrame.newLootButton:IsShown(), true, "language change keeps incoming loot available")
+        assertEqual(h.env.DoYouNeedItFrame.newLootButton:GetText(), option[2], "new loot shortcut follows the selected language")
+    end
+end
+
 local tests = {
+    { "Russian settings font coverage", testRussianClientSettingsUseGlyphCapableFont },
+    { "large-font picker geometry", testLargeFontPickerRowsFitText },
+    { "settings gear tooltip dismissal", testSettingsGearTooltipDismissalIsOwnerScoped },
+    { "new loot shortcut language changes", testNewLootShortcutFollowsLanguageChanges },
     { "settings containment", testSettingsControlsStayInsideWindow },
     { "settings height restoration", testLeavingSettingsRestoresLootHeight },
     { "window Escape and clamping", testMainWindowEscapeAndClamping },

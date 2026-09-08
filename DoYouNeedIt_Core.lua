@@ -1236,24 +1236,6 @@ function Core.SnapshotHistoryForSave(history, limit, rowLimit, mergeWindow, loca
     return saved
 end
 
-function Core.GetNewestRowsFirst(rows, limit)
-    local result = {}
-    if type(rows) ~= "table" then
-        return result
-    end
-    limit = math.max(1, math.floor(asNumber(limit, #rows)))
-    for index = #rows, 1, -1 do
-        local row = rows[index]
-        if type(row) == "table" then
-            result[#result + 1] = row
-            if #result >= limit then
-                break
-            end
-        end
-    end
-    return result
-end
-
 function Core.StoreEquipmentCache(cache, names, equippedByLoc, timestamp)
     if type(cache) ~= "table" then
         return false
@@ -1733,9 +1715,6 @@ function Core.ClassifyTradeCandidate(item, looter, playerName, settings)
     end
     if item.canTrade == false then
         return { visible = false, reason = "not_tradeable" }
-    end
-    if item.isAccountBound == true or item.isAccountBoundUntilEquipped == true then
-        return { visible = false, reason = "warband_bound" }
     end
     local bindType = tonumber(item.bindType)
     if bindType == nil and item.tradeTimeRemaining ~= true and item.canTrade ~= true then

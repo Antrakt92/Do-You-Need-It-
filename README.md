@@ -123,7 +123,7 @@ $env:CURSEFORGE_API_TOKEN = "<token from CurseForge>"
 .\scripts\upload-curseforge.ps1
 ```
 
-The upload script rebuilds the default `dist\DoYouNeedIt-<version>.zip`, reads `## X-Curse-Project-ID`, `## Version`, and `## Interface` from the TOC, uses the top matching `CHANGELOG.md` entry, and sends the package through CurseForge's upload API. Pass `-ZipPath` only when you intentionally want to upload a specific prepared archive. Run `.\scripts\upload-curseforge.ps1 -DryRun` to inspect the metadata without uploading.
+The upload script rebuilds the default `dist\DoYouNeedIt-<version>.zip`, reads `## X-Curse-Project-ID`, `## Version`, and `## Interface` from the TOC, uses the top matching `CHANGELOG.md` entry, and sends the package through CurseForge's upload API. Pass `-ZipPath` only when you intentionally want to upload a specific prepared archive. Every archive must contain exactly the files and content produced from the current checkout; stale, incomplete, or modified packages are rejected before any upload. Run `.\scripts\upload-curseforge.ps1 -DryRun` to validate the archive and inspect the metadata without uploading.
 
 ## License
 

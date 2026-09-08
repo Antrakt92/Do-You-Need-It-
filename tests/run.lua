@@ -533,7 +533,6 @@ do
     assertEqual(#merged, 1, "adjacent saved boss groups merge")
     assertEqual(merged[1].rows[1].id, "middle", "saved history cap removes oldest askable loot")
     assertEqual(merged[1].allRows[2].id, "newest", "saved history cap preserves newest gear")
-    assertEqual(Core.GetNewestRowsFirst(merged[1].allRows)[1].id, "newest", "merged history displays newest loot first")
 
     local repeated = Core.SnapshotHistoryForSave({
         { instanceName = "Dungeon", encounterName = "Boss", endedAt = 102, rows = {
@@ -691,10 +690,6 @@ end
 assertEqual(#sessionState.sessionRows, 3, "session rows prune to configured limit")
 assertEqual(sessionState.sessionRows[1].id, "session3", "session pruning keeps oldest retained row first")
 assertEqual(sessionState.sessionRows[3].id, "session5", "session pruning keeps newest row")
-local displayRows = Core.GetNewestRowsFirst(sessionState.sessionRows, 2)
-assertEqual(#displayRows, 2, "display rows respect visible limit")
-assertEqual(displayRows[1].id, "session5", "display rows show newest first")
-assertEqual(displayRows[2].id, "session4", "display rows show next newest second")
 local loadedSessionRows = Core.NormalizeSavedRows({
     { id = "old" },
     { id = "middle" },

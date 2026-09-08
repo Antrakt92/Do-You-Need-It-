@@ -733,4 +733,48 @@ testStaleScanReadyDoesNotCacheReplacementUnit()
 testInstanceChangeCancelsPendingInspectBeforeHistory()
 testSameItemLevelPersonalLootBecomesAskableAfterInspect()
 
+local function testDelayedPersonalLootComparison(kind, clearBeforeRecovery)
+    local h = newLoadedHarness()
+    local slot = kind == "slot" and "INVTYPE_FINGER" or "INVTYPE_NECK"
+    local drop = h:addItem(21920, { equipLoc = slot, classID = 4, subclassID = 0, bindType = 1, itemLevel = 500 })
+    local equipped = h:addItem(21921, { equipLoc = slot, classID = 4, subclassID = 0, itemLevel = 510,
+        cacheLoaded = kind ~= "metadata" })
+    h:setInventoryLink("party1", kind == "slot" and "Finger0Slot" or "NeckSlot", equipped)
+    h:fireLoot("Otherplayer", drop)
+    local row = h:visibleRows()[1].row
+    assertEqual(row.askable, false, "partial comparison does not speculate about transfer")
+    assertTruthy(row.equippedText:find(equipped, 1, true), "partial comparison retains known equipment links")
+    if clearBeforeRecovery then h:slash("clear") end
+    h.items[21921].cacheLoaded = true
+    if kind == "slot" then h:setInventoryLink("party1", "Finger1Slot", equipped) end
+    h:runTimers(nil, 100)
+    assertEqual(row.askable, not clearBeforeRecovery, "delayed comparison recovers only while the row is tracked")
+    if not clearBeforeRecovery then
+        assertEqual(row.tradeStatusKey, "trade_likely", "loaded comparison restores likely transfer")
+        assertEqual(row.inspectRetryCount, nil, "completed comparison clears its retry budget")
+    end
+    assertEqual(#h.timers, 0, "comparison recovery finishes without polling forever")
+end
+
+local function testMissingPersonalLootComparisonStopsRetrying()
+    local h = newLoadedHarness()
+    local drop = h:addItem(21922, { equipLoc = "INVTYPE_NECK", classID = 4, subclassID = 0, bindType = 1 })
+    local equipped = h:addItem(21923, { equipLoc = "INVTYPE_NECK", classID = 4, cacheLoaded = false, cacheNeverLoads = true })
+    h:setInventoryLink("party1", "NeckSlot", equipped)
+    h:fireLoot("Otherplayer", drop)
+    local row = h:visibleRows()[1].row
+    local timersRun = h:runTimers(nil, 100)
+    assertTruthy(timersRun > 0, "missing comparison data receives bounded recovery")
+    assertTruthy(timersRun < 20, "missing comparison data cannot create unbounded retries")
+    assertEqual(#h.timers, 0, "exhausted comparison stops scheduling")
+    assertEqual(row.askable, false, "missing levels never authorize Ask")
+    assertTruthy(row.equippedText:find(equipped, 1, true), "failed metadata recovery preserves the equipment tooltip")
+end
+
+testDelayedPersonalLootComparison("metadata", false)
+testDelayedPersonalLootComparison("slot", false)
+testDelayedPersonalLootComparison("metadata", true)
+testDelayedPersonalLootComparison("slot", true)
+testMissingPersonalLootComparisonStopsRetrying()
+
 print("runtime inspect ok")

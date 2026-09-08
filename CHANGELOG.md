@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Retry incomplete equipment comparisons when item levels or a second ring/trinket load late, while preserving known item tooltips.
+- Keep font-picker rows readable at large font sizes and resize reused options when the font size changes.
+- Dismiss the settings gear tooltip when its button is hidden, and update the New loot shortcut after switching languages.
+- Reject stale, incomplete, modified, or invalid archives before upload, including explicitly selected packages.
+
 ## 0.5.0 - 05-Sep-2026 — Clearer loot, quieter requests
 
 ### Improved

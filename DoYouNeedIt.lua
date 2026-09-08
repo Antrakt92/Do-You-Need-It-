@@ -37,6 +37,7 @@ local CreateUI
 local CreateSettingsUI
 local OpenSettings
 local RequestInspectForRow
+local ScheduleInspectRetry
 local StartEquipmentScan
 local StartNextInspectRequest
 local QueueInspectRequest
@@ -131,9 +132,6 @@ local EQUIP_LOC_SLOTS = {
 
 local function Print(message)
     DEFAULT_CHAT_FRAME:AddMessage("|cff7ccfffDo You Need It?|r " .. tostring(message))
-end
-
-local function Debug(message)
 end
 
 local function IsSecret(value)
@@ -634,8 +632,6 @@ local function RecordDiagnostic(stage, fields)
     local saved = Core.RecordDiagnostic(Addon.diagnostics, entry, MAX_DIAGNOSTICS)
     PersistDiagnostics()
 
-    local detail = saved and (saved.reason or saved.looter or saved.itemLink) or nil
-    Debug(stage .. (detail and (": " .. tostring(detail)) or ""))
     return saved
 end
 
@@ -1593,6 +1589,13 @@ local function NewestRowsWindow(rows)
     return result, offset, maxOffset, rowCount
 end
 
+function Addon.HideSettingsTooltip()
+    if GameTooltip and Addon.settingsButton
+        and CleanBoolean(SafeCall(GameTooltip.IsOwned, GameTooltip, Addon.settingsButton)) == true then
+        HideItemTooltip()
+    end
+end
+
 function Addon.SetLootChromeShown(shown)
     local function setShown(frame)
         if not frame then
@@ -1615,6 +1618,7 @@ function Addon.SetLootChromeShown(shown)
         setShown(Addon.columnHeaders[index])
     end
     if not shown then
+        Addon.HideSettingsTooltip()
         setShown(Addon.scrollBadge)
         setShown(Addon.scrollText)
     end
@@ -1633,6 +1637,7 @@ function Addon.HideRowTooltip(rowFrame)
 end
 
 function Addon.HideLootRows()
+    Addon.HideSettingsTooltip()
     for index = 1, MAX_VISIBLE_ROWS do
         if Addon.rowFrames[index] then
             Addon.HideRowTooltip(Addon.rowFrames[index])
@@ -2450,8 +2455,20 @@ local function CompleteInspectRow(row, equippedText, equippedLinks)
     row.equippedText = equippedText
     row.inspectPending = false
     row.inspectToken = nil
-    row.inspectRetryCount = nil
+    if not row.itemLevel then row.itemLevel = Addon.ReadItemLevel(row.itemLink) end
     Addon.PromotePersonalLootRowFromEquipped(row, equippedLinks)
+    if row.reason == "bind_on_pickup" and row.playerCanEquip == true and not row.unsafe then
+        local slots = EQUIP_LOC_SLOTS[row.equipLoc]
+        local requiredCount = type(slots) == "table" and #slots or 1
+        local levels = Addon.ReadEquippedItemLevels(equippedLinks)
+        if not row.itemLevel or #levels < requiredCount then
+            -- Links can arrive before item levels or the second ring/trinket slot.
+            -- Keep the same retry budget until the comparison is complete.
+            ScheduleInspectRetry(row, "comparison_pending")
+            return
+        end
+    end
+    row.inspectRetryCount = nil
     RecordDiagnostic("inspect_ready", {
         looter = row.looter,
         equipLoc = row.equipLoc,
@@ -2478,7 +2495,7 @@ local function FailInspectRow(row, reason)
     })
 end
 
-local function ScheduleInspectRetry(row, reason)
+ScheduleInspectRetry = function(row, reason)
     if not row then
         return false
     end
@@ -2495,7 +2512,7 @@ local function ScheduleInspectRetry(row, reason)
         -- Combat duration is not an inspection failure and must not spend retries.
         row.inspectToken = nil
         Addon.combatInspectRows[row] = true
-        if not IsCachedEquippedText(row.equippedText) then
+        if row.equippedText == UNKNOWN_EQUIPPED or row.equippedText == EQUIPPED_UNAVAILABLE then
             row.equippedText = EQUIPPED_PENDING
         end
         return true
@@ -2510,7 +2527,7 @@ local function ScheduleInspectRetry(row, reason)
         return false
     end
 
-    if not IsCachedEquippedText(row.equippedText) then
+    if row.equippedText == UNKNOWN_EQUIPPED or row.equippedText == EQUIPPED_UNAVAILABLE then
         row.equippedText = EQUIPPED_PENDING
     end
     local token = {}
@@ -4085,6 +4102,7 @@ RefreshLocalization = function()
         Addon.frame.columnDrop:SetText(L("Dropped"))
         Addon.frame.columnEquipped:SetText(L("Equipped now"))
         Addon.frame.columnTrade:SetText(L("Trade"))
+        Addon.frame.newLootButton:SetText(L("New loot"))
     end
     RefreshRows()
     RefreshSettingsControls()
@@ -4196,18 +4214,23 @@ local function HideFontPicker()
     end
 end
 
+function Addon.FontPickerMetrics()
+    local settings = Addon.state and Addon.state.settings or {}
+    local buttonHeight = math.max(22, Core.ResolveFontSize(12, settings.fontSize) + 4)
+    local metrics = { cols = 3, buttonWidth = 160, buttonHeight = buttonHeight, pad = 8, scrollbarWidth = 22 }
+    metrics.visibleRows = math.max(1, math.floor(308 / buttonHeight))
+    metrics.frameWidth = metrics.cols * metrics.buttonWidth + metrics.pad * 2 + metrics.scrollbarWidth
+    metrics.frameHeight = metrics.visibleRows * buttonHeight + metrics.pad * 2
+    return metrics
+end
+
 local function BuildFontPickerFrame()
-    local cols = 3
-    local buttonWidth = 160
-    local buttonHeight = 22
-    local pad = 8
-    local scrollbarWidth = 22
-    local visibleRows = 14
-    local frameWidth = cols * buttonWidth + pad * 2 + scrollbarWidth
-    local frameHeight = visibleRows * buttonHeight + pad * 2
+    local metrics = Addon.FontPickerMetrics()
+    local cols, buttonWidth = metrics.cols, metrics.buttonWidth
+    local pad, scrollbarWidth = metrics.pad, metrics.scrollbarWidth
 
     local picker = CreateFrame("Frame", "DoYouNeedItFontPicker", UIParent, "BackdropTemplate")
-    picker:SetSize(frameWidth, frameHeight)
+    picker:SetSize(metrics.frameWidth, metrics.frameHeight)
     picker:SetFrameStrata("DIALOG")
     picker:SetFrameLevel((Addon.settingsFrame and Addon.settingsFrame:GetFrameLevel() or 100) + 50)
     picker:SetClampedToScreen(true)
@@ -4261,22 +4284,21 @@ local function PopulateFontPicker()
         return
     end
 
-    local cols = 3
-    local buttonWidth = 160
-    local buttonHeight = 22
-    local visibleRows = 14
+    local metrics = Addon.FontPickerMetrics()
+    local cols, buttonWidth = metrics.cols, metrics.buttonWidth
+    local buttonHeight, visibleRows = metrics.buttonHeight, metrics.visibleRows
     local fonts = BuildFontsList(ActiveLocale())
     local currentPath = Addon.state and Addon.state.settings and Addon.state.settings.font
     local rows = math.ceil(#fonts / cols)
     local currentRow
 
-    Addon.fontPickerContent:SetHeight(math.max(rows * buttonHeight, 1))
+    Addon.fontPickerFrame:SetSize(metrics.frameWidth, metrics.frameHeight)
+    Addon.fontPickerContent:SetSize(cols * buttonWidth, math.max(rows * buttonHeight, 1))
 
     for index, font in ipairs(fonts) do
         local button = Addon.fontPickerButtons[index]
         if not button then
             button = CreateFrame("Button", nil, Addon.fontPickerContent)
-            button:SetSize(buttonWidth, buttonHeight)
 
             button.bg = button:CreateTexture(nil, "BACKGROUND")
             button.bg:SetAllPoints()
@@ -4328,6 +4350,7 @@ local function PopulateFontPicker()
 
         local row = math.floor((index - 1) / cols)
         local col = (index - 1) % cols
+        button:SetSize(buttonWidth, buttonHeight)
         button:ClearAllPoints()
         button:SetPoint("TOPLEFT", col * buttonWidth, -row * buttonHeight)
         button.fontName = font.name

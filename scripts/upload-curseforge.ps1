@@ -154,6 +154,7 @@ if ($GameVersionNames.Count -eq 0) {
 }
 
 $resolvedZipPath = Resolve-UploadZip -RequestedPath $ZipPath -Version $version
+& (Join-Path $PSScriptRoot "check-package.ps1") -ZipPath $resolvedZipPath
 $changelog = Get-TopChangelogEntry -Path $ChangelogPath -Version $version
 
 $metadata = [ordered]@{
