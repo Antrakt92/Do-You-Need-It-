@@ -48,7 +48,7 @@ function Convert-InterfaceToGameVersionName {
     return "$major.$minor.$patch"
 }
 
-function Get-TopChangelogEntry {
+function Get-ReleaseChangelog {
     param(
         [Parameter(Mandatory = $true)]
         [string]$Path,
@@ -67,28 +67,18 @@ function Get-TopChangelogEntry {
         throw "Missing changelog: $resolvedPath"
     }
 
-    $lines = Get-Content -LiteralPath $resolvedPath
-    $start = -1
-    for ($i = 0; $i -lt $lines.Count; $i++) {
-        if ($lines[$i] -match "^##\s+$([regex]::Escape($Version))(\s|$)") {
-            $start = $i
-            break
-        }
+    $text = (Get-Content -LiteralPath $resolvedPath -Raw -Encoding UTF8) -replace "`r`n?", "`n"
+    $headings = @([regex]::Matches($text, '(?m)^##[ \t]+([^\n]+)'))
+    $hasUnreleased = $headings.Count -gt 0 -and $headings[0].Groups[1].Value.Trim() -ceq 'Unreleased'
+    $firstRelease = if ($hasUnreleased) { 1 } else { 0 }
+    if ($headings.Count -le $firstRelease -or
+        $headings[$firstRelease].Groups[1].Value -notmatch "^$([regex]::Escape($Version))(\s|$)") {
+        throw "Top changelog release must match version $Version in $resolvedPath"
     }
-
-    if ($start -lt 0) {
-        throw "Could not find changelog entry for version $Version in $resolvedPath"
+    if ($hasUnreleased) {
+        $text = $text.Substring(0, $headings[0].Index) + $text.Substring($headings[1].Index)
     }
-
-    $end = $lines.Count
-    for ($i = $start + 1; $i -lt $lines.Count; $i++) {
-        if ($lines[$i] -match '^##\s+') {
-            $end = $i
-            break
-        }
-    }
-
-    return (($lines[$start..($end - 1)]) -join "`n").Trim()
+    return $text.Trim() + "`n"
 }
 
 function Resolve-UploadZip {
@@ -155,7 +145,7 @@ if ($GameVersionNames.Count -eq 0) {
 
 $resolvedZipPath = Resolve-UploadZip -RequestedPath $ZipPath -Version $version
 & (Join-Path $PSScriptRoot "check-package.ps1") -ZipPath $resolvedZipPath
-$changelog = Get-TopChangelogEntry -Path $ChangelogPath -Version $version
+$changelog = Get-ReleaseChangelog -Path $ChangelogPath -Version $version
 
 $metadata = [ordered]@{
     changelog = $changelog
