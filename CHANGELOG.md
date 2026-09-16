@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.2 - 16-Sep-2026 — Complete package notices
+
+### Fixed
+
+- Include complete license texts for bundled libraries.
+- Keep the full release history in packaged and published changelogs.
+
 ## 0.5.1 - 08-Sep-2026 — Reliable comparisons and settings
 
 ### Fixed

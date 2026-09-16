@@ -10,7 +10,7 @@ For World of Warcraft Retail / Midnight 12.x. The current package supports clien
 
 Install through CurseForge, or extract the `DoYouNeedIt-<version>.zip` release asset into `World of Warcraft/_retail_/Interface/AddOns/`. The resulting folder must be named `DoYouNeedIt` and contain `DoYouNeedIt.toc` directly inside it.
 
-Run `/reload`, then `/dyni` to open the window. `/dyni status` should report `build=0.5.1`. Use `/dyni test` to preview sample rows; these cannot send whispers and are not saved to your history.
+Run `/reload`, then `/dyni` to open the window. `/dyni status` should report `build=0.5.2`. Use `/dyni test` to preview sample rows; these cannot send whispers and are not saved to your history.
 
 ## Loot and comparison
 
