@@ -96,6 +96,8 @@ try {
     Copy-PackageFile "CHANGELOG.md"
     Copy-PackageFile "LICENSE"
     Copy-PackageFile "THIRD-PARTY-NOTICES.md"
+    Copy-PackageFile "LICENSES/CallbackHandler-1.0-BSD-2-Clause.txt"
+    Copy-PackageFile "LICENSES/LibSharedMedia-3.0-LGPL-2.1.txt"
 
     if (Test-Path -LiteralPath $zipPath) {
         Remove-Item -LiteralPath $zipPath -Force

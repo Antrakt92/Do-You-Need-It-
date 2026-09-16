@@ -15,6 +15,8 @@ function Assert-PackageCase {
         try {
             foreach ($entry in $reference.Entries) {
                 if ($Name -eq 'missing-file' -and $entry.FullName.EndsWith('/README.md')) { continue }
+                if ($Name -eq 'missing-lgpl' -and $entry.FullName.EndsWith('/LibSharedMedia-3.0-LGPL-2.1.txt')) { continue }
+                if ($Name -eq 'missing-bsd' -and $entry.FullName.EndsWith('/CallbackHandler-1.0-BSD-2-Clause.txt')) { continue }
                 $entryName = $entry.FullName
                 if ($Name -eq 'wrong-root') { $entryName = $entryName.Replace('DoYouNeedIt/', 'OtherAddon/') }
                 if ($Name -eq 'wrong-case') { $entryName = $entryName.ToUpperInvariant() }
@@ -22,7 +24,8 @@ function Assert-PackageCase {
                 $destination = $copy.Open()
                 $source = $entry.Open()
                 try {
-                    if ($Name -eq 'same-size-change' -and $entryName.EndsWith('/DoYouNeedIt.lua')) {
+                    if (($Name -eq 'same-size-change' -and $entryName.EndsWith('/DoYouNeedIt.lua')) -or
+                        ($Name -eq 'modified-license' -and $entryName.EndsWith('/LibSharedMedia-3.0-LGPL-2.1.txt'))) {
                         $destination.WriteByte($source.ReadByte() -bxor 1)
                     }
                     $source.CopyTo($destination)
@@ -81,6 +84,9 @@ try {
     $caseCount++
     Assert-PackageCase 'invalid-zip' '*'
     Assert-PackageCase 'missing-file' 'missing required files'
+    Assert-PackageCase 'missing-lgpl' 'missing required files'
+    Assert-PackageCase 'missing-bsd' 'missing required files'
+    Assert-PackageCase 'modified-license' 'content differs'
     Assert-PackageCase 'stale-runtime' 'content differs'
     Assert-PackageCase 'same-size-change' 'content differs'
     Assert-PackageCase 'stale-version' 'content differs'

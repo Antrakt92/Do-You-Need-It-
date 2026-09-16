@@ -1,130 +1,69 @@
 # Do You Need It?
 
-Do You Need It? is a Retail World of Warcraft addon for Midnight 12.x, currently packaged for Retail 12.0.7 and 12.1.0. It tracks likely-tradeable Mythic+ and raid gear drops, compares the drop with the looter's equipped item, and helps you ask with optional delayed whispers.
+Compare dungeon and raid gear drops with the looter's equipped items, review recent loot, and use **Ask** to send a whisper. Automatic whispers are optional and off by default.
 
-The addon focuses on quiet signal:
+[Install on CurseForge](https://www.curseforge.com/wow/addons/do-you-need-it) · [Download the latest ZIP](https://github.com/Antrakt92/Do-You-Need-It-/releases/latest) · [Report a problem](https://github.com/Antrakt92/Do-You-Need-It-/issues)
 
-- Shows grouped dungeon/raid gear drops in one compact scrollable list, including own loot and bonus loot, while hiding known warband/account-bound items.
-- Shows the `Ask` action only on rows that look worth asking for and usable by your current character.
-- Hides currency, reagents, recipes, consumables, quest items, and other non-gear loot.
-- Clearly labels the dropped item and the looter's currently equipped item in separate columns, using live inspection when safely available and retrying briefly when inspection data is delayed.
-- Shows an honest transfer status for every gear row: confirmed by a trade timer, likely for fresh bind-on-equip/use gear, unavailable when explicitly blocked, or unknown when WoW does not expose another player's personal-loot eligibility.
-- Pre-scans group equipment into a session cache, then shows `Cached:` equipped items if live inspection is blocked or delayed.
-- Shows real item tooltips when you hover dropped or equipped item links in the loot window.
-- Colors looter names by class when roster data is available.
-- Keeps Cyrillic player names readable with dynamic font fallback even when the selected UI font lacks those glyphs.
-- Keeps per-character lightweight history for the current view, the last 50 saved session drops, and the last 10 completed boss/run groups.
-- Sends whispers only from row actions unless auto-whisper is explicitly enabled.
-- Includes a settings gear with auto-whisper, delay, whisper text, language, font, and font-size controls.
-- Previews language and font choices on hover, then rolls back if you close the picker without selecting.
-- Uses a compact loot window with clear row separators, transfer colors, and separate Whispers and Appearance settings.
-- Expands the settings window to fit every control, keeps drafts open when loot arrives, and supports Escape to close.
-- Keeps local demo rows separate from real loot history and whispers.
-- Preserves the history view and reading position when more loot arrives, with a shortcut back to new loot.
-- Remembers the window position between reloads, offers Reset Position in settings, and adapts visible row count to your chosen font size.
-- Gives each compared ring, trinket, or weapon its own tooltip and click target.
+For World of Warcraft Retail / Midnight 12.x. The current package supports client versions 12.0.7 and 12.1.0.
+
+## Install
+
+Install through CurseForge, or extract the `DoYouNeedIt-<version>.zip` release asset into `World of Warcraft/_retail_/Interface/AddOns/`. The resulting folder must be named `DoYouNeedIt` and contain `DoYouNeedIt.toc` directly inside it.
+
+Run `/reload`, then `/dyni` to open the window. `/dyni status` should report `build=0.5.1`. Use `/dyni test` to preview sample rows; these cannot send whispers and are not saved to your history.
+
+## Loot and comparison
+
+- One list shows group gear drops, including your own and bonus loot. Non-gear loot and known warband/account-bound items are hidden.
+- **Dropped**, **Equipped now**, and **Trade** columns show the item, the looter's equipment, and its estimated transfer status. Hover item links for tooltips; paired rings, trinkets, and weapons each have their own target.
+- **Ask** appears only on eligible drops your character can use. It does not mean the item is an upgrade for you.
+- Equipment comparisons use live inspection when available, with items labelled **Cached:** when using an earlier scan. `/dyni scan` queues a group equipment scan before a dungeon or raid.
+- History is saved per character: up to 50 session drops and 10 completed boss/run groups. New drops preserve your reading position; **New loot** returns to incoming drops.
+
+### What Trade means
+
+| Status | Meaning |
+|---|---|
+| **Yes** | A trade timer was detected. |
+| **Likely** | Bind-on-equip/use gear, or personal loot whose item level is no higher than the looter's inspected gear in the same slot. |
+| **Unknown** | The addon cannot determine whether the item can be traded. |
+| **No** | A transfer restriction was detected. |
+
+WoW does not expose another player's final personal-loot eligibility. **Likely** is an estimate; the looter must confirm. Inspection also depends on range, combat state, throttling, and item data availability. Old saved records are retained even when they are filtered out of the window.
+
+## Whispers and settings
+
+Open the gear button or `/dyni settings` to change whispers, language, font, and font size. The window remembers its position, closes with Escape, and can be centered with **Reset Position**.
+
+Auto-whisper is **off by default**. If enabled, it waits 10 seconds by default; the delay can be set from 3 to 30 seconds. A pending whisper is cancelled when you ask manually, clear the current rows, disable auto-whisper, or the looter leaves the group.
+
+Use `{item}` in a custom message, for example: `Hi, do you need {item}?` If the completed message is too long or contains invalid characters, the row explains the problem. Edit the message and use Ask again.
+
+Language defaults to **Auto**, following your client locale. English and Russian have the most complete text. German, Spanish, French, Italian, Brazilian Portuguese, Korean, and Simplified/Traditional Chinese are selectable, with English fallback for untranslated labels. Font and language pickers preview on hover and restore the saved choice if closed without a selection. Bundled LibSharedMedia and Blizzard fonts provide font choices and Cyrillic fallback.
 
 ## Commands
 
 | Command | Action |
 |---|---|
 | `/dyni` | Toggle the loot window. |
-| `/dyni settings` | Open the settings view inside the loot window. |
-| `/dyni auto on` | Enable delayed auto-whisper. |
-| `/dyni auto off` | Disable auto-whisper. |
-| `/dyni delay <seconds>` | Set auto-whisper delay, clamped to 3-30 seconds. |
-| `/dyni clear` | Clear current live/session rows while keeping saved history. |
-| `/dyni resetpos` | Center the window without resetting your settings or history. |
-| `/dyni history` | Cycle the history view. |
-| `/dyni scan` | Queue a manual group equipment pre-scan. |
-| `/dyni test` | Show local comparison examples with disabled Ask buttons; sends no chat and saves no demo loot. |
+| `/dyni settings` | Open settings. |
+| `/dyni auto on` / `/dyni auto off` | Enable or disable automatic whispers. |
+| `/dyni delay <seconds>` | Set the delay, clamped to 3–30 seconds. |
+| `/dyni clear` | Clear current rows while keeping saved history. |
+| `/dyni resetpos` | Center the window without resetting settings or history. |
+| `/dyni history` | Cycle history views. |
+| `/dyni scan` | Queue a group equipment scan. |
+| `/dyni test` | Preview sample rows without whispers or saved demo loot. |
+| `/dyni status` | Print settings, build, and layout. |
 | `/dyni debug on` | Save the last 20 loot-processing diagnostic entries. |
-| `/dyni diag` | Print the newest saved diagnostic entries. |
-| `/dyni status` | Print current settings, build, and layout. |
+| `/dyni diag` | Print the newest diagnostic entries. |
 
-Auto-whisper is off by default. When enabled, it waits 10 seconds by default before sending, and pending sends are cancelled if you manually ask first, clear current rows, or turn auto-whisper off.
+## Help and development
 
-Automatic messages are also cancelled when the looter leaves your group. Messages are validated after inserting the item link; if a template produces an oversized or invalid message, the row explains that it needs editing and Ask remains retryable.
+For a loot problem, enable `/dyni debug on` before the drop, then collect `/dyni diag` and `/dyni status`. Include the client language, addon version, steps to reproduce, and any Lua error in a [bug report](https://github.com/Antrakt92/Do-You-Need-It-/issues). Remove player names or other personal details you do not want to share.
 
-The loot window uses one unified list. Known warband/account-bound gear is hidden because it cannot be passed to another group member. Unknown personal-loot transfer eligibility stays visible. The `Ask` button appears only on rows that the addon currently considers worth asking about and usable by your current character. Bonus loot, your own loot, and other review-only drops stay visible without pointless Ask buttons. Existing saved records are preserved even when filtered out of the window. Use the gear button or `/dyni settings` to adjust whispers and appearance.
-
-The `Dropped`, `Equipped now`, and `Trade` columns keep the comparison explicit. `Trade: yes` means a trade timer was detected, while `Trade: likely` covers gear that is normally transferable until equipped or used, including personal loot whose item level is no higher than the inspected gear in the same slot. `Trade: unknown` is deliberately conservative: WoW does not expose another player's final personal-loot eligibility to addons, so the looter still needs to confirm.
-
-Incoming drops keep recording while you edit settings or read history. Use Back to return to the loot list and **New loot** to jump to incoming drops when ready. The window stays within the screen when dragged, remembers its position after reload, and closes with Escape. Use **Reset Position** in settings or `/dyni resetpos` to center it. `/dyni test` temporarily previews two examples; real loot replaces the preview, and `/dyni history` returns to your recorded drops.
-
-## Language and Fonts
-
-Language defaults to `Auto`, which follows your WoW client locale. You can also force a locale from settings:
-
-| Language | Locale |
-|---|---|
-| Auto | Current WoW client locale |
-| English | `enUS` |
-| Deutsch | `deDE` |
-| Español | `esES`, `esMX` |
-| Français | `frFR` |
-| Italiano | `itIT` |
-| Português do Brasil | `ptBR` |
-| Русский | `ruRU` |
-| 한국어 | `koKR` |
-| 中文 简体 | `zhCN` |
-| 中文 繁體 | `zhTW` |
-
-English and Russian currently have the most complete addon-specific text. Other locales cover the core settings labels and fall back to English for unreviewed addon labels.
-
-Font choices use bundled LibSharedMedia support plus Blizzard fallbacks. Hovering a language or font previews it live, closing the picker without selecting restores the saved setting, and loot-row names can temporarily fall back to glyph-capable fonts such as Arial Narrow for Cyrillic names. Russian settings also replace saved Latin-only fonts with a Cyrillic-capable fallback.
-
-## Quick In-Game Check
-
-After installing a new build:
-
-1. Run `/reload`.
-2. Run `/dyni status` and confirm it reports `build=0.5.1`, `session drops=...`, `all gear=...`, `cache=...`, and `layout=540x300`.
-3. Run `/dyni scan` before a dungeon to pre-cache group equipment.
-4. Run `/dyni test`, hover the dropped and equipped item text, and confirm the bound test item appears in the same list without an Ask button.
-5. For live loot debugging, run `/dyni debug on` before a boss or dungeon chest and `/dyni diag` afterward. Inspect/cache problems appear as `inspect_retry`, `inspect_failed`, `scan_retry`, or `scan_failed`.
-
-## Install
-
-Copy this folder to:
-
-```text
-World of Warcraft/_retail_/Interface/AddOns/DoYouNeedIt
-```
-
-Then reload the game UI with `/reload`.
-
-## Development Checks
-
-Run from the repository root:
-
-```powershell
-.\scripts\check.ps1
-```
-
-The check script runs the Lua regression tests, Lua 5.1 syntax checks, package-shape validation, CurseForge upload dry-run metadata validation, and a public-source leakage guard. If `lua5.1` or `luac5.1` are missing on a Windows machine, run:
-
-```powershell
-.\scripts\install-check-tools.ps1 -Install
-```
-
-Build a local addon zip with:
-
-```powershell
-.\scripts\package.ps1
-```
-
-The package is written to `dist\DoYouNeedIt-<version>.zip` with `DoYouNeedIt/` as the zip root. It includes the addon TOC, Lua files, bundled runtime libraries, addon-list icon, README, changelog, license, and third-party notices, while excluding tests, scripts, and local development files. The main check script also validates this package shape.
-
-Upload a prepared package to CurseForge with:
-
-```powershell
-$env:CURSEFORGE_API_TOKEN = "<token from CurseForge>"
-.\scripts\upload-curseforge.ps1
-```
-
-The upload script rebuilds the default `dist\DoYouNeedIt-<version>.zip`, reads `## X-Curse-Project-ID`, `## Version`, and `## Interface` from the TOC, uses the top matching `CHANGELOG.md` entry, and sends the package through CurseForge's upload API. Pass `-ZipPath` only when you intentionally want to upload a specific prepared archive. Every archive must contain exactly the files and content produced from the current checkout; stale, incomplete, or modified packages are rejected before any upload. Run `.\scripts\upload-curseforge.ps1 -DryRun` to validate the archive and inspect the metadata without uploading.
+See [CONTRIBUTING.md](https://github.com/Antrakt92/Do-You-Need-It-/blob/main/CONTRIBUTING.md) for development checks and packaging.
 
 ## License
 
-MIT. This project is intended to be freely modifiable and redistributable under the license terms.
+The addon code is [MIT licensed](LICENSE). Bundled libraries retain their own licenses; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) and the included `LICENSES/` directory.

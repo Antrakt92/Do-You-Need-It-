@@ -185,6 +185,29 @@ try {
         }
     }
 
+    $notices = Get-Content -LiteralPath .\THIRD-PARTY-NOTICES.md -Raw
+    foreach ($path in $expectedLibraryHashes.Keys) {
+        $noticePath = $path.Replace('\', '/')
+        $section = [regex]::Match($notices, '(?ms)^## ' + [regex]::Escape($noticePath) + '\r?\n(?<body>.*?)(?=^## |\z)')
+        if (-not $section.Success -or
+            $section.Groups['body'].Value -notmatch ('(?m)^- SHA256: ' + $expectedLibraryHashes[$path] + '\r?$')) {
+            throw "Third-party notice hash does not match the normalized library hash: $noticePath"
+        }
+    }
+    $expectedLicenseHashes = @{
+        'LICENSES/CallbackHandler-1.0-BSD-2-Clause.txt' = 'BB630CB510B8EBAFC0F04C82A2BA1D21BB13598DB5B45C890185E71E96E5D933'
+        'LICENSES/LibSharedMedia-3.0-LGPL-2.1.txt' = '20E50FE7AAE3E56378EBF0417D9DE904F55A0E61E4DF315333E632A4D3555D95'
+    }
+    foreach ($path in $expectedLicenseHashes.Keys) {
+        if ((Get-NormalizedTextFileSha256 -Path $path) -cne $expectedLicenseHashes[$path]) {
+            throw "Bundled license text changed: $path"
+        }
+        if (-not $notices.Contains("- License text: $path") -or
+            -not $notices.Contains("- License text SHA256: $($expectedLicenseHashes[$path])")) {
+            throw "Third-party notice is missing the pinned license text or hash: $path"
+        }
+    }
+
     $packageTemp = Join-Path ([System.IO.Path]::GetTempPath()) ("dyni-package-check-" + [System.Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $packageTemp | Out-Null
     try {
@@ -227,7 +250,9 @@ try {
                 "DoYouNeedIt/media/icon.png",
                 "DoYouNeedIt/CHANGELOG.md",
                 "DoYouNeedIt/LICENSE",
-                "DoYouNeedIt/THIRD-PARTY-NOTICES.md"
+                "DoYouNeedIt/THIRD-PARTY-NOTICES.md",
+                "DoYouNeedIt/LICENSES/CallbackHandler-1.0-BSD-2-Clause.txt",
+                "DoYouNeedIt/LICENSES/LibSharedMedia-3.0-LGPL-2.1.txt"
             )
             foreach ($entry in $required) {
                 if ($entries -notcontains $entry) {
@@ -238,7 +263,8 @@ try {
                 if ($entry -notmatch '^DoYouNeedIt/') {
                     throw "package entry is outside DoYouNeedIt root: $entry"
                 }
-                if ($entry -match '^DoYouNeedIt/(tests|scripts|\.git|\.github)/' -or $entry -eq "DoYouNeedIt/.gitignore") {
+                if ($entry -match '^DoYouNeedIt/(tests|scripts|\.git|\.github)/' -or
+                    $entry -eq "DoYouNeedIt/.gitignore" -or $entry -eq "DoYouNeedIt/CONTRIBUTING.md") {
                     throw "package includes development-only entry: $entry"
                 }
             }
