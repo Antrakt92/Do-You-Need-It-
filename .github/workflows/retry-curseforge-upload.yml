@@ -42,14 +42,14 @@ jobs:
           throw "Recovery reruns are blocked because the prior upload outcome must be reassessed. Dispatch a new run with the currently proven recovery mode."
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
           ref: ${{ inputs.tag }}
           persist-credentials: false
 
       - name: Checkout pinned recovery guards
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.workflow_sha }}
           path: .release-workflow-guards

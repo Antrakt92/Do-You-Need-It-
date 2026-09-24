@@ -175,7 +175,7 @@ try {
     $expectedLibraryHashes = @{
         'libs\LibStub\LibStub.lua' = 'C6D9599EFE3D24B90BC175629AD5464981B10DDB7E74A18274658E5C56875B85'
         'libs\CallbackHandler-1.0\CallbackHandler-1.0.lua' = '7A0BD63D0DCB126359A60204862D21A7AC2C9FF18D61480D4F5C554751553F5D'
-        'libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua' = '39445CC0486FB0FDBA7367AAE9979CAA342D2AB194CDBC5ED1C6FED72FDD8D6E'
+        'libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua' = 'B2650FC5ACBFF310C7F7A23A36C8026A99D2441982D4B4F63AFB76489D56B214'
     }
     foreach ($path in $expectedLibraryHashes.Keys) {
         $actualHash = (Get-NormalizedTextFileSha256 -Path $path).ToUpperInvariant()
