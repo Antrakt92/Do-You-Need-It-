@@ -1,6 +1,10 @@
 # Changelog
 
-## 0.5.2 - 16-Sep-2026 — Complete package notices
+## 0.5.2 - 24-Sep-2026 — PTR compatibility and complete package notices
+
+### Updated
+
+- Support Retail 12.1.0 and the 12.1.5 PTR in one package.
 
 ### Fixed
 

@@ -1099,7 +1099,7 @@ end
 
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
-assertTruthy(toc:find("## Interface: 120007, 120100", 1, true), "toc interface supports current Retail and Midnight 12.1.0")
+assertTruthy(toc:find("## Interface: 120100, 120105", 1, true), "toc interface supports Retail 12.1.0 and Midnight 12.1.5 PTR")
 assertTruthy(toc:find("## Version: 0.5.2", 1, true), "toc version present")
 assertTruthy(toc:find("## IconTexture: Interface\\AddOns\\DoYouNeedIt\\media\\icon.png", 1, true), "toc addon list icon present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")

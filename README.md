@@ -4,7 +4,7 @@ Compare dungeon and raid gear drops with the looter's equipped items, review rec
 
 [Install on CurseForge](https://www.curseforge.com/wow/addons/do-you-need-it) · [Download the latest ZIP](https://github.com/Antrakt92/Do-You-Need-It-/releases/latest) · [Report a problem](https://github.com/Antrakt92/Do-You-Need-It-/issues)
 
-For World of Warcraft Retail / Midnight 12.x. The current package supports client versions 12.0.7 and 12.1.0.
+For World of Warcraft Retail / Midnight 12.x. The current package supports 12.1.0 and the 12.1.5 PTR.
 
 ## Install
 
