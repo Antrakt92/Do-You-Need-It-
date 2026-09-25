@@ -172,6 +172,15 @@ local function HideItemTooltip()
     end
 end
 
+function Addon.ShowTextTooltip(owner, text)
+    if not owner or type(text) ~= "string" or text == "" or not GameTooltip then
+        return
+    end
+    pcall(GameTooltip.SetOwner, GameTooltip, owner, "ANCHOR_RIGHT")
+    pcall(GameTooltip.SetText, GameTooltip, text)
+    pcall(GameTooltip.Show, GameTooltip)
+end
+
 local function OpenItemLink(owner, itemLink)
     if type(itemLink) ~= "string" or itemLink == "" then
         return
@@ -464,9 +473,23 @@ local function FindFontName(path)
     return "Friz Quadrata TT"
 end
 
+-- Saved font paths can go stale mid-session (shared-media set replaced by
+-- another addon, profile copied from another machine after load repair).
+-- Resolve once per paint pass so a broken path never reaches SetFont.
+function Addon.ValidatedDisplayFont()
+    local settings = Addon.state and Addon.state.settings or Core.NormalizeSettings({})
+    local font = Addon.previewFont or settings.font or Core.GetDefaultFont()
+    local active = ActiveLocale()
+    local fonts = BuildFontsList(active)
+    if not FindAvailableFontPath(font, fonts) then
+        font = FindCompatibleAvailableFont(font, Core.GetLocaleGlyphRequirement(active), fonts, ClientLocale())
+    end
+    return font
+end
+
 ApplyCurrentFont = function()
     local settings = Addon.state and Addon.state.settings or Core.NormalizeSettings({})
-    local previewFont = Addon.previewFont or settings.font or Core.GetDefaultFont()
+    local previewFont = Addon.ValidatedDisplayFont()
     local stableFont
     local dynamicFonts
     local dynamicFallbacks = {}
@@ -1607,6 +1630,22 @@ function Addon.GetVisibleRowCount()
     return count
 end
 
+-- Column widths grow with the body font (same idea as the history/scroll/new
+-- loot chrome scaling below) but stay capped so the fixed 510px row keeps
+-- every column on screen; headers and hover targets follow the same widths.
+function Addon.LootColumnWidths()
+    local size = Addon.state and Addon.state.settings.fontSize or 12
+    local scale = Core.ResolveFontSize(11, size) / 11
+    local function scaled(base, cap)
+        return math.min(cap, math.max(base, math.floor(base * scale + 0.5)))
+    end
+    return {
+        looter = scaled(ROW_LOOTER_WIDTH, 110),
+        drop = scaled(ROW_DROP_WIDTH, 200),
+        equipped = scaled(ROW_EQUIPPED_WIDTH, 160),
+    }
+end
+
 function Addon.CaptureReadingPosition()
     local rows = RowsForSelectedView()
     local offset = Addon.rowScrollOffset or 0
@@ -1782,6 +1821,15 @@ local function RefreshRows()
     Addon.historyButton:GetFontString():SetWidth(HEADER_HISTORY_WIDTH - badgeWidth - 24)
     Addon.newLootButton:SetHeight(math.max(22, bodyHeight + 3))
     Addon.newLootButton:SetWidth(math.max(100, bodyHeight * 6))
+    local columnWidths = Addon.LootColumnWidths()
+    local dropX = 18 + columnWidths.looter + 8
+    local equippedX = dropX + columnWidths.drop + 10
+    Addon.frame.columnPlayer:SetWidth(columnWidths.looter)
+    Addon.frame.columnDrop:SetWidth(columnWidths.drop)
+    Addon.frame.columnEquipped:SetWidth(columnWidths.equipped)
+    Addon.frame.columnPlayer.columnX = 18
+    Addon.frame.columnDrop.columnX = dropX
+    Addon.frame.columnEquipped.columnX = equippedX
     for _, header in ipairs(Addon.columnHeaders) do
         header:ClearAllPoints()
         header:SetPoint("TOPLEFT", Addon.frame, "TOPLEFT", header.columnX, -68 - extraSize)
@@ -1792,7 +1840,7 @@ local function RefreshRows()
         title = L("This Session")
     elseif Addon.selectedView == "history" and Addon.selectedHistoryIndex then
         local group = Addon.state.history[Addon.selectedHistoryIndex]
-        title = group and group.title or L("History")
+        title = Core.GetHistoryGroupTitle(group, ActiveLocale()) or L("History")
     end
     Addon.historyButton:SetText(title)
     if Addon.scrollText then
@@ -1829,6 +1877,7 @@ local function RefreshRows()
             rowFrame:SetPoint("TOPLEFT", Addon.frame, "TOPLEFT", 10, rowStartY - ((index - 1) * rowStride))
             rowFrame:SetHeight(rowHeight)
             rowFrame.looter:SetHeight(bodyHeight)
+            rowFrame.looter:SetWidth(columnWidths.looter)
             rowFrame.dropLink:SetHeight(bodyHeight + 3)
             rowFrame.equippedLink:SetHeight(bodyHeight + 3)
             rowFrame.equippedLink2:SetHeight(bodyHeight + 3)
@@ -1840,25 +1889,38 @@ local function RefreshRows()
             if row.lootSource == "bonus_roll" then
                 rowFrame.rollIcon:Show()
                 rowFrame.drop:SetPoint("LEFT", rowFrame.rollIcon, "RIGHT", 4, 0)
-                rowFrame.drop:SetWidth(ROW_DROP_WIDTH - 18)
+                rowFrame.drop:SetWidth(columnWidths.drop - 18)
             else
                 rowFrame.rollIcon:Hide()
                 rowFrame.drop:SetPoint("LEFT", rowFrame.looter, "RIGHT", 8, 0)
-                rowFrame.drop:SetWidth(ROW_DROP_WIDTH)
+                rowFrame.drop:SetWidth(columnWidths.drop)
             end
             rowFrame.drop:SetText(row.itemLink or "")
+            -- Hover targets track the scaled columns (defaults reproduce the
+            -- creation-time 104/294 anchors exactly at font size 12).
+            rowFrame.dropLink:ClearAllPoints()
+            rowFrame.dropLink:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", 14 + columnWidths.looter, -1)
+            rowFrame.dropLink:SetWidth(columnWidths.drop + 8)
+            local equippedLinkX = 24 + columnWidths.looter + columnWidths.drop
+            rowFrame.equippedLink:ClearAllPoints()
+            rowFrame.equippedLink:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", equippedLinkX, -1)
+            rowFrame.equippedLink:SetWidth(columnWidths.equipped + 8)
             if secondEquipped then
                 local prefix = IsCachedEquippedText(row.equippedText) and DisplayEquippedText("Cached: ") or ""
                 rowFrame.equipped:SetText(prefix .. firstEquipped)
-                rowFrame.equipped:SetWidth((ROW_EQUIPPED_WIDTH - 8) / 2)
-                rowFrame.equippedLink:SetWidth((ROW_EQUIPPED_WIDTH - 8) / 2 + 2)
+                rowFrame.equipped:SetWidth((columnWidths.equipped - 8) / 2)
+                rowFrame.equippedLink:SetWidth((columnWidths.equipped - 8) / 2 + 2)
+                rowFrame.equipped2:SetWidth((columnWidths.equipped - 8) / 2)
+                rowFrame.equippedLink2:ClearAllPoints()
+                rowFrame.equippedLink2:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", equippedLinkX + (columnWidths.equipped - 8) / 2 + 8, -1)
+                rowFrame.equippedLink2:SetWidth((columnWidths.equipped - 8) / 2 + 2)
                 rowFrame.equipped2:SetText(secondEquipped)
                 rowFrame.equipped2:Show()
                 rowFrame.equippedDivider:Show()
             else
                 rowFrame.equipped:SetText(DisplayEquippedText(row.equippedText))
-                rowFrame.equipped:SetWidth(ROW_EQUIPPED_WIDTH)
-                rowFrame.equippedLink:SetWidth(ROW_EQUIPPED_HOVER_WIDTH)
+                rowFrame.equipped:SetWidth(columnWidths.equipped)
+                rowFrame.equippedLink:SetWidth(columnWidths.equipped + 8)
                 rowFrame.equipped2:Hide()
                 rowFrame.equippedDivider:Hide()
             end
@@ -3745,7 +3807,9 @@ function Addon.FormatHistoryTimestamp(timestamp)
 end
 
 function Addon.HistoryGroupMenuTitle(group, index)
-    local title = type(group) == "table" and CleanString(group.title) or nil
+    -- Render from stored instance/encounter names so a language switch
+    -- re-localizes the menu instead of showing a frozen completion-time title.
+    local title = Core.GetHistoryGroupTitle(group, ActiveLocale())
     if not title then
         title = L("History") .. " " .. tostring(index)
     end
@@ -3919,11 +3983,7 @@ local function CreateRow(parent, index)
     row.tradeInfo:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -6, 1)
     row.tradeInfo:SetSize(110, 11)
     row.tradeInfo:SetScript("OnEnter", function(button)
-        if GameTooltip and type(button.tooltipText) == "string" and button.tooltipText ~= "" then
-            GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
-            GameTooltip:SetText(button.tooltipText)
-            GameTooltip:Show()
-        end
+        Addon.ShowTextTooltip(button, button.tooltipText)
     end)
     row.tradeInfo:SetScript("OnLeave", HideItemTooltip)
     row.tradeInfo:Hide()
@@ -3977,6 +4037,9 @@ function Addon.RestoreWindowPosition()
 end
 
 function Addon.ResetWindowPosition()
+    if type(DoYouNeedItDB) ~= "table" then
+        DoYouNeedItDB = {}
+    end
     DoYouNeedItDB.windowPosition = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 0 }
     Addon.RestoreWindowPosition()
 end
@@ -3990,6 +4053,9 @@ CreateUI = function()
     frame:SetSize(WINDOW_WIDTH, WINDOW_HEIGHT)
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("DIALOG")
+    -- DIALOG strata alone can slide under other addons' windows; toplevel
+    -- keeps the loot window above foreign UI while it is shown.
+    frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
     UISpecialFrames = UISpecialFrames or {}
     table.insert(UISpecialFrames, "DoYouNeedItFrame")
@@ -4005,6 +4071,11 @@ CreateUI = function()
         frame:EnableMouseWheel(true)
     end
     frame:SetScript("OnMouseWheel", function(_, delta)
+        -- Settings mode shows no loot rows; scrolling there must not move a
+        -- hidden reading position that would surprise the user on return.
+        if Addon.contentMode == "settings" then
+            return
+        end
         local value = CleanNumber(delta) or 0
         if value == 0 then
             return
@@ -4114,11 +4185,7 @@ CreateUI = function()
     frame.settingsButton:SetPushedTexture("Interface\\Buttons\\UI-OptionsButton")
     frame.settingsButton:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
     frame.settingsButton:SetScript("OnEnter", function(button)
-        if GameTooltip then
-            GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
-            GameTooltip:SetText(L("Settings"))
-            GameTooltip:Show()
-        end
+        Addon.ShowTextTooltip(button, L("Settings"))
     end)
     frame.settingsButton:SetScript("OnLeave", HideItemTooltip)
     frame.settingsButton:SetScript("OnClick", OpenSettings)
@@ -4371,7 +4438,16 @@ RefreshSettingsControls = function()
         Addon.whisperEditBox:SetText(settings.whisperTemplate)
     end
     if Addon.whisperResetButton then
-        Addon.whisperResetButton:SetText(L("Reset"))
+        local armedAt = tonumber(Addon.whisperResetArmedAt)
+        if armedAt and Now() - armedAt > 5 then
+            Addon.whisperResetArmedAt = nil
+            armedAt = nil
+        end
+        if armedAt then
+            Addon.whisperResetButton:SetText(L("Reset") .. "?")
+        else
+            Addon.whisperResetButton:SetText(L("Reset"))
+        end
     end
     if Addon.languageLabel then
         Addon.languageLabel:SetText(L("Language:"))
@@ -4395,7 +4471,7 @@ RefreshSettingsControls = function()
         SetDropdownTextSafe(Addon.languageDropdown, CurrentLanguageLabel())
     end
     if Addon.fontDropdown then
-        SetDropdownTextSafe(Addon.fontDropdown, FindFontName(settings.font))
+        SetDropdownTextSafe(Addon.fontDropdown, FindFontName(Addon.ValidatedDisplayFont()))
     end
     RefreshFontWarning()
 end
@@ -4426,11 +4502,25 @@ local function ScheduleSettingsControlsRefresh()
     end
 end
 
-local function SetFontSize(value)
+local function SetFontSize(value, previewOnly)
     Addon.state.settings.fontSize = tonumber(value) or Addon.state.settings.fontSize
     Addon.state.settings = Core.NormalizeSettings(Addon.state.settings)
-    SaveDB()
+    if previewOnly then
+        Addon.pendingSliderSave = true
+    else
+        SaveDB()
+    end
     ApplyCurrentFont()
+    RefreshSettingsControls()
+end
+
+function Addon.CommitSliderChanges()
+    if not Addon.pendingSliderSave then
+        return
+    end
+    Addon.pendingSliderSave = nil
+    SaveDB()
+    RefreshRows()
     RefreshSettingsControls()
 end
 
@@ -4783,10 +4873,16 @@ local function ArmDropdownPreviewHooks()
     end
 end
 
+-- WHY eager-commit: leaving settings (Back, window close, loot arrival keeps
+-- the panel open but Back always saves) deliberately persists the focused
+-- whisper draft, mirroring how every other settings control applies
+-- instantly. A Save/Discard confirmation step was considered too invasive
+-- for a single text field, so Back keeps its save-on-exit contract.
 function Addon.CommitFocusedWhisperTemplate()
     if Addon.whisperEditBox and Addon.whisperTemplateFocused and not Addon.committingWhisperTemplate then
         Addon.committingWhisperTemplate = true
         Addon.whisperTemplateFocused = false
+        Addon.whisperResetArmedAt = nil
         SetWhisperTemplate(Addon.whisperEditBox:GetText())
         Addon.committingWhisperTemplate = false
     end
@@ -4796,6 +4892,7 @@ function Addon.EnterLootMode()
     local leavingSettings = Addon.contentMode == "settings" or (Addon.settingsFrame and Addon.settingsFrame:IsShown())
     if leavingSettings then
         Addon.CommitFocusedWhisperTemplate()
+        Addon.CommitSliderChanges()
         HideFontPicker()
         SafeCall(CloseDropDownMenus)
         CancelSettingsPreview()
@@ -4904,11 +5001,7 @@ CreateSettingsUI = function()
         SetAutoWhisper(check:GetChecked() == true)
     end)
     frame.autoCheck:SetScript("OnEnter", function(check)
-        if GameTooltip then
-            GameTooltip:SetOwner(check, "ANCHOR_RIGHT")
-            GameTooltip:SetText(L("Only eligible new drops. Off by default."))
-            GameTooltip:Show()
-        end
+        Addon.ShowTextTooltip(check, L("Only eligible new drops. Off by default."))
     end)
     frame.autoCheck:SetScript("OnLeave", HideItemTooltip)
     Addon.autoCheck = frame.autoCheck
@@ -4940,7 +5033,12 @@ CreateSettingsUI = function()
         if Addon.updatingControls then
             return
         end
-        SetDelay(math.floor((tonumber(value) or 10) + 0.5), true)
+        SetDelay(math.floor((tonumber(value) or 10) + 0.5), true, true)
+    end)
+    -- Slider ticks apply instantly on screen but reach SavedVariables only on
+    -- release (or when settings close), so a single drag is one disk write.
+    frame.delaySlider:SetScript("OnMouseUp", function()
+        Addon.CommitSliderChanges()
     end)
     Addon.delaySlider = frame.delaySlider
 
@@ -4977,6 +5075,7 @@ CreateSettingsUI = function()
         end
         Addon.committingWhisperTemplate = true
         Addon.whisperTemplateFocused = false
+        Addon.whisperResetArmedAt = nil
         SetWhisperTemplate(editBox:GetText())
         SafeCall(editBox.ClearFocus, editBox)
         Addon.committingWhisperTemplate = false
@@ -4987,6 +5086,7 @@ CreateSettingsUI = function()
         end
         Addon.committingWhisperTemplate = true
         Addon.whisperTemplateFocused = false
+        Addon.whisperResetArmedAt = nil
         SetWhisperTemplate(editBox:GetText())
         Addon.committingWhisperTemplate = false
     end)
@@ -5003,9 +5103,21 @@ CreateSettingsUI = function()
     frame.whisperResetButton:SetSize(58, 22)
     Addon.StyleButton(frame.whisperResetButton, false)
     frame.whisperResetButton:SetScript("OnClick", function()
-        Addon.whisperTemplateFocused = false
-        SetWhisperTemplate(nil)
-        SafeCall(frame.whisperEditBox.ClearFocus, frame.whisperEditBox)
+        -- One stray click used to erase a customized whisper template.
+        -- The first click only arms a 5-second confirmation ("Reset?"); only
+        -- a second click inside that window restores the default template.
+        -- Typing a new draft disarms the pending confirmation.
+        local armedAt = tonumber(Addon.whisperResetArmedAt)
+        if armedAt and Now() - armedAt <= 5 then
+            Addon.whisperResetArmedAt = nil
+            Addon.whisperTemplateFocused = false
+            SetWhisperTemplate(nil)
+            SafeCall(frame.whisperEditBox.ClearFocus, frame.whisperEditBox)
+        else
+            Addon.whisperResetArmedAt = Now()
+            Addon.whisperTemplateFocused = false
+            frame.whisperResetButton:SetText(L("Reset") .. "?")
+        end
     end)
     RegisterButtonFont(frame.whisperResetButton, 11, nil, true)
     Addon.whisperResetButton = frame.whisperResetButton
@@ -5085,7 +5197,11 @@ CreateSettingsUI = function()
         if Addon.updatingControls then
             return
         end
-        SetFontSize(math.floor((tonumber(value) or 12) + 0.5))
+        SetFontSize(math.floor((tonumber(value) or 12) + 0.5), true)
+    end)
+    -- See the delay slider above: ticks preview, release persists.
+    frame.fontSizeSlider:SetScript("OnMouseUp", function()
+        Addon.CommitSliderChanges()
     end)
     Addon.fontSizeSlider = frame.fontSizeSlider
 
@@ -5171,11 +5287,15 @@ SetAutoWhisper = function(enabled)
     RefreshSettingsControls()
 end
 
-SetDelay = function(value, quiet)
+SetDelay = function(value, quiet, previewOnly)
     local old = Addon.state.settings.autoDelay
     Addon.state.settings.autoDelay = tonumber(value) or old
     Addon.state.settings = Core.NormalizeSettings(Addon.state.settings)
-    SaveDB()
+    if previewOnly then
+        Addon.pendingSliderSave = true
+    else
+        SaveDB()
+    end
     RefreshRows()
     RefreshSettingsControls()
     if not quiet and Addon.state.settings.autoDelay ~= tonumber(value) then
@@ -5279,6 +5399,11 @@ local function HandleSlash(message)
                 .. (entry.itemLink and (" item=" .. tostring(entry.itemLink)) or ""))
         end
     elseif command == "status" then
+        local layoutWidth, layoutHeight = WINDOW_WIDTH, WINDOW_HEIGHT
+        if Addon.frame then
+            layoutWidth = SafeCall(Addon.frame.GetWidth, Addon.frame) or layoutWidth
+            layoutHeight = SafeCall(Addon.frame.GetHeight, Addon.frame) or layoutHeight
+        end
         Print("auto=" .. tostring(Addon.state.settings.autoWhisper)
             .. ", delay=" .. tostring(Addon.state.settings.autoDelay)
             .. "s, saved groups=" .. tostring(#Addon.state.history)
@@ -5291,7 +5416,7 @@ local function HandleSlash(message)
             .. ", build=" .. tostring(Core.VERSION)
             .. ", locale=" .. tostring(Core.ResolveActiveLocale(Addon.state.settings.forceLocale, ClientLocale()))
             .. ", font=" .. tostring(FindFontName(Addon.state.settings.font))
-            .. ", layout=540x300")
+            .. ", layout=" .. tostring(layoutWidth) .. "x" .. tostring(layoutHeight))
     else
         Print("commands: /dyni, /dyni settings, /dyni resetpos, /dyni test, /dyni scan, /dyni auto on|off, /dyni delay <seconds>, /dyni clear, /dyni history, /dyni debug on|off, /dyni diag, /dyni status")
     end

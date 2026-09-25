@@ -393,42 +393,60 @@ local function testMainWindowLayoutBoundsLongText()
     assertTruthy(row.trade:GetWidth() <= 110, "trade status stays inside the action column")
 end
 
-local function testCyrillicLootTextUsesGlyphCapableFont()
-    local h = Harness.new({
-        db = {
-            settings = {
-                font = "Fonts\\FRIZQT__.TTF",
+local function testNonLatinLootTextUsesGlyphCapableFont()
+    local notoPath = "Interface\\AddOns\\TestFonts\\NotoSansCJK-Regular.ttf"
+    local cases = {
+        { name = "Игрок", lsmFonts = nil, expected = "Fonts\\ARIALN.TTF" },
+        { name = "플레이어", lsmFonts = { { name = "Noto Sans CJK", path = notoPath } }, expected = notoPath },
+        { name = "玩家", lsmFonts = { { name = "Noto Sans CJK", path = notoPath } }, expected = notoPath },
+    }
+    for _, case in ipairs(cases) do
+        local fonts = {
+            { name = "Friz Quadrata TT", path = "Fonts\\FRIZQT__.TTF" },
+            { name = "Arial Narrow", path = "Fonts\\ARIALN.TTF" },
+        }
+        if case.lsmFonts then
+            for _, extra in ipairs(case.lsmFonts) do
+                fonts[#fonts + 1] = extra
+            end
+        end
+        local h = Harness.new({
+            lsmFonts = fonts,
+            db = {
+                settings = {
+                    font = "Fonts\\FRIZQT__.TTF",
+                },
             },
-        },
-    })
-    h:setUnit("party1", {
-        name = "Игрок",
-        realm = "Ravencrest",
-        guid = "CyrillicGUID",
-        classToken = "PALADIN",
-    })
-    h:loadAddon()
-    h.timers = {}
-    h:resetSideEffects()
+        })
+        h:setUnit("party1", {
+            name = case.name,
+            realm = "Ravencrest",
+            guid = "GlyphGUID-" .. case.name,
+            classToken = "PALADIN",
+        })
+        h:loadAddon()
+        h.timers = {}
+        h:resetSideEffects()
 
-    local item = h:addItem(22001, {
-        name = "Eye of the Drowning Void",
-        equipLoc = "INVTYPE_TRINKET",
-        classID = 4,
-        subclassID = 0,
-        quality = 4,
-        bindType = 2,
-        equippable = true,
-        usable = true,
-    })
+        local item = h:addItem(22001, {
+            name = "Eye of the Drowning Void",
+            equipLoc = "INVTYPE_TRINKET",
+            classID = 4,
+            subclassID = 0,
+            quality = 4,
+            bindType = 2,
+            equippable = true,
+            usable = true,
+        })
 
-    h:fireLoot("Игрок", item)
+        h:fireLoot(case.name, item)
 
-    local rows = h:visibleRows()
-    assertEqual(#rows, 1, "cyrillic looter row is visible")
-    assertEqual(rows[1].looter.font, "Fonts\\ARIALN.TTF", "cyrillic looter name falls back to Arial Narrow")
-    assertEqual(rows[1].drop.font, "Fonts\\FRIZQT__.TTF", "latin item text keeps the selected Friz font")
-    assertEqual(h.env.DoYouNeedItFrame.title.font, "Fonts\\FRIZQT__.TTF", "main title keeps the selected Friz font")
+        local rows = h:visibleRows()
+        assertEqual(#rows, 1, "non-latin looter row is visible for " .. case.name)
+        assertEqual(rows[1].looter.font, case.expected, "non-latin looter name falls back to a capable font for " .. case.name)
+        assertEqual(rows[1].drop.font, "Fonts\\FRIZQT__.TTF", "latin item text keeps the selected Friz font for " .. case.name)
+        assertEqual(h.env.DoYouNeedItFrame.title.font, "Fonts\\FRIZQT__.TTF", "main title keeps the selected Friz font for " .. case.name)
+    end
 end
 
 local function testLootLooterNameUsesClassColor()
@@ -2060,6 +2078,9 @@ local function testSettingsWhisperTemplateEditBoxSaves()
 
     frame.whisperEditBox:SetText("temporary")
     frame.whisperResetButton:FireScript("OnClick")
+    assertEqual(h.env.DoYouNeedItDB.settings.whisperTemplate, "Hey, do you need {item}?", "first reset click arms confirmation without erasing")
+    assertEqual(frame.whisperResetButton:GetText(), "Reset?", "first reset click asks for confirmation")
+    frame.whisperResetButton:FireScript("OnClick")
     assertEqual(h.env.DoYouNeedItDB.settings.whisperTemplate, "Hey, do you need {item}?", "whisper template reset button restores default")
     assertEqual(frame.whisperEditBox:GetText(), "Hey, do you need {item}?", "whisper template reset refreshes edit box text")
 end
@@ -2076,7 +2097,7 @@ local function testSettingsRefreshKeepsFocusedWhisperDraft()
 
     frame.fontSizeSlider:SetValue(13)
     assertEqual(frame.whisperEditBox:GetText(), draft, "settings refresh keeps focused whisper template draft")
-    assertEqual(h.env.DoYouNeedItDB.settings.whisperTemplate, "Hey, do you need {item}?", "focused whisper draft is not saved before commit")
+    assertEqual((h.env.DoYouNeedItDB.settings or {}).whisperTemplate, nil, "font-size preview tick saves nothing before commit")
 
     frame.whisperEditBox:FireScript("OnEditFocusLost")
     assertEqual(h.env.DoYouNeedItDB.settings.whisperTemplate, draft, "focused whisper draft saves on focus loss")
@@ -2110,7 +2131,7 @@ testCustomWhisperTemplateIsUsedForManualAsk()
 testManualWhisperFailureLeavesRowRetryable()
 testClearCancelsDeferredManualWhisper()
 testMainWindowLayoutBoundsLongText()
-testCyrillicLootTextUsesGlyphCapableFont()
+testNonLatinLootTextUsesGlyphCapableFont()
 testLootLooterNameUsesClassColor()
 testInstanceChangeCompletesCurrentGroup()
 testInstanceChangeHistoryTitleUsesActiveLocale()

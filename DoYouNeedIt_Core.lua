@@ -82,6 +82,13 @@ local FONT_GLYPH_PATTERNS = {
 }
 
 local CYRILLIC_UTF8_LEAD_PATTERN = "[\208\209]"
+-- Hiragana/katakana share lead E3 with CJK Extension A; Unified Ideographs
+-- span leads E4-E9. Lead bytes cannot tell Simplified from Traditional apart,
+-- so both probe as HANS: every bundled/pattern font that covers HANS also
+-- covers HANT, and any CJK-capable fallback beats a Latin-only font.
+local CJK_UTF8_LEAD_PATTERN = "[\227-\233]"
+-- Hangul syllables U+AC00-U+D7A3 encode with leads EA-ED.
+local HANGUL_UTF8_LEAD_PATTERN = "[\234-\237]"
 
 local BLIZZARD_SHIPPED_FONTS = {
     { path = "Fonts\\FRIZQT__.TTF", name = "Friz Quadrata TT" },
@@ -169,6 +176,7 @@ local LABELS_BY_LOCALE = {
         ["test row"] = "test row",
         ["test_row"] = "test row",
         ["bind_on_pickup"] = "bind on pickup",
+        ["warband_bound"] = "warband bound",
         ["bind_unknown"] = "trade status unknown",
         ["not_askable"] = "not askable",
         ["quest_bound"] = "quest bound",
@@ -217,6 +225,9 @@ local LABELS_BY_LOCALE = {
         ["Dropped"] = "Выпало",
         ["Equipped now"] = "Надето сейчас",
         ["Trade"] = "Передача",
+        -- "Спросить" (7 glyphs at button font 11) overflows the 48px whisper
+        -- action button, so the Russian client deliberately keeps the short
+        -- English label, matching the compact Sending/Sent states.
         ["Ask"] = "Ask",
         ["Sent"] = "Отпр.",
         ["Sending"] = "Отпр...",
@@ -255,6 +266,7 @@ local LABELS_BY_LOCALE = {
         ["test row"] = "тест",
         ["test_row"] = "тест",
         ["bind_on_pickup"] = "персональный",
+        ["warband_bound"] = "привязано к отряду",
         ["bind_unknown"] = "статус передачи неизвестен",
         ["not_askable"] = "не спрашивать",
         ["quest_bound"] = "квестовый предмет",
@@ -412,6 +424,7 @@ local PERSISTED_GROUP_KEYS = {
     title = "string",
     instanceName = "string",
     encounterName = "string",
+    dropCount = "number",
     startedAt = "number",
     endedAt = "number",
 }
@@ -670,7 +683,10 @@ local function resolveRowStatus(row, useFallback)
         if seconds then
             return "auto_pending", tonumber(seconds)
         end
-        return LEGACY_STATUS_TEXT_TO_KEY[text] or text, nil
+        -- Unknown legacy free text carries no evidence; rendering it raw
+        -- would freeze foreign or corrupt strings on screen, so new rows
+        -- start from the neutral candidate state instead.
+        return LEGACY_STATUS_TEXT_TO_KEY[text] or "candidate", nil
     end
 
     if type(row.reason) == "string" and row.reason ~= "" then
@@ -1063,10 +1079,16 @@ function Core.GetTextGlyphRequirement(text)
     if type(text) ~= "string" or text == "" then
         return nil
     end
-    -- WHY: WoW Lua is byte-based; this only detects UTF-8 Cyrillic lead bytes
+    -- WHY: WoW Lua is byte-based; this only detects UTF-8 lead bytes
     -- and does not slice or transform the user-visible text.
     if text:find(CYRILLIC_UTF8_LEAD_PATTERN) then
         return GLYPH_CYR
+    end
+    if text:find(HANGUL_UTF8_LEAD_PATTERN) then
+        return GLYPH_HANGUL
+    end
+    if text:find(CJK_UTF8_LEAD_PATTERN) then
+        return GLYPH_HANS
     end
     return nil
 end
@@ -1251,6 +1273,7 @@ function Core.SnapshotHistoryForSave(history, limit, rowLimit, mergeWindow, loca
                         latest.endedAt = savedEndedAt
                     end
                     local mergedDropCount = #latest.allRows > 0 and #latest.allRows or #latest.rows
+                    latest.dropCount = mergedDropCount
                     latest.title = groupTitle({
                         instanceName = latest.instanceName,
                         encounterName = latest.encounterName,
@@ -1892,6 +1915,32 @@ end
 -- re-render on the active locale instead of showing the frozen
 -- completion-time string. Legacy groups without names keep their stored
 -- title verbatim; groups without any title resolve to nil.
+function Core.GetHistoryGroupTitle(group, locale)
+    if type(group) ~= "table" then
+        return nil
+    end
+    locale = type(locale) == "string" and locale ~= "" and locale or "enUS"
+    local instanceName = type(group.instanceName) == "string" and group.instanceName ~= "" and group.instanceName or nil
+    local encounterName = type(group.encounterName) == "string" and group.encounterName ~= "" and group.encounterName or nil
+    if not instanceName and not encounterName then
+        if type(group.title) == "string" and group.title ~= "" then
+            return group.title
+        end
+        return nil
+    end
+    local dropCount = asNumber(group.dropCount, nil)
+    if dropCount == nil then
+        local allRows = type(group.allRows) == "table" and group.allRows or {}
+        local rows = type(group.rows) == "table" and group.rows or {}
+        dropCount = #allRows > 0 and #allRows or #rows
+    end
+    return groupTitle({
+        instanceName = instanceName,
+        encounterName = encounterName,
+        locale = locale,
+    }, dropCount)
+end
+
 local function rowMergeKey(row)
     if type(row) ~= "table" then
         return nil
@@ -2007,6 +2056,7 @@ function Core.CompleteCurrentGroup(state, groupMeta)
         title = groupTitle(groupMeta, dropCount),
         instanceName = groupMeta.instanceName,
         encounterName = groupMeta.encounterName,
+        dropCount = dropCount,
         startedAt = groupMeta.startedAt,
         endedAt = groupMeta.endedAt,
         rows = rows,
@@ -2024,6 +2074,7 @@ function Core.CompleteCurrentGroup(state, groupMeta)
         latest.startedAt = latest.startedAt or group.startedAt
         latest.endedAt = group.endedAt or latest.endedAt
         local mergedDropCount = #latest.allRows > 0 and #latest.allRows or #latest.rows
+        latest.dropCount = mergedDropCount
         latest.title = groupTitle({
             instanceName = latest.instanceName,
             encounterName = latest.encounterName,

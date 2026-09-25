@@ -88,6 +88,14 @@ function FrameMethods:SetFrameStrata(strata)
     self.strata = strata
 end
 
+function FrameMethods:SetToplevel(toplevel)
+    self.toplevel = toplevel == true
+end
+
+function FrameMethods:IsToplevel()
+    return self.toplevel == true
+end
+
 function FrameMethods:SetFrameLevel(level)
     self.frameLevel = level
 end

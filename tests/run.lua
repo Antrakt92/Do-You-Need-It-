@@ -1195,6 +1195,12 @@ assertTruthy(runtime:find("Core.GetLocaleLabel", 1, true), "runtime localizes vi
 assertTruthy(runtime:find("RegisterFontString", 1, true), "runtime tracks owned font strings")
 assertTruthy(runtime:find("ApplyCurrentFont", 1, true), "runtime applies chosen or previewed font")
 assertTruthy(runtime:find("Core.ResolveFontSize", 1, true), "runtime applies font-size slider to registered font strings")
+assertTruthy(runtime:find("frame:SetToplevel(true)", 1, true), "runtime keeps the main window above foreign UI")
+assertTruthy(runtime:find("ShowTextTooltip", 1, true), "runtime routes text tooltips through one guarded helper")
+assertTruthy(runtime:find("whisperResetArmedAt", 1, true), "runtime confirms whisper template reset with a second click")
+assertTruthy(runtime:find("CommitSliderChanges", 1, true), "runtime persists slider changes on release")
+assertTruthy(runtime:find("LootColumnWidths", 1, true), "runtime scales loot columns with the body font")
+assertTruthy(runtime:find("GetHistoryGroupTitle", 1, true), "runtime renders history titles on the active locale")
 assertTruthy(runtime:find("local WINDOW_WIDTH = 540", 1, true), "runtime uses compact non-overlapping window width")
 assertTruthy(runtime:find("local WINDOW_HEIGHT = 300", 1, true), "runtime uses compact settings-enabled window height")
 assertTruthy(runtime:find("local ROW_START_Y = -82", 1, true), "runtime leaves a compact header area above rows")
@@ -1259,6 +1265,42 @@ assertTruthy(runtime:find("all gear=", 1, true), "runtime reports saved all gear
 assertTruthy(runtime:find("NewestRowsWindow", 1, true), "runtime displays newest rows through a scrollable window")
 assertTruthy(runtime:find("OnMouseWheel", 1, true), "runtime lets raid-sized loot lists scroll")
 assertEqual(runtime:find("UnitExistsClean", 1, true), nil, "runtime does not gate roster building through UnitExists")
-assertTruthy(runtime:find("layout=540x300", 1, true), "runtime reports compact settings-enabled layout in status")
+assertTruthy(runtime:find("layout=\" .. tostring(layoutWidth)", 1, true), "runtime reports live window size in status")
+assertTruthy(runtime:find("Addon.frame.GetWidth", 1, true), "runtime reads live window width for status")
+
+assertEqual(Core.GetLocaleLabel("Ask", "ruRU"), "Ask", "Russian client keeps the short Ask label that fits the 48px whisper button")
+assertEqual(Core.GetLocaleLabel("warband_bound", "enUS"), "warband bound", "warband rejection has an English status label")
+assertEqual(Core.GetLocaleLabel("warband_bound", "ruRU"), "привязано к отряду", "warband rejection has a Russian status label")
+assertEqual(Core.GetRowStatusText({ reason = "warband_bound" }, "ruRU"), "привязано к отряду", "warband reason renders without a raw key")
+assertEqual(Core.GetRowStatusText({ statusText = "mystery garbage" }, "enUS"), "candidate", "unknown legacy status text falls back to candidate")
+assertEqual(Core.GetRowStatusText({ statusText = "mystery garbage" }, "ruRU"), "кандидат", "unknown legacy status text localizes the candidate fallback")
+assertEqual(Core.GetTextGlyphRequirement("플레이어"), "HANGUL", "hangul text requests a hangul glyph fallback")
+assertEqual(Core.GetTextGlyphRequirement("玩家"), "HANS", "han text requests a han glyph fallback")
+assertEqual(Core.GetTextGlyphRequirement("プレイヤー"), "HANS", "kana text requests a han-capable glyph fallback")
+
+local titleGroupState = Core.CreateState({ maxHistoryGroups = 10, maxSessionRows = 10 })
+Core.AddVisibleRow(titleGroupState, {
+    id = "title-row-1",
+    looter = "Otherplayer",
+    itemLink = "|cff0070dd|Hitem:401:::::::::::::|h[Title One]|h|r",
+}, true)
+Core.AddVisibleRow(titleGroupState, {
+    id = "title-row-2",
+    looter = "Otherplayer",
+    itemLink = "|cff0070dd|Hitem:402:::::::::::::|h[Title Two]|h|r",
+}, false)
+local titleGroup = Core.CompleteCurrentGroup(titleGroupState, {
+    instanceName = "Dungeon",
+    encounterName = "Boss",
+    locale = "enUS",
+    endedAt = 1,
+})
+assertEqual(titleGroup.dropCount, 2, "completed group stores its drop count")
+assertEqual(Core.GetHistoryGroupTitle(titleGroup, "enUS"), "Dungeon - Boss (2 drops)", "history title renders in English")
+assertEqual(Core.GetHistoryGroupTitle(titleGroup, "ruRU"), "Dungeon - Boss (2 дропа)", "history title re-renders in Russian")
+assertEqual(Core.GetHistoryGroupTitle({ title = "Legacy Dungeon - Boss (1 drop)" }, "ruRU"), "Legacy Dungeon - Boss (1 drop)", "legacy group without names keeps its stored title")
+assertEqual(Core.GetHistoryGroupTitle({ instanceName = "Dungeon", rows = { { id = "a" }, { id = "b" } } }, "enUS"), "Dungeon - Run (2 drops)", "history title derives the drop count from rows")
+assertEqual(Core.GetHistoryGroupTitle(nil, "enUS"), nil, "missing group has no history title")
+assertEqual(Core.GetHistoryGroupTitle({}, "enUS"), nil, "title-less group without names has no history title")
 
 print("tests ok")

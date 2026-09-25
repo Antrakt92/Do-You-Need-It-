@@ -506,7 +506,183 @@ local function testNewLootShortcutFollowsLanguageChanges()
     end
 end
 
+local function testMainWindowToplevelAndGeometry()
+    local h = Harness.new()
+    h:loadAddon()
+    local main = h.env.DoYouNeedItFrame
+    assertEqual(main:IsToplevel(), true, "main window stays above foreign UI")
+    assertEqual(main.strata, "DIALOG", "main window keeps dialog strata")
+    assertEqual(main:GetWidth(), 540, "main window keeps compact width")
+    assertEqual(main:GetHeight(), 300, "main window keeps compact height")
+end
+
+local function testTextTooltipsUseGuardedHelper()
+    local h, tooltip = tooltipHarness(1)
+    local row = h:visibleRows()[1]
+    row.tradeInfo:FireScript("OnEnter")
+    assertEqual(tooltip:IsShown(), true, "trade explanation tooltip appears")
+    assertEqual(tooltip:GetOwner(), row.tradeInfo, "trade explanation tooltip is owned by its row button")
+    assertTruthy((tooltip:GetText() or "") ~= "", "trade explanation tooltip carries help text")
+    row.tradeInfo:FireScript("OnLeave")
+    local main = h.env.DoYouNeedItFrame
+    main.settingsButton:FireScript("OnEnter")
+    assertEqual(tooltip:GetText(), "Settings", "settings gear tooltip carries its label")
+    assertEqual(tooltip:GetOwner(), main.settingsButton, "settings gear tooltip is owned by its button")
+    main.settingsButton:FireScript("OnLeave")
+    h:slash("settings")
+    local settings = h.env.DoYouNeedItSettingsFrame
+    settings.autoCheck:FireScript("OnEnter")
+    assertEqual(tooltip:GetText(), "Only eligible new drops. Off by default.", "checkbox tooltip carries its help text")
+    assertEqual(tooltip:GetOwner(), settings.autoCheck, "checkbox tooltip is owned by its checkbox")
+end
+
+local function testWhisperResetNeedsConfirmation()
+    local h = Harness.new()
+    h:loadAddon()
+    h:slash("delay 10")
+    h:slash("settings")
+    local settings = h.env.DoYouNeedItSettingsFrame
+    local defaultTemplate = h.env.DoYouNeedItDB.settings.whisperTemplate
+    settings.whisperEditBox:FireScript("OnEditFocusGained")
+    settings.whisperEditBox:SetText("Custom {item} please")
+    settings.whisperEditBox:FireScript("OnEditFocusLost")
+    assertEqual(h.env.DoYouNeedItDB.settings.whisperTemplate, "Custom {item} please", "custom draft commits on focus loss")
+    settings.whisperResetButton:FireScript("OnClick")
+    assertEqual(h.env.DoYouNeedItDB.settings.whisperTemplate, "Custom {item} please", "first reset click preserves the custom template")
+    assertEqual(settings.whisperResetButton:GetText(), "Reset?", "first reset click arms confirmation")
+    settings.whisperResetButton:FireScript("OnClick")
+    assertEqual(h.env.DoYouNeedItDB.settings.whisperTemplate, defaultTemplate, "second reset click restores the default template")
+    assertEqual(settings.whisperResetButton:GetText(), "Reset", "confirmed reset clears the armed state")
+    settings.whisperEditBox:FireScript("OnEditFocusGained")
+    settings.whisperEditBox:SetText("Another {item} draft")
+    settings.whisperEditBox:FireScript("OnEditFocusLost")
+    settings.whisperResetButton:FireScript("OnClick")
+    h.now = h.now + 6
+    settings.whisperResetButton:FireScript("OnClick")
+    assertEqual(h.env.DoYouNeedItDB.settings.whisperTemplate, "Another {item} draft", "stale confirmation does not reset the template")
+    settings.whisperEditBox:FireScript("OnEditFocusGained")
+    settings.whisperEditBox:SetText("Final {item} draft")
+    settings.whisperEditBox:FireScript("OnEditFocusLost")
+    settings.whisperResetButton:FireScript("OnClick")
+    assertEqual(h.env.DoYouNeedItDB.settings.whisperTemplate, "Final {item} draft", "typing a new draft disarms the pending reset")
+end
+
+local function testSlidersPersistOnRelease()
+    local h = Harness.new()
+    h:loadAddon()
+    h:slash("delay 10")
+    h:slash("settings")
+    local settings = h.env.DoYouNeedItSettingsFrame
+    -- SaveDB reassigns the settings table, so identity (not the live value,
+    -- which previews already mutate) tells a preview tick from a real save.
+    local savedBefore = h.env.DoYouNeedItDB.settings
+    settings.delaySlider:SetValue(15)
+    assertEqual(h.env.DoYouNeedItDB.settings, savedBefore, "delay drag previews without saving")
+    assertEqual(settings.delayValue:GetText(), "15s", "delay drag updates its readout")
+    settings.delaySlider:FireScript("OnMouseUp")
+    assertTruthy(h.env.DoYouNeedItDB.settings ~= savedBefore, "delay release persists the value")
+    assertEqual(h.env.DoYouNeedItDB.settings.autoDelay, 15, "delay release stores the dragged value")
+    local fontSavedBefore = h.env.DoYouNeedItDB.settings
+    settings.fontSizeSlider:SetValue(20)
+    assertEqual(h.env.DoYouNeedItDB.settings, fontSavedBefore, "font-size drag previews without saving")
+    settings.fontSizeSlider:FireScript("OnMouseUp")
+    assertEqual(h.env.DoYouNeedItDB.settings.fontSize, 20, "font-size release stores the dragged value")
+    settings.delaySlider:SetValue(18)
+    settings.back:FireScript("OnClick")
+    assertEqual(h.env.DoYouNeedItDB.settings.autoDelay, 18, "leaving settings persists an unreleased drag")
+end
+
+local function testWheelIgnoredInSettings()
+    local h = tooltipHarness(8)
+    local main = h.env.DoYouNeedItFrame
+    main:FireScript("OnMouseWheel", -1)
+    local scrolled = h:visibleRows()[1].row
+    h:slash("settings")
+    main:FireScript("OnMouseWheel", -1)
+    h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
+    assertEqual(h:visibleRows()[1].row, scrolled, "wheel in settings does not move the loot reading position")
+end
+
+local function testColumnWidthsScaleWithFont()
+    local h = tooltipHarness(1)
+    local row = h:visibleRows()[1]
+    assertEqual(row.looter:GetWidth(), 90, "default looter column width")
+    assertEqual(row.drop:GetWidth(), 180, "default drop column width")
+    assertEqual(row.equipped:GetWidth(), 150, "default equipped column width")
+    assertEqual(h.env.DoYouNeedItFrame.columnDrop.points[1][4], 116, "default drop header anchor")
+    assertEqual(h.env.DoYouNeedItFrame.columnEquipped.points[1][4], 306, "default equipped header anchor")
+    h:slash("settings")
+    h.env.DoYouNeedItSettingsFrame.fontSizeSlider:SetValue(24)
+    h.env.DoYouNeedItSettingsFrame.fontSizeSlider:FireScript("OnMouseUp")
+    h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
+    row = h:visibleRows()[1]
+    assertEqual(row.looter:GetWidth(), 110, "large-font looter column grows")
+    assertEqual(row.drop:GetWidth(), 200, "large-font drop column grows")
+    assertEqual(row.equipped:GetWidth(), 160, "large-font equipped column grows")
+    local main = h.env.DoYouNeedItFrame
+    assertEqual(main.columnDrop.points[1][4], 136, "large-font drop header follows its column")
+    assertEqual(main.columnEquipped.points[1][4], 346, "large-font equipped header follows its column")
+    assertTruthy(8 + 110 + 8 + 200 + 10 + 160 <= 510 - 6, "scaled columns stay inside the row")
+    assertTruthy(row.dropLink:GetWidth() >= row.drop:GetWidth(), "drop hover target covers the scaled column")
+    assertTruthy(row.equippedLink:GetWidth() >= row.equipped:GetWidth(), "equipped hover target covers the scaled column")
+    local headerTop = -(main.columnPlayer.points[1][5] or 0)
+    local rowTop = -(row.points[1][5] or 0)
+    assertTruthy(headerTop < rowTop, "column headers stay above large-font rows")
+end
+
+local function testStatusReportsLiveLayout()
+    local h = Harness.new()
+    h:loadAddon()
+    h:slash("status")
+    local found = false
+    for _, message in ipairs(h.messages) do
+        if message:find("layout=540x300", 1, true) then
+            found = true
+        end
+    end
+    assertEqual(found, true, "status reports the live window size")
+end
+
+local function testResetPositionWithMissingDB()
+    local h = Harness.new()
+    h:loadAddon()
+    h.env.DoYouNeedItDB = nil
+    h:slash("resetpos")
+    assertTruthy(type(h.env.DoYouNeedItDB) == "table", "reset recreates missing storage")
+    assertEqual(h.env.DoYouNeedItFrame.points[1][1], "CENTER", "reset centers without prior storage")
+end
+
+local function testBrokenFontFallsBackToCompatible()
+    local gonePath = "Interface\\AddOns\\Gone\\gone.ttf"
+    local h = Harness.new({
+        lsmFonts = {
+            { name = "Gone Font", path = gonePath },
+            { name = "Friz Quadrata TT", path = "Fonts\\FRIZQT__.TTF" },
+            { name = "Arial Narrow", path = "Fonts\\ARIALN.TTF" },
+        },
+        db = { settings = { font = gonePath } },
+    })
+    h:loadAddon()
+    assertEqual(h.env.DoYouNeedItDB.settings.font, gonePath, "precondition: known shared-media font survives load")
+    addRealGear(h, 22501)
+    assertEqual(h:visibleRows()[1].drop.font, gonePath, "precondition: loot uses the selected shared-media font")
+    table.remove(h.options.lsmFonts, 1)
+    h:slash("delay 11")
+    local rows = h:visibleRows()
+    assertTruthy(#rows > 0, "precondition: loot rows exist for the font check")
+    assertEqual(rows[1].drop.font, "Fonts\\FRIZQT__.TTF", "unregistered font falls back instead of painting blind")
+end
+
 local tests = {
+    { "main window toplevel and geometry", testMainWindowToplevelAndGeometry },
+    { "guarded text tooltips", testTextTooltipsUseGuardedHelper },
+    { "whisper reset confirmation", testWhisperResetNeedsConfirmation },
+    { "slider release persistence", testSlidersPersistOnRelease },
+    { "wheel ignored in settings", testWheelIgnoredInSettings },
+    { "column widths scale with font", testColumnWidthsScaleWithFont },
+    { "status live layout", testStatusReportsLiveLayout },
+    { "reset position without storage", testResetPositionWithMissingDB },
+    { "broken font fallback", testBrokenFontFallsBackToCompatible },
     { "Russian settings font coverage", testRussianClientSettingsUseGlyphCapableFont },
     { "large-font picker geometry", testLargeFontPickerRowsFitText },
     { "settings gear tooltip dismissal", testSettingsGearTooltipDismissalIsOwnerScoped },
