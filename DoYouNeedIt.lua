@@ -2162,15 +2162,39 @@ local function SendWhisper(row, isAuto)
         row.whisperToken = nil
         row.whisperIsAuto = nil
         if ok then
-            if isAuto then
+            -- LIMITATION (client-accepted, not delivered): pcall success only
+            -- proves the chat API accepted the call on this client. Delivery,
+            -- throttling and offline targets are invisible here, so rapid
+            -- repeats are treated as suspected throttling: the row keeps a
+            -- retryable Ask instead of Sent.
+            local nowStamp = Now()
+            local lastStamp = Addon.lastWhisperSentAt
+            Addon.lastWhisperSentAt = nowStamp
+            if type(lastStamp) == "number" and type(nowStamp) == "number" and nowStamp - lastStamp < 1 then
+                Addon.fastWhisperStreak = (Addon.fastWhisperStreak or 0) + 1
+            else
+                Addon.fastWhisperStreak = 0
+            end
+            if (Addon.fastWhisperStreak or 0) >= 2 then
+                Addon.fastWhisperStreak = 0
+                row.statusKey = "whisper_failed"
+                row.whisperRetryable = true
+                RecordDiagnostic("whisper_throttled", {
+                    looter = target,
+                    itemLink = row.itemLink,
+                })
+            elseif isAuto then
                 row.autoWhispered = true
                 row.statusKey = "auto_sent"
+                row.whisperRetryable = nil
             else
                 row.manualWhispered = true
                 row.statusKey = "sent"
+                row.whisperRetryable = nil
             end
         else
             row.statusKey = "whisper_failed"
+            row.whisperRetryable = true
             RecordDiagnostic("whisper_failed", {
                 looter = target,
                 itemLink = row.itemLink,
@@ -2395,6 +2419,56 @@ function Addon.UpgradePendingLootToBonus(looter, itemLink, context, source)
     return updated
 end
 
+function Addon.AutoWhisperGap()
+    local jitter = 0
+    if math and type(math.random) == "function" then
+        local ok, value = pcall(math.random)
+        if ok and type(value) == "number" and value >= 0 and value < 1 then
+            jitter = value * 0.5
+        end
+    end
+    return 1.5 + jitter
+end
+
+function Addon.PumpAutoWhisperQueue()
+    Addon.autoWhisperPumpScheduled = false
+    if Addon.state == nil or Addon.state.settings == nil then
+        return
+    end
+    local now = Now()
+    -- Cap in-flight automatic sends at one: a queued row waits while the
+    -- active automatic send has not resolved yet.
+    for index = 1, #Addon.autoWhisperQueue do
+        local queued = Addon.autoWhisperQueue[index]
+        if type(queued) == "table" and queued.whisperInFlight == true and queued.whisperIsAuto == true then
+            Addon.autoWhisperPumpScheduled = true
+            C_Timer.After(Addon.AutoWhisperGap(), Addon.PumpAutoWhisperQueue)
+            return
+        end
+    end
+    while #Addon.autoWhisperQueue > 0 do
+        local row = table.remove(Addon.autoWhisperQueue, 1)
+        if type(row) == "table" and row.pendingAutoWhisper == true and row.autoToken ~= nil
+            and IsRowStillTracked(row) and Addon.state.settings.autoWhisper == true
+            and row.unsafe ~= true and row.askable ~= false and not Core.IsHiddenLootRow(row) then
+            local last = Addon.autoWhisperLastDispatchAt
+            if type(last) == "number" and type(now) == "number" and now - last < 1.5 then
+                table.insert(Addon.autoWhisperQueue, 1, row)
+                Addon.autoWhisperPumpScheduled = true
+                C_Timer.After((last + 1.5 - now) + (Addon.AutoWhisperGap() - 1.5), Addon.PumpAutoWhisperQueue)
+                return
+            end
+            Addon.autoWhisperLastDispatchAt = now
+            SendWhisper(row, true)
+            break
+        end
+    end
+    if #Addon.autoWhisperQueue > 0 and not Addon.autoWhisperPumpScheduled then
+        Addon.autoWhisperPumpScheduled = true
+        C_Timer.After(Addon.AutoWhisperGap(), Addon.PumpAutoWhisperQueue)
+    end
+end
+
 local function ScheduleAutoWhisper(row)
     local decision = Core.GetAutoWhisperDecision(Addon.state.settings, row)
     if not decision.shouldSchedule then
@@ -2409,17 +2483,13 @@ local function ScheduleAutoWhisper(row)
     row.statusText = nil
     RefreshRows()
 
-    C_Timer.After(decision.delay, function()
-        if row.autoToken ~= token or not row.pendingAutoWhisper then
-            return
-        end
-        if Addon.state.settings.autoWhisper ~= true or row.unsafe == true then
-            CancelPendingAuto(row)
-            RefreshRows()
-            return
-        end
-        SendWhisper(row, true)
-    end)
+    -- FIFO pacing: the head keeps its configured delay, followers dispatch
+    -- through the pump at least 1.5s (+ jitter) apart, one in flight.
+    Addon.autoWhisperQueue[#Addon.autoWhisperQueue + 1] = row
+    if not Addon.autoWhisperPumpScheduled then
+        Addon.autoWhisperPumpScheduled = true
+        C_Timer.After(decision.delay, Addon.PumpAutoWhisperQueue)
+    end
 end
 
 function Addon.AddRowToListOnce(list, row)
@@ -5025,6 +5095,9 @@ local function CancelAllPendingAuto(cancelManual)
         return
     end
 
+    -- Drop queued automatic rows with the flags below; an armed pump then
+    -- finds an empty queue and stops by itself.
+    Addon.autoWhisperQueue = {}
     local seen = {}
     local function cancelList(list)
         if type(list) ~= "table" then
@@ -5227,6 +5300,11 @@ local function Initialize()
     Addon.pendingItems = {}
     Addon.lootGeneration = 0
     Addon.recentLootKeys = {}
+    Addon.lastWhisperSentAt = nil
+    Addon.fastWhisperStreak = 0
+    Addon.autoWhisperQueue = {}
+    Addon.autoWhisperPumpScheduled = false
+    Addon.autoWhisperLastDispatchAt = nil
     Addon.currentHistoryFallbackGroup = nil
     Addon.challengeCompletedAt = nil
     Addon.challengeFinalizeToken = nil

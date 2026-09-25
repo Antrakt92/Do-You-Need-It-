@@ -226,6 +226,58 @@ function tests.clearInvalidatesDetailedMetadataRecovery()
     equal(#h.sentMessages, 0, "cleared metadata recovery cannot start a whisper")
 end
 
+function tests.autoWhisperQueuePacesSends()
+    local h = Harness.new({ db = { settings = { autoWhisper = true, autoDelay = 3 } } })
+    h:loadAddon()
+    h.timers = {}
+    h:resetSideEffects()
+    for id = 29121, 29123 do
+        h:fireLoot("Otherplayer", h:addItem(id, { name = "Paced Sword " .. tostring(id) }))
+    end
+    equal(#h:visibleRows(), 3, "three automatic rows queue in the same tick")
+    h:runTimers(3, 10)
+    equal(#h.sentMessages, 1, "first automatic whisper sends on schedule")
+    h:runTimers(3, 5)
+    equal(#h.sentMessages, 1, "no same-tick automatic spam while the pacing gap holds")
+    h.now = h.now + 2
+    h:runTimers(3, 5)
+    equal(#h.sentMessages, 2, "second automatic whisper sends after the pacing gap")
+    h.now = h.now + 2
+    h:runTimers(3, 5)
+    equal(#h.sentMessages, 3, "third automatic whisper sends after its own gap")
+    for _, frame in ipairs(h:visibleRows()) do
+        equal(frame.row.statusKey, "auto_sent", "paced automatic rows all report sent")
+    end
+end
+
+function tests.rapidRepeatsSuspectThrottling()
+    local h = fresh(false)
+    for id = 29111, 29113 do
+        h:fireLoot("Otherplayer", h:addItem(id, { name = "Throttle Sword " .. tostring(id) }))
+    end
+    local frames = h:visibleRows()
+    equal(#frames, 3, "three manual asks start in the same tick")
+    for _, frame in ipairs(frames) do
+        frame.whisper:FireScript("OnClick")
+    end
+    h:runTimers(0, 10)
+    equal(#h.sentMessages, 3, "every repeat still reaches the chat API")
+    local sent, failed, failedFrame = 0, 0, nil
+    for _, frame in ipairs(h:visibleRows()) do
+        if frame.row.statusKey == "sent" then
+            sent = sent + 1
+        elseif frame.row.statusKey == "whisper_failed" then
+            failed = failed + 1
+            failedFrame = frame
+        end
+    end
+    equal(sent, 2, "paced repeats are accepted by the client")
+    equal(failed, 1, "a third same-tick repeat is suspected throttling")
+    equal(failedFrame.row.whisperRetryable, true, "suspected throttling stays retryable")
+    equal(failedFrame.row.manualWhispered, nil, "suspected throttling never marks the row sent")
+    equal(failedFrame.whisper:IsEnabled(), true, "suspected throttling leaves Ask enabled")
+end
+
 function tests.reloadKeepsSingleDetailedRowForVariantTwins()
     local generic = "|cffa335ee|Hitem:29203:::::::::::::|h[Reload Drop]|h|r"
     local detailed = "|cffa335ee|Hitem:29203::::::::::::1:9999:|h[Reload Drop]|h|r"
