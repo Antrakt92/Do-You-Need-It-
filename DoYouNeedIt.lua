@@ -207,7 +207,7 @@ local function CleanNumber(value)
         return nil
     end
     local ok, number = pcall(tonumber, value)
-    if ok then
+    if ok and type(number) == "number" and number == number and number ~= math.huge and number ~= -math.huge then
         return number
     end
     return nil
@@ -1196,12 +1196,12 @@ local function ReadItemMetadata(itemLink)
     }, {
         name = CleanString(itemName),
         link = CleanString(resolvedLink),
-        quality = quality,
+        quality = CleanNumber(quality),
         itemLevel = Addon.ReadItemLevel(itemLink),
         classID = metadataClassID,
         subclassID = metadataSubclassID,
         equipLoc = metadataEquipLoc,
-        bindType = bindType,
+        bindType = CleanNumber(bindType),
         tradeTimeRemaining = TooltipHasTradeTimer(itemLink),
         isAccountBound = isAccountBound,
         isAccountBoundUntilEquipped = isAccountBoundUntilEquipped,
@@ -1239,7 +1239,7 @@ function Addon.ReadItemLevel(itemLink)
         local _, _, _, fallbackItemLevel = GetItemInfoCompat(itemLink)
         itemLevel = CleanNumber(fallbackItemLevel)
     end
-    if not itemLevel or itemLevel <= 0 or itemLevel == math.huge or itemLevel == -math.huge then
+    if not (itemLevel and itemLevel > 0 and itemLevel < math.huge) then
         return nil
     end
     return itemLevel
@@ -3374,7 +3374,7 @@ end
 function Addon.HandleEncounterLootReceived(encounterID, itemID, itemLink, quantity, playerName, classFileName)
     RecordDiagnostic("loot_event", {
         source = "encounter",
-        itemID = tonumber(itemID),
+        itemID = CleanNumber(itemID),
         looter = CleanString(playerName),
         classToken = CleanString(classFileName),
     })

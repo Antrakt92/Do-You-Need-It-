@@ -396,8 +396,19 @@ local PERSISTED_GROUP_KEYS = {
     endedAt = "number",
 }
 
+local function safeTonumber(value)
+    -- WHY: in combat Blizzard may hand us secret-tagged values; a bare
+    -- tonumber on those raises inside the loot event flow. pcall keeps the
+    -- row alive and lets callers fall back to unknown/not-askable.
+    local ok, number = pcall(tonumber, value)
+    if not ok then
+        return nil
+    end
+    return number
+end
+
 local function asNumber(value, fallback)
-    local number = tonumber(value)
+    local number = safeTonumber(value)
     if number == nil or number ~= number or number == math.huge or number == -math.huge then
         return fallback
     end
@@ -957,13 +968,13 @@ local function isItemLink(link)
 end
 
 local function isValidClassID(classID)
-    local number = tonumber(classID)
+    local number = asNumber(classID, nil)
     return number == 2 or number == 4
 end
 
 local function isVisibleQuality(quality, minQuality)
-    local number = tonumber(quality)
-    return number ~= nil and number >= minQuality
+    local number = asNumber(quality, nil)
+    return number ~= nil and number >= asNumber(minQuality, 0)
 end
 
 function Core.FontPathKey(fontPath)
@@ -1639,9 +1650,9 @@ function Core.ResolvePlayerCanEquip(item, playerClassToken, apiCanEquip)
         return true
     end
 
-    local classID = tonumber(item.classID or item.itemClassID)
+    local classID = asNumber(item.classID or item.itemClassID, nil)
     if classID == 4 and ARMOR_SPECIALIZATION_EQUIP_LOCS[equipLoc] == true then
-        local subclassID = tonumber(item.subclassID or item.itemSubclassID)
+        local subclassID = asNumber(item.subclassID or item.itemSubclassID, nil)
         local preferredSubclassID = PLAYER_ARMOR_SUBCLASS_BY_CLASS[playerClassToken or ""]
         if subclassID == nil or preferredSubclassID == nil then
             return nil
@@ -1666,7 +1677,7 @@ function Core.ResolveTradeStatus(item)
         return "trade_no"
     end
 
-    local bindType = tonumber(item.bindType)
+    local bindType = asNumber(item.bindType, nil)
     if bindType == 4 then
         return "trade_no"
     end
@@ -1716,7 +1727,7 @@ function Core.ClassifyTradeCandidate(item, looter, playerName, settings)
     if item.canTrade == false then
         return { visible = false, reason = "not_tradeable" }
     end
-    local bindType = tonumber(item.bindType)
+    local bindType = asNumber(item.bindType, nil)
     if bindType == nil and item.tradeTimeRemaining ~= true and item.canTrade ~= true then
         return { visible = false, reason = "bind_unknown" }
     end
