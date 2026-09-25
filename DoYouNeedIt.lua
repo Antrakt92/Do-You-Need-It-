@@ -636,6 +636,12 @@ local function RecordDiagnostic(stage, fields)
 end
 
 local function BuildRoster()
+    local previous = {}
+    for _, entry in ipairs(Addon.rosterEntries or {}) do
+        if type(entry) == "table" and type(entry.fullName) == "string" then
+            previous[entry.fullName] = true
+        end
+    end
     local entries = {}
 
     local function addUnit(unit)
@@ -657,8 +663,23 @@ local function BuildRoster()
     for index = 1, 40 do
         addUnit("raid" .. index)
     end
+    local current = {}
+    for _, entry in ipairs(entries) do
+        if type(entry.fullName) == "string" then
+            current[entry.fullName] = true
+        end
+    end
     Addon.rosterEntries = entries
     Addon.roster = Core.CreateRosterIndex(entries)
+    -- Report departed full names so roster events can invalidate only their
+    -- equipment cache instead of wiping fresh entries of the living.
+    local departed = {}
+    for name in pairs(previous) do
+        if not current[name] then
+            departed[#departed + 1] = name
+        end
+    end
+    return departed
 end
 
 local function ResolveUnitForName(name)
@@ -1439,11 +1460,32 @@ local function AddScanUnit(queue, seen, unit, source)
     }
 end
 
-local function QueueEquipmentScan(source, quiet)
+function Addon.InvalidateEquipmentCacheForNames(names)
+    if type(names) ~= "table" or type(Addon.equipmentCache) ~= "table" then
+        return 0
+    end
+    local removed = 0
+    for index = 1, #names do
+        local fullName = names[index]
+        if type(fullName) == "string" and fullName ~= "" then
+            if Addon.equipmentCache[fullName] ~= nil then
+                Addon.equipmentCache[fullName] = nil
+                removed = removed + 1
+            end
+            local shortName = fullName:match("^([^-]+)")
+            if shortName and shortName ~= fullName and Addon.equipmentCache[shortName] ~= nil then
+                Addon.equipmentCache[shortName] = nil
+                removed = removed + 1
+            end
+        end
+    end
+    return removed
+end
+
+function Addon.RebuildEquipmentScanQueue(source)
     if not Addon.state then
         return 0
     end
-
     BuildRoster()
     local queue = {}
     local seen = {}
@@ -1454,15 +1496,23 @@ local function QueueEquipmentScan(source, quiet)
     for index = 1, 40 do
         AddScanUnit(queue, seen, "raid" .. index, source)
     end
-
     Addon.equipmentScanQueue = queue
     RemoveQueuedScanInspectRequests()
+    return #queue
+end
+
+local function QueueEquipmentScan(source, quiet)
+    if not Addon.state then
+        return 0
+    end
+
+    local count = Addon.RebuildEquipmentScanQueue(source)
     RecordDiagnostic("scan_queued", {
         reason = source or "manual",
-        count = #queue,
+        count = count,
     })
     ScheduleEquipmentScan(0)
-    return #queue
+    return count
 end
 
 StartEquipmentScan = function()
@@ -5183,6 +5233,7 @@ local function Initialize()
     Addon.recentEncounterFinalizeToken = nil
     Addon.equipmentScanQueue = {}
     Addon.equipmentScanScheduled = false
+    Addon.rosterScanPendingAfterCombat = nil
     Addon.lootPatterns = Core.CreateLootMessagePatterns({
         lootSelf = LOOT_ITEM_SELF,
         lootSelfMultiple = LOOT_ITEM_SELF_MULTIPLE,
@@ -5259,6 +5310,10 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         QueueEquipmentScan("entering_world", true)
     elseif event == "PLAYER_REGEN_ENABLED" then
         Addon.ResumeInspectWorkAfterCombat(3)
+        if Addon.rosterScanPendingAfterCombat then
+            Addon.rosterScanPendingAfterCombat = nil
+            QueueEquipmentScan("group_roster_update", true)
+        end
     elseif event == "CHALLENGE_MODE_START" then
         Addon.challengeCompletedAt = nil
         Addon.challengeFinalizeToken = nil
@@ -5272,9 +5327,19 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         Addon.challengeFinalizeToken = nil
         Addon.recentEncounterFinalizeToken = nil
     elseif event == "GROUP_ROSTER_UPDATE" then
-        BuildRoster()
-        Addon.equipmentCache = {}
-        QueueEquipmentScan("group_roster_update", true)
+        local departed = BuildRoster()
+        Addon.InvalidateEquipmentCacheForNames(departed)
+        if InCombatLockdown and InCombatLockdown() then
+            -- Pause in combat: cache is already trimmed, the shared combat-end
+            -- wakeup requeues the scan.
+            Addon.rosterScanPendingAfterCombat = true
+        elseif Addon.equipmentScanScheduled then
+            -- Coalesce roster storms into the already armed scan: refresh
+            -- membership without arming another timer.
+            Addon.RebuildEquipmentScanQueue("group_roster_update")
+        else
+            QueueEquipmentScan("group_roster_update", true)
+        end
     elseif event == "ENCOUNTER_START" then
         local encounterID, encounterName = ...
         if Addon.state and (#Addon.state.currentRows > 0 or #(Addon.state.allRows or {}) > 0) then

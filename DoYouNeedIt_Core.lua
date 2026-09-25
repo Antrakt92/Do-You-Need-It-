@@ -363,6 +363,26 @@ local UNIVERSAL_EQUIP_LOCS = {
     INVTYPE_CLOAK = true,
 }
 
+-- Static weapon proficiency by class (item subclass IDs for classID 2).
+-- Fallback only: consulted when the usability API is silent (nil), and only
+-- ever denies. Known gaps resolve to false (never ask); allowed or unknown
+-- combinations stay unknown (nil) so a silent API can never grant Ask.
+local WEAPON_PROFICIENCY_BY_CLASS = {
+    WARRIOR = { [0] = true, [1] = true, [4] = true, [5] = true, [6] = true, [7] = true, [8] = true, [10] = true, [13] = true, [15] = true },
+    PALADIN = { [0] = true, [1] = true, [4] = true, [5] = true, [6] = true, [7] = true, [8] = true },
+    HUNTER = { [0] = true, [1] = true, [2] = true, [3] = true, [6] = true, [7] = true, [8] = true, [10] = true, [13] = true, [15] = true, [18] = true },
+    ROGUE = { [0] = true, [2] = true, [3] = true, [4] = true, [7] = true, [13] = true, [15] = true, [18] = true },
+    PRIEST = { [4] = true, [10] = true, [15] = true, [19] = true },
+    DEATHKNIGHT = { [0] = true, [1] = true, [4] = true, [5] = true, [6] = true, [7] = true, [8] = true },
+    SHAMAN = { [0] = true, [1] = true, [4] = true, [5] = true, [10] = true, [13] = true, [15] = true },
+    MAGE = { [7] = true, [10] = true, [15] = true, [19] = true },
+    WARLOCK = { [7] = true, [10] = true, [15] = true, [19] = true },
+    MONK = { [0] = true, [4] = true, [6] = true, [7] = true, [10] = true, [13] = true },
+    DRUID = { [4] = true, [5] = true, [6] = true, [10] = true, [13] = true, [15] = true },
+    DEMONHUNTER = { [0] = true, [7] = true, [9] = true, [13] = true, [15] = true },
+    EVOKER = { [0] = true, [4] = true, [7] = true, [10] = true, [13] = true, [15] = true },
+}
+
 local PERSISTED_ROW_KEYS = {
     id = "string",
     looter = "string",
@@ -1647,6 +1667,11 @@ function Core.ResolvePlayerCanEquip(item, playerClassToken, apiCanEquip)
 
     local equipLoc = item.equipLoc or ""
     if UNIVERSAL_EQUIP_LOCS[equipLoc] == true then
+        -- Universal slots are usable by every class, but a conservative
+        -- usability API still wins: explicit false is never overridden.
+        if apiCanEquip == false then
+            return false
+        end
         return true
     end
 
@@ -1658,6 +1683,15 @@ function Core.ResolvePlayerCanEquip(item, playerClassToken, apiCanEquip)
             return nil
         end
         return subclassID == preferredSubclassID
+    end
+
+    if classID == 2 and apiCanEquip == nil then
+        local subclassID = asNumber(item.subclassID or item.itemSubclassID, nil)
+        local proficient = WEAPON_PROFICIENCY_BY_CLASS[playerClassToken or ""]
+        if type(proficient) == "table" and subclassID ~= nil and proficient[subclassID] ~= true then
+            return false
+        end
+        return nil
     end
 
     if type(apiCanEquip) == "boolean" then

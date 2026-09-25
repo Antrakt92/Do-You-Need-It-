@@ -888,6 +888,72 @@ local function testDepartedLooterMidFlightInspectStaysSafe()
     assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 1, "departed looter row is retained")
 end
 
+local function countScanQueued(h)
+    local count = 0
+    for _, entry in ipairs(h.env.DoYouNeedItDB.diagnostics or {}) do
+        if entry.stage == "scan_queued" then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+local function testRosterStormKeepsFreshCacheOfLiving()
+    local h = Harness.new()
+    h:setInventoryLink("party1", "MainHandSlot", "|cff1eff00|Hitem:36:::::::::::::|h[Storm Worn Sword]|h|r")
+    h:loadAddon()
+    assertEqual(h:runNextTimer(0), true, "storm test starts with player capture")
+    assertEqual(h:runNextTimer(1.1), true, "storm test starts party inspect")
+    h:fire("INSPECT_READY", "PartyGUID1")
+    h.timers = {}
+    h:resetSideEffects()
+    -- Drop the live link so loot rows fall back to the seeded scan cache.
+    h:setInventoryLink("party1", "MainHandSlot", nil)
+    h:slash("debug on")
+    local queuedBefore = countScanQueued(h)
+    for _ = 1, 5 do
+        h:fire("GROUP_ROSTER_UPDATE")
+    end
+    assertTruthy(countScanQueued(h) - queuedBefore <= 1, "roster storm coalesces into the armed scan without requeueing")
+    assertTruthy(#h.timers <= 1, "coalesced roster storm arms no extra scan timers")
+    local item = addWeapon(h, 21108, "Storm Survivor Sword")
+    h:fireLoot("Otherplayer", item)
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "post-storm loot stays visible")
+    assertTruthy(rows[1].row.equippedText:find("Cached: ", 1, true), "post-storm loot reuses the fresh living cache")
+    assertTruthy(rows[1].row.equippedText:find("Storm Worn Sword", 1, true), "post-storm cache content is intact")
+end
+
+local function testRosterUpdatePausesScanInCombat()
+    local h = Harness.new()
+    h:setInventoryLink("party1", "MainHandSlot", "|cff1eff00|Hitem:37:::::::::::::|h[Combat Worn Sword]|h|r")
+    h:loadAddon()
+    assertEqual(h:runNextTimer(0), true, "combat test starts with player capture")
+    assertEqual(h:runNextTimer(1.1), true, "combat test starts party inspect")
+    h:fire("INSPECT_READY", "PartyGUID1")
+    h.timers = {}
+    h:resetSideEffects()
+    -- Drop the live link so loot rows fall back to the seeded scan cache.
+    h:setInventoryLink("party1", "MainHandSlot", nil)
+    h:slash("debug on")
+    h.env.InCombatLockdown = function()
+        return true
+    end
+    h:fire("GROUP_ROSTER_UPDATE")
+    assertEqual(countScanQueued(h), 0, "combat roster update queues no scan")
+    assertEqual(#h.timers, 0, "combat roster update arms no scan timer")
+    h.env.InCombatLockdown = function()
+        return false
+    end
+    h:fire("PLAYER_REGEN_ENABLED")
+    assertEqual(countScanQueued(h), 1, "combat-end wakeup runs the deferred roster scan")
+    local item = addWeapon(h, 21109, "Combat Survivor Sword")
+    h:fireLoot("Otherplayer", item)
+    local rows = h:visibleRows()
+    assertEqual(#rows, 1, "post-combat loot stays visible")
+    assertTruthy(rows[1].row.equippedText:find("Combat Worn Sword", 1, true), "combat pause keeps the fresh living cache")
+end
+
 testDelayedPersonalLootComparison("metadata", false)
 testDelayedPersonalLootComparison("slot", false)
 testDelayedPersonalLootComparison("metadata", true)
@@ -900,5 +966,7 @@ testSecretGuidSkipsInspectWithoutBurningRetries()
 testSecretItemValuesDegradeGracefully()
 testFailedNotifyInspectRecoversOnRetry()
 testDepartedLooterMidFlightInspectStaysSafe()
+testRosterStormKeepsFreshCacheOfLiving()
+testRosterUpdatePausesScanInCombat()
 
 print("runtime inspect ok")

@@ -182,7 +182,12 @@ assertEqual(Core.ResolvePlayerCanEquip({
     classID = 4,
     subclassID = 1,
     equipLoc = "INVTYPE_CLOAK",
-}, "DEATHKNIGHT", false), true, "cloak remains askable even when usability API is conservative")
+}, "DEATHKNIGHT", false), false, "cloak respects a conservative usability API")
+assertEqual(Core.ResolvePlayerCanEquip({
+    classID = 4,
+    subclassID = 0,
+    equipLoc = "INVTYPE_NECK",
+}, "SHAMAN", false), false, "neck respects a conservative usability API")
 assertEqual(Core.ResolvePlayerCanEquip({
     classID = 4,
     subclassID = 0,
@@ -208,6 +213,31 @@ assertEqual(Core.ResolvePlayerCanEquip({
     subclassID = 7,
     equipLoc = "INVTYPE_WEAPON",
 }, "MAGE", false), false, "unusable weapon is not askable")
+assertEqual(Core.ResolvePlayerCanEquip({
+    classID = 2,
+    subclassID = 1,
+    equipLoc = "INVTYPE_WEAPON",
+}, "MAGE", nil), false, "static proficiency denies a two-handed axe for a mage when the API is silent")
+assertEqual(Core.ResolvePlayerCanEquip({
+    classID = 2,
+    subclassID = 19,
+    equipLoc = "INVTYPE_WEAPON",
+}, "WARRIOR", nil), false, "static proficiency denies a wand for a warrior when the API is silent")
+assertEqual(Core.ResolvePlayerCanEquip({
+    classID = 2,
+    subclassID = 7,
+    equipLoc = "INVTYPE_WEAPON",
+}, "MAGE", nil), nil, "static proficiency never grants Ask for an allowed weapon when the API is silent")
+assertEqual(Core.ResolvePlayerCanEquip({
+    classID = 2,
+    subclassID = 7,
+    equipLoc = "INVTYPE_WEAPON",
+}, "WARRIOR", nil), nil, "allowed weapons stay unknown instead of askable without API evidence")
+assertEqual(Core.ResolvePlayerCanEquip({
+    classID = 2,
+    subclassID = 7,
+    equipLoc = "INVTYPE_WEAPON",
+}, "UNKNOWNCLASS", nil), nil, "unknown classes stay unknown instead of denied by the static table")
 
 local accepted = Core.ClassifyTradeCandidate({
     link = "|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r",
