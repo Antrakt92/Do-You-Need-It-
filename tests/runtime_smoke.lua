@@ -508,7 +508,7 @@ local function testChallengeCompletionKeepsEndLootInHistory()
     h:fireLoot("Otherplayer", item)
 
     assertEqual(#h.env.DoYouNeedItDB.history, 0, "challenge end loot waits briefly for more chest drops")
-    h:runTimers(3)
+    h:runTimers(10)
 
     assertEqual(#h.env.DoYouNeedItDB.history, 1, "challenge completion moves end loot to history")
     assertTruthy(h.env.DoYouNeedItDB.history[1].title:find("Ruby Life Pools", 1, true), "challenge history uses dungeon name")

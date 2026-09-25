@@ -1854,16 +1854,47 @@ groupTitle = function(meta, dropCount)
     return base .. " (" .. tostring(dropCount) .. " " .. noun .. ")"
 end
 
+-- Display-time history title: groups completed with instance/encounter names
+-- re-render on the active locale instead of showing the frozen
+-- completion-time string. Legacy groups without names keep their stored
+-- title verbatim; groups without any title resolve to nil.
 local function rowMergeKey(row)
     if type(row) ~= "table" then
         return nil
     end
     local id = type(row.id) == "string" and row.id or ""
     local itemID = tonumber(row.itemID) or Core.ExtractItemID(row.itemLink)
-    -- Older saved groups can reuse an ID across reloads for different drops.
+    -- Identity is id+looter+itemID+timestamp, matching the runtime merge key.
+    -- Older saved groups can reuse an ID across reloads for different drops;
+    -- the full link is compared only when upgrading an item variant below.
     return id .. "\031" .. tostring(row.looter or "") .. "\031"
-        .. tostring(itemID or row.itemLink or "") .. "\031"
+        .. tostring(itemID or "") .. "\031"
         .. tostring(row.timestamp or "")
+end
+
+function Core.UpgradeRowLinkToDetailed(stored, incoming)
+    if type(stored) ~= "table" or type(incoming) ~= "table" then
+        return false
+    end
+    local newLink = incoming.itemLink
+    local oldLink = stored.itemLink
+    if type(newLink) ~= "string" or newLink == "" or newLink == oldLink then
+        return false
+    end
+    if type(oldLink) == "string" and oldLink ~= "" and #newLink <= #oldLink then
+        return false
+    end
+    local newID = Core.ExtractItemID(newLink)
+    if not newID then
+        return false
+    end
+    local oldID = tonumber(stored.itemID) or Core.ExtractItemID(oldLink)
+    if oldID ~= nil and oldID ~= newID then
+        return false
+    end
+    stored.itemLink = newLink
+    stored.itemID = newID
+    return true
 end
 
 appendUniqueRows = function(target, rows, preferIncoming)
@@ -1887,6 +1918,8 @@ appendUniqueRows = function(target, rows, preferIncoming)
             seen[key] = #target
         elseif key and preferIncoming then
             target[seen[key]] = row
+        elseif key then
+            Core.UpgradeRowLinkToDetailed(target[seen[key]], row)
         end
     end
     return target

@@ -78,6 +78,29 @@ tests[#tests + 1] = function()
 end
 tests[#tests + 1] = function()
     local h = fresh()
+    local item = h:addItem(34004, { name = "Late Warband Sword", bindType = 2 })
+    h:fireLoot("Otherplayer", item)
+    equal(#h:visibleRows(), 1, "bind-on-equip drop starts visible")
+    h.items[34004].bindToAccountUntilEquip = true
+    h:runTimers(2, 100)
+    equal(#h:visibleRows(), 0, "late warband confirmation hides the row")
+    local saved = h.env.DoYouNeedItDB.sessionAllRows
+    equal(#saved, 1, "bounded warband recheck keeps history")
+    equal(saved[1].statusKey, "warband_bound", "bounded warband recheck stores an explicit reason")
+    equal(saved[1].tradeStatusKey, "trade_no", "bounded warband recheck clears the likely-transfer claim")
+    equal(#h.sentMessages, 0, "bounded warband recheck never starts a whisper")
+end
+tests[#tests + 1] = function()
+    local h = fresh()
+    local item = h:addItem(34005, { name = "Ordinary BoE Sword", bindType = 2 })
+    h:fireLoot("Otherplayer", item)
+    equal(#h:visibleRows(), 1, "ordinary drop starts visible")
+    h:runTimers(2, 100)
+    equal(#h:visibleRows(), 1, "bounded warband recheck leaves ordinary bind-on-equip visible")
+    equal(h.env.DoYouNeedItDB.sessionAllRows[1].statusKey, "candidate", "unconfirmed row keeps its askable status")
+end
+tests[#tests + 1] = function()
+    local h = fresh()
     for id = 34010, 34018 do h:fireLoot("Otherplayer", h:addItem(id, {})) end
     h.env.DoYouNeedItFrame:FireScript("OnMouseWheel", -1)
     h:fireLoot("Otherplayer", h:addItem(34019, {}))

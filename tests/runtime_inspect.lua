@@ -83,6 +83,19 @@ local function findDiagnostic(h, stage, reason)
     return nil
 end
 
+-- The bounded warband binding recheck (1.5s, one-shot) is metadata recovery,
+-- not inspect/scan polling: combat-park assertions ignore it by delay.
+local WARBAND_RECHECK_DELAY = 1.5
+local function nonBindingTimerCount(h)
+    local count = 0
+    for _, timer in ipairs(h.timers) do
+        if timer.delay ~= WARBAND_RECHECK_DELAY then
+            count = count + 1
+        end
+    end
+    return count
+end
+
 local function testDifferentGuidLootInspectsAreSerialized()
     local h = newLoadedHarness()
     local first = addWeapon(h, 21001, "First Sword")
@@ -553,7 +566,7 @@ local function testLootInspectWaitsForCombatWithoutUsingRetries()
     local item = addWeapon(h, 21901, "Combat Drop")
     h:fireLoot("Otherplayer", item)
     local row = h:visibleRows()[1].row
-    assertEqual(#h.timers, 0, "combat loot inspect parks without timers")
+    assertEqual(nonBindingTimerCount(h), 0, "combat loot inspect parks without inspect timers")
     assertEqual(row.inspectRetryCount, nil, "combat wait does not spend the inspect retry budget")
     assertEqual(#h.notifyInspectCalls, 0, "combat loot cannot issue NotifyInspect")
     combat = false
@@ -611,7 +624,7 @@ local function testCombatParksAnAlreadyScheduledLootRetry()
     combat = true
     h:runNextTimer(0.8)
     assertEqual(row.inspectRetryCount, 1, "queued retry reaching combat preserves its budget")
-    assertEqual(#h.timers, 0, "queued retry parks instead of scheduling more combat timers")
+    assertEqual(nonBindingTimerCount(h), 0, "queued retry parks instead of scheduling more combat timers")
     combat = false
     h:fire("PLAYER_REGEN_ENABLED")
     assertEqual(#h.notifyInspectCalls, 2, "parked retry resumes once after combat")
@@ -624,15 +637,17 @@ local function testCombatLootWakeupIsBoundedAndCancellationSafe()
     h.env.InCombatLockdown = function() return combat end
     h:fireLoot("Otherplayer", addWeapon(h, 21903, "Cleared Combat Drop"))
     for _ = 1, 20 do h:fire("PLAYER_REGEN_ENABLED") end
-    assertEqual(#h.timers, 1, "lagging regen events share one pending wakeup")
-    local staleTimer = table.remove(h.timers, 1)
+    assertEqual(nonBindingTimerCount(h), 1, "lagging regen events share one pending wakeup")
+    -- The wakeup is the most recently armed timer (the one-shot binding
+    -- recheck arms first at loot intake).
+    local staleTimer = table.remove(h.timers)
     h:slash("clear")
     h:fireLoot("Secondplayer", addWeapon(h, 21904, "Current Combat Drop"))
     h:fire("PLAYER_REGEN_ENABLED")
     combat = false
     staleTimer.callback()
     assertEqual(#h.notifyInspectCalls, 0, "old wakeup cannot consume a replacement loot queue")
-    assertEqual(#h.timers, 1, "old wakeup leaves the current callback intact")
+    assertEqual(nonBindingTimerCount(h), 1, "old wakeup leaves the current callback intact")
     h:runNextTimer(0.25)
     assertEqual(#h.notifyInspectCalls, 1, "current wakeup resumes exactly once")
     assertEqual(h.notifyInspectCalls[1], "party2", "cleared loot was not resurrected")
@@ -642,6 +657,8 @@ local function testCombatLootWakeupIsBoundedAndCancellationSafe()
     blocked.env.InCombatLockdown = function() return true end
     blocked:fireLoot("Otherplayer", addWeapon(blocked, 21905, "Long Combat Drop"))
     blocked:fire("PLAYER_REGEN_ENABLED")
+    -- Drain the one-shot binding recheck first so the retry budget below counts inspect wakeups only.
+    assertEqual(blocked:runNextTimer(nil), true, "binding recheck drains before the wakeup budget")
     assertEqual(blocked:runTimers(nil, 20), 3, "loot-only wakeup has the same three-retry budget")
     assertEqual(#blocked.timers, 0, "loot-only wakeup cannot poll forever")
     assertEqual(blocked:visibleRows()[1].row.inspectRetryCount, nil, "API lag does not spend loot retries")
@@ -654,7 +671,7 @@ local function testSameLooterCombatRowsShareOneResumedInspect()
     h.env.InCombatLockdown = function() return combat end
     h:fireLoot("Otherplayer", addWeapon(h, 21906, "First Combat Sword"))
     h:fireLoot("Otherplayer", addWeapon(h, 21907, "Second Combat Sword"))
-    assertEqual(#h.timers, 0, "multiple combat drops remain timer-free")
+    assertEqual(nonBindingTimerCount(h), 0, "multiple combat drops remain free of inspect timers")
     combat = false
     h:fire("PLAYER_REGEN_ENABLED")
     assertEqual(#h.notifyInspectCalls, 1, "same-looter parked rows coalesce after combat")

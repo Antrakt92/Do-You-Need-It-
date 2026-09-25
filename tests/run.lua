@@ -554,6 +554,23 @@ do
         } },
     }, 10, 50, 60)
     assertEqual(#colliding[1].allRows, 2, "legacy repeated row IDs preserve distinct saved drops")
+
+    local variantGeneric = "|cffa335ee|Hitem:29202:::::::::::::|h[Variant Drop]|h|r"
+    local variantDetailed = "|cffa335ee|Hitem:29202::::::::::::1:9999:|h[Variant Drop]|h|r"
+    local variantState = Core.CreateState({})
+    variantState.currentRows = {
+        { id = "row1", looter = "Otherplayer", itemLink = variantGeneric, itemID = 29202, timestamp = 2000 },
+    }
+    variantState.allRows = { variantState.currentRows[1] }
+    Core.CompleteCurrentGroup(variantState, { instanceName = "Dungeon", encounterName = "Boss", endedAt = 2000, mergeWindow = 120 })
+    variantState.currentRows = {
+        { id = "row1", looter = "Otherplayer", itemLink = variantDetailed, itemID = 29202, timestamp = 2000 },
+    }
+    variantState.allRows = { variantState.currentRows[1] }
+    Core.CompleteCurrentGroup(variantState, { instanceName = "Dungeon", encounterName = "Boss", endedAt = 2005, mergeWindow = 120 })
+    assertEqual(#variantState.history, 1, "same encounter window keeps one history group")
+    assertEqual(#variantState.history[1].allRows, 1, "generic and detailed links of one drop merge once")
+    assertEqual(variantState.history[1].allRows[1].itemLink, variantDetailed, "merged drop keeps the detailed item variant")
 end
 
 Core.AddVisibleRow(mergeState, {

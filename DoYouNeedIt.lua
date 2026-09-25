@@ -24,7 +24,7 @@ local Addon = {
     recentLootDedupeSeconds = 8,
     challengeCompletedAt = nil,
     challengeFinalizeToken = nil,
-    challengeLootFinalizeDelay = 3,
+    challengeLootFinalizeDelay = 10,
     recentEncounterFinalizeToken = nil,
     encounterLootFinalizeDelay = 10,
     fontStrings = {},
@@ -983,11 +983,17 @@ function Addon.ScheduleChallengeHistoryFinalize(reason)
             return
         end
         Addon.challengeFinalizeToken = nil
+        -- Late M+ chest loot can still be resolving when the run closes: drain
+        -- every bucket that can complete now so it joins its run inside grace,
+        -- then close only a run that actually owns loot rows.
+        Addon.DrainCompletablePendingLoot()
         if Addon.HasCurrentLootRows() then
             RecordDiagnostic("challenge_history_complete", {
                 reason = reason or "challenge_completed",
             })
             Addon.CompleteCurrentGroup(Addon.currentEncounterName)
+        elseif Addon.IsRecentChallengeCompletion() then
+            Addon.ScheduleChallengeHistoryFinalize(reason)
         end
     end)
 end
@@ -1916,9 +1922,13 @@ function Addon.RowMergeKey(row)
     if type(row) ~= "table" then
         return nil
     end
+    -- Identity is id+looter+itemID+timestamp: reloads reuse row IDs, so the
+    -- full link is compared only when upgrading an item variant, never to
+    -- tell two rows apart.
+    local itemID = tonumber(row.itemID) or Core.ExtractItemID(row.itemLink)
     return tostring(row.id or "")
         .. "\031" .. tostring(row.looter or "")
-        .. "\031" .. tostring(row.itemLink or "")
+        .. "\031" .. tostring(itemID or "")
         .. "\031" .. tostring(row.timestamp or "")
 end
 
@@ -1930,8 +1940,13 @@ function Addon.AppendUniqueRows(target, seen, rows)
         local row = rows[index]
         local key = Addon.RowMergeKey(row)
         if key and not seen[key] then
-            seen[key] = true
+            seen[key] = #target + 1
             target[#target + 1] = row
+        elseif key then
+            local stored = target[seen[key]]
+            if type(stored) == "table" then
+                Core.UpgradeRowLinkToDetailed(stored, row)
+            end
         end
     end
 end
@@ -2982,6 +2997,59 @@ Addon.ResumeInspectWorkAfterCombat = function(retries)
     end
 end
 
+function Addon.ScheduleWarbandRecheck(row, metadata)
+    -- WHY: ReadAccountBinding runs only at intake, but warband-until-equipped
+    -- flags can resolve a moment later while bindType 2/3 still reports BoE.
+    -- A single bounded recheck hides a row that confirms as warband-bound
+    -- without deleting its history; anything else leaves the row untouched.
+    if type(row) ~= "table" or type(metadata) ~= "table" then
+        return
+    end
+    if metadata.bindType ~= 2 and metadata.bindType ~= 3 then
+        return
+    end
+    if metadata.isAccountBound == true or metadata.isAccountBoundUntilEquipped == true then
+        return
+    end
+    if row.tradeStatusKey ~= "trade_likely" then
+        return
+    end
+    local token = {}
+    row.warbandRecheckToken = token
+    local generation = Addon.lootGeneration or 0
+    local itemLink = row.itemLink
+    -- One bounded recheck inside the 1-2s binding-resolution window.
+    C_Timer.After(1.5, function()
+        if row.warbandRecheckToken ~= token then
+            return
+        end
+        row.warbandRecheckToken = nil
+        if generation ~= (Addon.lootGeneration or 0) then
+            return
+        end
+        if row.itemLink ~= itemLink or not IsRowStillTracked(row) then
+            return
+        end
+        local bound, untilEquip = ReadAccountBinding(itemLink)
+        if bound ~= true and untilEquip ~= true then
+            return
+        end
+        CancelPendingAuto(row, true)
+        row.isAccountBound = bound == true
+        row.isAccountBoundUntilEquipped = untilEquip == true
+        row.tradeStatusKey = "trade_no"
+        row.reason = "warband_bound"
+        row.statusKey = "warband_bound"
+        Addon.SyncRowAskability(row, false)
+        RecordDiagnostic("warband_recheck_hidden", {
+            looter = row.looter,
+            itemLink = itemLink,
+        })
+        SaveDB()
+        RefreshRows()
+    end)
+end
+
 local function AddTradeCandidate(looter, itemLink, metadata, context)
     context = type(context) == "table" and context or BuildDropContext(false)
     local playerName = SafePlayerName()
@@ -3075,6 +3143,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
     if askable and context.isGroupInstance == true then
         ScheduleAutoWhisper(row)
     end
+    Addon.ScheduleWarbandRecheck(row, metadata)
     Addon.demoRows = nil
     Addon.currentHistoryFallbackGroup = nil
     Addon.RestoreReadingPosition(reading, true)
@@ -3323,6 +3392,25 @@ local function MergeDuplicatePendingLoot(looter, itemLink, context, source)
         end
     end
     return false
+end
+
+function Addon.DrainCompletablePendingLoot()
+    -- Finalize paths call this before closing a run: every pending bucket
+    -- whose item data resolves now becomes rows; unresolvable buckets keep
+    -- their own bounded retries instead of being dropped or duplicated.
+    if type(Addon.pendingItems) ~= "table" then
+        return
+    end
+    local links = {}
+    for itemLink in pairs(Addon.pendingItems) do
+        links[#links + 1] = itemLink
+    end
+    for index = 1, #links do
+        local bucket = Addon.pendingItems[links[index]]
+        if type(bucket) == "table" then
+            ProcessPendingItem(links[index], bucket)
+        end
+    end
 end
 
 local function InvalidatePendingLoot()

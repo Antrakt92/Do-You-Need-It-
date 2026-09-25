@@ -226,6 +226,64 @@ function tests.clearInvalidatesDetailedMetadataRecovery()
     equal(#h.sentMessages, 0, "cleared metadata recovery cannot start a whisper")
 end
 
+function tests.reloadKeepsSingleDetailedRowForVariantTwins()
+    local generic = "|cffa335ee|Hitem:29203:::::::::::::|h[Reload Drop]|h|r"
+    local detailed = "|cffa335ee|Hitem:29203::::::::::::1:9999:|h[Reload Drop]|h|r"
+    local h = Harness.new()
+    h.units.player.realm = nil
+    h:loadAddon()
+    h:addItem(29203, { name = "Reload Drop" })
+    h:fireLoot("Otherplayer", generic)
+    local liveRow = h:visibleRows()[1].row
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 29203, detailed, 1, "Otherplayer", "PALADIN")
+    h:runTimers(0, 10)
+    equal(liveRow.itemLink, detailed, "live side upgrades to the detailed variant")
+    -- Plant what a pre-reload save held: the generic twin of the same drop.
+    local twin = { id = liveRow.id, looter = liveRow.looter, itemLink = generic, itemID = 29203, timestamp = liveRow.timestamp }
+    h.env.DoYouNeedItDB.characters["Player-Ravencrest"] = {
+        sessionRows = { twin },
+        sessionAllRows = { twin },
+        history = {},
+    }
+    h.units.player.realm = "Ravencrest"
+    h:fire("PLAYER_ENTERING_WORLD")
+    local merged = h.env.DoYouNeedItDB.characters["Player-Ravencrest"].sessionAllRows
+    equal(#merged, 1, "reload merge keeps one row for saved generic and live detailed twins")
+    equal(merged[1].itemLink, detailed, "reload merge keeps the detailed item variant")
+end
+
+function tests.lateChestLootWithinGraceStaysInOneGroup()
+    local h = fresh(false)
+    h:fireLoot("Otherplayer", h:addItem(29101, { name = "Dungeon Drop" }))
+    h:fire("CHALLENGE_MODE_COMPLETED")
+    h:runTimers(3, 100)
+    equal(#h.env.DoYouNeedItDB.history, 0, "challenge run waits past the old finalize delay for chest loot")
+    h.now = h.now + 5
+    h:fireLoot("Otherplayer", h:addItem(29102, { name = "Chest Drop" }))
+    h:runTimers(10, 100)
+    equal(#h.env.DoYouNeedItDB.history, 1, "challenge run closes as one group")
+    equal(#(h.env.DoYouNeedItDB.history[1].allRows or {}), 2, "late chest loot joins its challenge run instead of splitting")
+end
+
+function tests.challengeFinalizeDrainsCompletablePending()
+    local h = fresh(false)
+    h:addItem(29104, { name = "Pending Chest Drop", cacheLoaded = false })
+    local generic = "|cffa335ee|Hitem:29104:::::::::::::|h[Pending Drop]|h|r"
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 29104, generic, 1, "Otherplayer", "PALADIN")
+    equal(#(h.env.DoYouNeedItDB.sessionAllRows or {}), 0, "unresolved chest loot waits in its pending bucket")
+    h:fire("CHALLENGE_MODE_COMPLETED")
+    h.items[29104].cacheLoaded = true
+    local finalizeCount = 0
+    for index = #h.timers, 1, -1 do
+        if h.timers[index].delay == 10 then
+            finalizeCount = finalizeCount + 1
+            table.remove(h.timers, index).callback()
+        end
+    end
+    equal(finalizeCount, 1, "exactly one challenge finalize is armed")
+    equal(#h.env.DoYouNeedItDB.sessionAllRows, 1, "challenge finalize drains a bucket whose item data just resolved")
+end
+
 function tests.trackedEncounterDetailUpgradesChatGeneric()
     local h = fresh(false)
     local generic = "|cffa335ee|Hitem:29020:::::::::::::|h[Generic Drop]|h|r"
