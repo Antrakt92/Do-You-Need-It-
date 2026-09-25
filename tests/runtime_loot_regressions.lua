@@ -226,6 +226,30 @@ function tests.clearInvalidatesDetailedMetadataRecovery()
     equal(#h.sentMessages, 0, "cleared metadata recovery cannot start a whisper")
 end
 
+function tests.trackedEncounterDetailUpgradesChatGeneric()
+    local h = fresh(false)
+    local generic = "|cffa335ee|Hitem:29020:::::::::::::|h[Generic Drop]|h|r"
+    local full = "|cffa335ee|Hitem:29020::::::::::::1:9999:|h[Detailed Drop]|h|r"
+    h:addItem(29020, { name = "Detailed Drop" })
+    h:fireLoot("Otherplayer", generic)
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 29020, full, 1, "Otherplayer", "PALADIN")
+    h:runTimers(0, 10)
+    equal(#h.env.DoYouNeedItDB.sessionAllRows, 1, "detail upgrade keeps one drop")
+    equal(h.env.DoYouNeedItDB.sessionAllRows[1].itemLink, full, "encounter detail upgrades tracked chat generic")
+end
+
+function tests.trackedGenericEncounterCannotDowngradeChatDetail()
+    local h = fresh(false)
+    local generic = "|cffa335ee|Hitem:29021:::::::::::::|h[Generic Drop]|h|r"
+    local full = "|cffa335ee|Hitem:29021::::::::::::1:9999:|h[Detailed Drop]|h|r"
+    h:addItem(29021, { name = "Detailed Drop" })
+    h:fireLoot("Otherplayer", full)
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 29021, generic, 1, "Otherplayer", "PALADIN")
+    h:runTimers(0, 10)
+    equal(#h.env.DoYouNeedItDB.sessionAllRows, 1, "downgrade attempt keeps one drop")
+    equal(h.env.DoYouNeedItDB.sessionAllRows[1].itemLink, full, "generic encounter data cannot downgrade tracked chat detail")
+end
+
 local failed = 0
 for name, test in pairs(tests) do
     local ok, failure = pcall(test)

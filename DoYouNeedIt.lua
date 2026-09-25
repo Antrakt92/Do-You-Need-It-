@@ -2199,7 +2199,13 @@ function Addon.UpdateTrackedLootLink(row, itemLink, source)
         return false
     end
     if source ~= "chat" and type(row.itemLink) == "string" and row.itemLink ~= "" then
-        return false
+        -- Encounter (or other) links may only replace the tracked link when they
+        -- describe the same item in more detail (longer bonus payload wins).
+        local oldID = Core.ExtractItemID(row.itemLink)
+        local newID = Core.ExtractItemID(itemLink)
+        if not newID or newID ~= oldID or #itemLink <= #row.itemLink then
+            return false
+        end
     end
 
     row.itemLink = itemLink
@@ -3222,7 +3228,8 @@ local function MergeDuplicatePendingLoot(looter, itemLink, context, source)
             and Core.ExtractItemID(bucket.itemLink or pendingLink) == itemID
             and PendingBucketHasLooter(bucket, looter, generation)
         then
-            if source ~= "chat" then
+            if source ~= "chat" and #itemLink <= #(bucket.itemLink or pendingLink) then
+                -- Keep the already-tracked detailed variant; merge context only.
                 UpdatePendingWaiterContext(bucket, looter, context)
                 if not ProcessPendingItem(pendingLink, bucket) then
                     SchedulePendingItemRetry(pendingLink, bucket, 0)
