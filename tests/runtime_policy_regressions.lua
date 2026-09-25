@@ -82,6 +82,20 @@ function tests.encounterDuplicateAfterDelayedBonusCannotRestoreAsk()
     equal(#h.env.DoYouNeedItDB.sessionAllRows, 2, "later genuine bonus drop remains separate")
 end
 
+function tests.rosterUpdateProactivelyCancelsDepartedAutoWhisper()
+    local h = fresh(true)
+    local item = h:addItem(31306, { name = "Proactive Departed Sword" })
+    h:fireLoot("Otherplayer", item)
+    local row = h:visibleRows()[1].row
+    equal(row.statusKey, "auto_pending", "auto send is pending before departure")
+    h:removeUnit("party1")
+    h:fire("GROUP_ROSTER_UPDATE")
+    equal(row.statusKey, "candidate", "departure proactively clears pending auto status")
+    equal(row.pendingAutoWhisper or false, false, "departure proactively clears pending auto flag")
+    h:runTimers(10, 100)
+    equal(#h.sentMessages, 0, "proactively cancelled auto never sends")
+end
+
 local failed = 0
 for name, test in pairs(tests) do
     local ok, failure = pcall(test)

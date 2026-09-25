@@ -544,8 +544,11 @@ local function ExtractItemLink(message)
     if message == nil then
         return nil
     end
-    return message:match("(|c%x%x%x%x%x%x%x%x|Hitem:[^|]+|h%[[^%]]+%]|h|r)")
-        or message:match("(|Hitem:[^|]+|h%[[^%]]+%]|h)")
+    -- WHY: item names may contain "]" (e.g. "Sword [of Doom]"), so the name
+    -- is matched non-greedily up to the "]|h" terminator instead of the
+    -- first "]".
+    return message:match("(|c%x%x%x%x%x%x%x%x|Hitem:[^|]+|h%[(.-)%]|h|r)")
+        or message:match("(|Hitem:[^|]+|h%[(.-)%]|h)")
 end
 
 local function ShouldPersistDiagnostics()
@@ -2226,6 +2229,32 @@ local function CancelPendingAuto(row, cancelManual)
     end
 end
 
+-- Proactive cleanup: a departed looter's pending auto-whisper can no longer
+-- be delivered. The send-boundary guard already blocks it lazily; cancelling
+-- here removes the stale "auto in Ns" display immediately.
+function Addon.CancelPendingAutoForDeparted(departed)
+    if type(departed) ~= "table" or type(Addon.state) ~= "table" then
+        return
+    end
+    local changed = false
+    for index = 1, #departed do
+        local name = departed[index]
+        if type(name) == "string" and name ~= "" then
+            Addon.FindTrackedLootRowMatching(name, function(row)
+                if type(row) == "table" and (row.pendingAutoWhisper == true or row.statusKey == "auto_pending") then
+                    CancelPendingAuto(row)
+                    changed = true
+                end
+                return false
+            end)
+        end
+    end
+    if changed then
+        SaveDB()
+        RefreshRows()
+    end
+end
+
 function Addon.RemoveRowFromList(list, row)
     if type(list) ~= "table" or type(row) ~= "table" then
         return false
@@ -3647,6 +3676,10 @@ function Addon.HandleEncounterLootReceived(encounterID, itemID, itemLink, quanti
     local looter, unsafeReason = Addon.ResolveEncounterLootLooter(playerName, classFileName)
     local context = BuildDropContext(unsafeReason ~= nil, unsafeReason)
     context.classToken = CleanString(classFileName)
+    -- Mirror the chat path: encounter loot can be our own (bonus/personal),
+    -- and revalidation checks row.isSelfLoot before reopening Ask.
+    local selfName = SafePlayerName()
+    context.isSelfLoot = type(looter) == "string" and type(selfName) == "string" and looter == selfName
     if unsafeReason == "ambiguous_looter" then
         context.skipDuplicateLoot = true
     end
@@ -5406,6 +5439,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         Addon.recentEncounterFinalizeToken = nil
     elseif event == "GROUP_ROSTER_UPDATE" then
         local departed = BuildRoster()
+        Addon.CancelPendingAutoForDeparted(departed)
         Addon.InvalidateEquipmentCacheForNames(departed)
         if InCombatLockdown and InCombatLockdown() then
             -- Pause in combat: cache is already trimmed, the shared combat-end

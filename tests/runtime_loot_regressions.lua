@@ -360,6 +360,28 @@ function tests.trackedGenericEncounterCannotDowngradeChatDetail()
     equal(h.env.DoYouNeedItDB.sessionAllRows[1].itemLink, full, "generic encounter data cannot downgrade tracked chat detail")
 end
 
+function tests.bracketItemNameExtractsFullLink()
+    local h = fresh(false)
+    local item = h:addItem(29030, { name = "Bracker] Blade" })
+    h:fireLoot("Otherplayer", item)
+    h:runTimers(0, 10)
+    equal(#h.env.DoYouNeedItDB.sessionAllRows, 1, "bracket name still produces one drop")
+    equal(h.env.DoYouNeedItDB.sessionAllRows[1].itemLink, item, "bracket name preserves full link")
+end
+
+function tests.encounterOwnLootNeverAskable()
+    local h = fresh(false)
+    local item = h:addItem(29031, { name = "Own Boss Sword" })
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 29031, item, 1, "Player", "WARRIOR")
+    h:runTimers(0, 10)
+    equal(#h.env.DoYouNeedItDB.sessionAllRows, 1, "own encounter loot is tracked once")
+    -- isSelfLoot lives on the live row (DB snapshots persist only askable
+    -- state; the name-based Core fallback re-derives it after reload).
+    local live = h:visibleRows()[1].row
+    equal(live.isSelfLoot, true, "own encounter loot is flagged self")
+    equal(live.askable, false, "own encounter loot never shows Ask")
+end
+
 local failed = 0
 for name, test in pairs(tests) do
     local ok, failure = pcall(test)
