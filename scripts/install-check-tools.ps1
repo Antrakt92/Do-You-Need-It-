@@ -30,6 +30,10 @@ function Install-Lua51 {
     }
 
     Write-Host "Installing lua51 $LuaPackageVersion with Chocolatey..."
+    # The lua51 Chocolatey package publishes no checksums, so installs cannot
+    # verify them. Integrity is anchored after install instead: the pinned
+    # tool path wins resolution and Assert-Lua51Version requires the exact
+    # pinned version below.
     & $choco install lua51 --version $LuaPackageVersion -y --no-progress --allow-empty-checksums 2>&1 |
         ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) {
@@ -59,7 +63,8 @@ function Require-Tool {
 function Assert-Lua51Version {
     param(
         [string]$Label,
-        [string]$Path
+        [string]$Path,
+        [string]$ExpectedVersion
     )
 
     $output = @(& $Path -v 2>&1)
@@ -67,8 +72,10 @@ function Assert-Lua51Version {
         throw "$Label -v failed with exit code $LASTEXITCODE`: $($output -join ' ')"
     }
     $text = ($output -join "`n").Trim()
-    if ($text -notmatch "Lua\s+5\.1") {
-        throw "$Label must be Lua 5.1, got: $text"
+    # Exact pinned match: 5.1.5 must not accept 5.1.50 or a LuaJIT 5.1 shim.
+    $escaped = [regex]::Escape($ExpectedVersion)
+    if ($text -notmatch "Lua\s+$escaped(?!\.\d)") {
+        throw "$Label must be Lua $ExpectedVersion, got: $text"
     }
     Write-Host "${Label} version: $text"
 }
@@ -100,16 +107,16 @@ function Add-ToolDirectoryToPath {
 
 $lua = Require-Tool `
     -Label "lua5.1" `
-    -Names @("lua5.1", "C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe")
+    -Names @("C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe", "lua5.1")
 
 $luac = Require-Tool `
     -Label "luac5.1" `
-    -Names @("luac5.1", "C:\ProgramData\chocolatey\lib\lua51\tools\luac5.1.exe")
+    -Names @("C:\ProgramData\chocolatey\lib\lua51\tools\luac5.1.exe", "luac5.1")
 
 Add-ToolDirectoryToPath -ToolPath $lua
 Add-ToolDirectoryToPath -ToolPath $luac
 
-Assert-Lua51Version -Label "lua5.1" -Path $lua
-Assert-Lua51Version -Label "luac5.1" -Path $luac
+Assert-Lua51Version -Label "lua5.1" -Path $lua -ExpectedVersion $LuaPackageVersion
+Assert-Lua51Version -Label "luac5.1" -Path $luac -ExpectedVersion $LuaPackageVersion
 
 Write-Host "Do You Need It check tools are available."
