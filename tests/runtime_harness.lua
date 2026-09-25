@@ -598,6 +598,41 @@ function Harness:loadAddon()
     self:fire("ADDON_LOADED", "DoYouNeedIt")
 end
 
+-- Secret-tagged combat values cannot be reproduced with plain Lua 5.1 strings
+-- (a bare tonumber never throws there). This hostile proxy raises on every
+-- read/concat/compare/tostring instead, so unguarded uses fail loudly while
+-- guarded Clean*/pcall paths degrade to unknown. One fidelity gap remains:
+-- bare tonumber(proxy) returns nil instead of throwing; tonumber-adjacent
+-- guards are therefore proven only for graceful fallback, not for throw safety.
+function Harness:secretValue(label)
+    local proxy = {}
+    self.secretProxies[proxy] = true
+    local function reject()
+        error("secret value use: " .. tostring(label), 2)
+    end
+    setmetatable(proxy, {
+        __index = reject,
+        __newindex = reject,
+        __tostring = reject,
+        __concat = reject,
+        __eq = reject,
+        __lt = reject,
+        __le = reject,
+        __unm = reject,
+        __add = reject,
+        __sub = reject,
+        __mul = reject,
+        __div = reject,
+    })
+    return proxy
+end
+
+function Harness:markUnitSecret(unit)
+    local entry = self.units[unit] or {}
+    entry.secretGUID = true
+    self.units[unit] = entry
+end
+
 function Harness.new(options)
     local self = setmetatable({
         options = options or {},
@@ -615,6 +650,8 @@ function Harness.new(options)
         items = {},
         inventoryLinks = {},
         canInspect = {},
+        secretProxies = {},
+        failNotifyInspectOnce = false,
         instanceName = options and options.instanceName or "Ruby Life Pools",
         instanceType = options and options.instanceType or "party",
         inGroup = options == nil or options.inGroup ~= false,
@@ -767,8 +804,8 @@ function Harness.new(options)
     env.InCombatLockdown = function()
         return false
     end
-    env.issecretvalue = function()
-        return false
+    env.issecretvalue = function(value)
+        return self.secretProxies[value] == true
     end
 
     self.units = {
@@ -786,7 +823,14 @@ function Harness.new(options)
         return nil
     end
     env.UnitGUID = function(unit)
-        return self.units[unit] and self.units[unit].guid or nil
+        local entry = self.units[unit]
+        if not entry then
+            return nil
+        end
+        if entry.secretGUID == true then
+            return self:secretValue("guid:" .. tostring(unit))
+        end
+        return entry.guid
     end
     env.UnitClassBase = function(unit)
         return self.units[unit] and self.units[unit].classToken or nil
@@ -833,6 +877,11 @@ function Harness.new(options)
             local _, _, _, _, _, _, _, name, link, quality, itemLevel, requiredLevel, itemTypeText,
                 itemSubTypeText, stackCount, equipLoc, itemIcon, sellPrice, classID, subclassID, bindType,
                 expansionID, setID, isCraftingReagent = self:itemInfo(itemLink)
+            if info.secretValues == true then
+                quality = self:secretValue("quality:" .. tostring(itemID))
+                itemLevel = self:secretValue("itemLevel:" .. tostring(itemID))
+                bindType = self:secretValue("bindType:" .. tostring(itemID))
+            end
             return name, link, quality, itemLevel, requiredLevel, itemTypeText, itemSubTypeText, stackCount,
                 equipLoc, itemIcon, sellPrice, classID, subclassID, bindType, expansionID, setID, isCraftingReagent
         end,
@@ -902,6 +951,10 @@ function Harness.new(options)
     env.SendChatMessage = env.C_ChatInfo.SendChatMessage
     env.NotifyInspect = function(unit)
         self.notifyInspectCalls[#self.notifyInspectCalls + 1] = unit
+        if self.failNotifyInspectOnce then
+            self.failNotifyInspectOnce = false
+            error("NotifyInspect failed")
+        end
     end
     env.ClearInspectPlayer = function()
         self.clearInspectCalls = self.clearInspectCalls + 1

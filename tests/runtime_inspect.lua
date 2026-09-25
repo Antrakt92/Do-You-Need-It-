@@ -816,6 +816,61 @@ local function testPersistentOutOfRangeStaysBounded()
     assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 1, "failed range-deferred loot is retained")
 end
 
+local function testSecretGuidSkipsInspectWithoutBurningRetries()
+    local h = newLoadedHarness()
+    local item = addWeapon(h, 21104, "Secret GUID Sword")
+    h:markUnitSecret("party1")
+    h:fireLoot("Otherplayer", item)
+    assertEqual(#h.notifyInspectCalls, 0, "secret GUID never reaches NotifyInspect")
+    h:runTimers(nil, 100)
+    assertEqual(#h.notifyInspectCalls, 0, "secret GUID retries never inspect")
+    assertEqual(#h.timers, 0, "secret GUID recovery stops scheduling")
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 1, "secret GUID loot is retained")
+    for _, saved in ipairs(h.env.DoYouNeedItDB.sessionAllRows) do
+        for key, value in pairs(saved) do
+            assertEqual(type(value) == "table", false, "no secret proxy persists in saved row field " .. tostring(key))
+        end
+    end
+end
+
+local function testSecretItemValuesDegradeGracefully()
+    local h = newLoadedHarness()
+    local item = addWeapon(h, 21105, "Secret Data Sword")
+    h:slash("debug on")
+    h.items[21105].secretValues = true
+    h:fireLoot("Otherplayer", item)
+    h:runTimers(3, 20)
+    assertEqual(#h:visibleRows(), 0, "secret values hide the row instead of crashing")
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 0, "secret values persist no unverified row")
+    assertTruthy(findDiagnostic(h, "metadata_failed", "retry_limit"), "secret values fail metadata boundedly")
+end
+
+local function testFailedNotifyInspectRecoversOnRetry()
+    local h = newLoadedHarness()
+    local item = addWeapon(h, 21106, "Flaky Inspect Sword")
+    h.failNotifyInspectOnce = true
+    h:fireLoot("Otherplayer", item)
+    assertEqual(#h.notifyInspectCalls, 1, "failed inspect still issues its request")
+    h:runTimers(1, 10)
+    assertTruthy(#h.notifyInspectCalls >= 2, "inspect timeout retries after a failed notify")
+    h:setInventoryLink("party1", "MainHandSlot", "|cff1eff00|Hitem:32:::::::::::::|h[Recovered Worn Sword]|h|r")
+    h:fire("INSPECT_READY", "PartyGUID1")
+    assertTruthy(h.env.DoYouNeedItDB.sessionRows[1].equippedText:find("Recovered Worn Sword", 1, true), "retry after failed notify completes")
+end
+
+local function testDepartedLooterMidFlightInspectStaysSafe()
+    local h = newLoadedHarness()
+    local item = addWeapon(h, 21107, "Departed Sword")
+    h:fireLoot("Otherplayer", item)
+    assertEqual(#h.notifyInspectCalls, 1, "departure test starts one inspect")
+    h:removeUnit("party1")
+    h:fire("GROUP_ROSTER_UPDATE")
+    h:runTimers(nil, 100)
+    assertEqual(#h.notifyInspectCalls, 1, "departed looter triggers no further inspects")
+    assertEqual(#h.timers, 0, "departed looter recovery stops scheduling")
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 1, "departed looter row is retained")
+end
+
 testDelayedPersonalLootComparison("metadata", false)
 testDelayedPersonalLootComparison("slot", false)
 testDelayedPersonalLootComparison("metadata", true)
@@ -824,5 +879,9 @@ testMissingPersonalLootComparisonStopsRetrying()
 testOutOfRangeDefersInspectWithoutBurningRetries()
 testRangeRecoveryResumesInspect()
 testPersistentOutOfRangeStaysBounded()
+testSecretGuidSkipsInspectWithoutBurningRetries()
+testSecretItemValuesDegradeGracefully()
+testFailedNotifyInspectRecoversOnRetry()
+testDepartedLooterMidFlightInspectStaysSafe()
 
 print("runtime inspect ok")
