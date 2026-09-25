@@ -1295,6 +1295,28 @@ local function CanInspectClean(unit)
     return CleanBoolean(result) == true
 end
 
+-- Returns true when the unit is in inspect range, false when definitely out
+-- of range, and nil when range cannot be determined (missing API or a
+-- secret-tagged result). Unknown range must never block inspection.
+local function CanInspectRangeClean(unit)
+    if type(unit) ~= "string" or unit == "" then
+        return nil
+    end
+    if type(UnitInRange) == "function" then
+        local inRange = CleanBoolean(SafeCall(UnitInRange, unit))
+        if inRange ~= nil then
+            return inRange
+        end
+    end
+    if type(CheckInteractDistance) == "function" then
+        local close = CleanBoolean(SafeCall(CheckInteractDistance, unit, 1))
+        if close ~= nil then
+            return close
+        end
+    end
+    return nil
+end
+
 local function CountEquipmentCacheEntries()
     local count = 0
     for _ in pairs(Addon.equipmentCache or {}) do
@@ -2759,6 +2781,41 @@ StartNextInspectRequest = function()
         FinishInspectRequest(request, "inspect_blocked", false)
         return
     end
+    if CanInspectRangeClean(unit) == false then
+        -- Out of range is not an inspection failure and must not spend the
+        -- bounded retry budget. Rotate to the back so other units proceed,
+        -- then resume with a longer delay. Repeated passes fail over to the
+        -- normal retry path exactly once per cycle, keeping this bounded.
+        request.rangePasses = (request.rangePasses or 0) + 1
+        if request.rangePasses > MAX_INSPECT_RETRIES then
+            request.rangePasses = nil
+            FinishInspectRequest(request, "out_of_range", false)
+            return
+        end
+        Addon.inspectQueue[#Addon.inspectQueue + 1] = request
+        Addon.inspectByGuid[request.guid] = request
+        local deferredRows = type(request.rows) == "table" and request.rows or {}
+        for index = 1, #deferredRows do
+            local deferredRow = deferredRows[index]
+            if type(deferredRow) == "table" and IsRowStillTracked(deferredRow)
+                and (deferredRow.equippedText == UNKNOWN_EQUIPPED or deferredRow.equippedText == EQUIPPED_UNAVAILABLE) then
+                deferredRow.equippedText = EQUIPPED_PENDING
+            end
+        end
+        RecordDiagnostic("inspect_out_of_range", {
+            looter = #deferredRows > 0 and deferredRows[1].looter or request.scan and request.scan.name,
+            passes = request.rangePasses,
+        })
+        local rangeGeneration = Addon.inspectGeneration or 0
+        C_Timer.After(INSPECT_RETRY_DELAY * 3, function()
+            if rangeGeneration ~= (Addon.inspectGeneration or 0) then return end
+            StartNextInspectRequest()
+        end)
+        SaveDB()
+        RefreshRows()
+        return
+    end
+    request.rangePasses = nil
 
     local rows = type(request.rows) == "table" and request.rows or {}
     request.token = {}

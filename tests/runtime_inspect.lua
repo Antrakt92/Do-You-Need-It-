@@ -771,10 +771,58 @@ local function testMissingPersonalLootComparisonStopsRetrying()
     assertTruthy(row.equippedText:find(equipped, 1, true), "failed metadata recovery preserves the equipment tooltip")
 end
 
+local function testOutOfRangeDefersInspectWithoutBurningRetries()
+    local h = newLoadedHarness()
+    local item = addWeapon(h, 21101, "Far Sword")
+    h:slash("debug on")
+    h.env.UnitInRange = function(unit) return false end
+    h:fireLoot("Otherplayer", item)
+    assertEqual(#h.notifyInspectCalls, 0, "out-of-range loot never calls NotifyInspect")
+    local row = h:visibleRows()[1].row
+    assertEqual(row.inspectRetryCount or 0, 0, "out-of-range defer spends no retries")
+    assertEqual(row.equippedText, "Equipped: checking...", "deferred row shows pending equipped text")
+    assertTruthy(findDiagnostic(h, "inspect_out_of_range"), "out-of-range defer is diagnosed")
+end
+
+local function testRangeRecoveryResumesInspect()
+    local h = newLoadedHarness()
+    local item = addWeapon(h, 21102, "Returning Sword")
+    h.env.UnitInRange = function(unit) return false end
+    h:fireLoot("Otherplayer", item)
+    assertEqual(#h.notifyInspectCalls, 0, "deferred loot starts no inspect while out of range")
+    h.env.UnitInRange = function(unit) return true end
+    h:runTimers(3, 10)
+    assertTruthy(#h.notifyInspectCalls >= 1, "back-in-range loot resumes inspection")
+    assertEqual(h.notifyInspectCalls[1], "party1", "resumed inspect targets the deferred looter")
+end
+
+local function testPersistentOutOfRangeStaysBounded()
+    local h = newLoadedHarness()
+    local item = addWeapon(h, 21103, "Distant Sword")
+    h:slash("debug on")
+    h.env.UnitInRange = function(unit) return false end
+    h:fireLoot("Otherplayer", item)
+    h:runTimers(3, 5)
+    local row = h:visibleRows()[1].row
+    assertTruthy(findDiagnostic(h, "inspect_out_of_range"), "repeated defers keep diagnosing range")
+    assertEqual(row.inspectRetryCount or 0, 0, "range deferral cannot burn the retry budget")
+    assertEqual(row.equippedText, "Equipped: checking...", "range-deferred row stays pending")
+    assertEqual(#h.notifyInspectCalls, 0, "persistent out-of-range never inspects")
+    h:runTimers(3, 300)
+    assertEqual(row.equippedText, "Equipped: unavailable", "hopeless range deferral eventually fails")
+    assertTruthy(findDiagnostic(h, "inspect_failed", "out_of_range"), "range exhaustion records out-of-range failure")
+    assertEqual(#h.notifyInspectCalls, 0, "failed range deferral never inspected")
+    assertEqual(#h.timers, 0, "range exhaustion stops scheduling")
+    assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 1, "failed range-deferred loot is retained")
+end
+
 testDelayedPersonalLootComparison("metadata", false)
 testDelayedPersonalLootComparison("slot", false)
 testDelayedPersonalLootComparison("metadata", true)
 testDelayedPersonalLootComparison("slot", true)
 testMissingPersonalLootComparisonStopsRetrying()
+testOutOfRangeDefersInspectWithoutBurningRetries()
+testRangeRecoveryResumesInspect()
+testPersistentOutOfRangeStaysBounded()
 
 print("runtime inspect ok")
