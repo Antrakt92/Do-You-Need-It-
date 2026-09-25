@@ -18,6 +18,32 @@ local MAX_CHAT_BYTES = 1280
 Core.DEFAULT_WHISPER_TEMPLATE = DEFAULT_WHISPER_TEMPLATE
 Core.MAX_WHISPER_TEMPLATE_LENGTH = MAX_WHISPER_TEMPLATE_LENGTH
 
+-- Bind types exposed by the item API: 1 pickup, 2 equip, 3 use, 4 quest.
+-- 0 (unbound) stays numeric at use sites: it shares the likely set below
+-- without being a named bind kind of its own.
+Core.BIND_ON_PICKUP = 1
+Core.BIND_ON_EQUIP = 2
+Core.BIND_ON_USE = 3
+Core.BIND_QUEST = 4
+
+Core.LIKELY_TRADE_BINDTYPES = {
+    [0] = true,
+    [Core.BIND_ON_EQUIP] = true,
+    [Core.BIND_ON_USE] = true,
+}
+
+-- Transfer-status text colors (UI-free data; rendering stays in main).
+Core.TRADE_STATUS_COLORS = {
+    trade_confirmed = { 0.25, 1.00, 0.35 },
+    trade_likely = { 0.75, 0.90, 0.25 },
+    trade_no = { 1.00, 0.35, 0.30 },
+    trade_unknown = { 1.00, 0.75, 0.20 },
+}
+
+-- Sub-second repeat streaks are suspected chat throttling, not delivery.
+Core.WHISPER_REPEAT_WINDOW = 1
+Core.WHISPER_REPEAT_STREAK_LIMIT = 2
+
 local LANGUAGE_OPTIONS = {
     { value = "auto", label = nil },
     { value = "enUS", label = "English" },
@@ -683,9 +709,7 @@ local function resolveRowStatus(row, useFallback)
         if seconds then
             return "auto_pending", tonumber(seconds)
         end
-        -- Unknown legacy free text carries no evidence; rendering it raw
-        -- would freeze foreign or corrupt strings on screen, so new rows
-        -- start from the neutral candidate state instead.
+        -- Legacy free text has no status evidence; fall back to candidate.
         return LEGACY_STATUS_TEXT_TO_KEY[text] or "candidate", nil
     end
 
@@ -1735,13 +1759,13 @@ function Core.ResolveTradeStatus(item)
     end
 
     local bindType = asNumber(item.bindType, nil)
-    if bindType == 4 then
+    if bindType == Core.BIND_QUEST then
         return "trade_no"
     end
     if item.canTrade == true or item.tradeTimeRemaining == true then
         return "trade_confirmed"
     end
-    if bindType == 0 or bindType == 2 or bindType == 3 then
+    if Core.LIKELY_TRADE_BINDTYPES[bindType] then
         return "trade_likely"
     end
     return "trade_unknown"
@@ -1788,10 +1812,10 @@ function Core.ClassifyTradeCandidate(item, looter, playerName, settings)
     if bindType == nil and item.tradeTimeRemaining ~= true and item.canTrade ~= true then
         return { visible = false, reason = "bind_unknown" }
     end
-    if bindType == 1 and item.tradeTimeRemaining ~= true then
+    if bindType == Core.BIND_ON_PICKUP and item.tradeTimeRemaining ~= true then
         return { visible = false, reason = "bind_on_pickup" }
     end
-    if bindType == 4 then
+    if bindType == Core.BIND_QUEST then
         return { visible = false, reason = "quest_bound" }
     end
     if item.playerCanEquip ~= true then
@@ -1911,10 +1935,8 @@ groupTitle = function(meta, dropCount)
     return base .. " (" .. tostring(dropCount) .. " " .. noun .. ")"
 end
 
--- Display-time history title: groups completed with instance/encounter names
--- re-render on the active locale instead of showing the frozen
--- completion-time string. Legacy groups without names keep their stored
--- title verbatim; groups without any title resolve to nil.
+-- Display-time history title: re-rendered on the active locale.
+-- Legacy groups without names keep their stored title verbatim.
 function Core.GetHistoryGroupTitle(group, locale)
     if type(group) ~= "table" then
         return nil
@@ -1947,9 +1969,8 @@ local function rowMergeKey(row)
     end
     local id = type(row.id) == "string" and row.id or ""
     local itemID = tonumber(row.itemID) or Core.ExtractItemID(row.itemLink)
-    -- Identity is id+looter+itemID+timestamp, matching the runtime merge key.
-    -- Older saved groups can reuse an ID across reloads for different drops;
-    -- the full link is compared only when upgrading an item variant below.
+    -- Identity is id+looter+itemID+timestamp; the full link only upgrades
+    -- variants below, never tells rows apart.
     return id .. "\031" .. tostring(row.looter or "") .. "\031"
         .. tostring(itemID or "") .. "\031"
         .. tostring(row.timestamp or "")

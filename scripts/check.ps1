@@ -2,10 +2,8 @@ $ErrorActionPreference = "Stop"
 
 Push-Location (Split-Path -Parent $PSScriptRoot)
 try {
-    # Tool-lock precondition: resolve pinned Lua 5.1 tools and assert their
-    # exact version before any gate evidence is produced. Without -Install
-    # this never installs; a missing tool fails here with the install hint
-    # instead of a cryptic CommandNotFound later.
+    # Tool-lock precondition: pinned Lua 5.1 tools, exact version, or a clear
+    # install hint instead of a cryptic CommandNotFound later.
     & "$PSScriptRoot\install-check-tools.ps1"
     & .\tests\release_ref.ps1
     & .\tests\package_upload.ps1

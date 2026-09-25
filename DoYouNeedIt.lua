@@ -27,6 +27,7 @@ local Addon = {
     challengeLootFinalizeDelay = 10,
     recentEncounterFinalizeToken = nil,
     encounterLootFinalizeDelay = 10,
+    warbandRecheckDelay = 1.5,
     fontStrings = {},
 }
 
@@ -757,15 +758,8 @@ function Addon.ApplyTradeStatusColor(fontString, statusKey)
     if not fontString or type(fontString.SetTextColor) ~= "function" then
         return
     end
-    if statusKey == "trade_confirmed" then
-        SafeCall(fontString.SetTextColor, fontString, 0.25, 1.00, 0.35, 1)
-    elseif statusKey == "trade_likely" then
-        SafeCall(fontString.SetTextColor, fontString, 0.75, 0.90, 0.25, 1)
-    elseif statusKey == "trade_no" then
-        SafeCall(fontString.SetTextColor, fontString, 1.00, 0.35, 0.30, 1)
-    else
-        SafeCall(fontString.SetTextColor, fontString, 1.00, 0.75, 0.20, 1)
-    end
+    local color = Core.TRADE_STATUS_COLORS[statusKey] or Core.TRADE_STATUS_COLORS.trade_unknown
+    SafeCall(fontString.SetTextColor, fontString, color[1], color[2], color[3], 1)
 end
 
 local function EnsureRowClassToken(row)
@@ -2227,20 +2221,18 @@ local function SendWhisper(row, isAuto)
         row.whisperToken = nil
         row.whisperIsAuto = nil
         if ok then
-            -- LIMITATION (client-accepted, not delivered): pcall success only
-            -- proves the chat API accepted the call on this client. Delivery,
-            -- throttling and offline targets are invisible here, so rapid
-            -- repeats are treated as suspected throttling: the row keeps a
+            -- LIMITATION: pcall proves client acceptance, not delivery.
+            -- Sub-second repeat streaks are suspected throttling: keep a
             -- retryable Ask instead of Sent.
             local nowStamp = Now()
             local lastStamp = Addon.lastWhisperSentAt
             Addon.lastWhisperSentAt = nowStamp
-            if type(lastStamp) == "number" and type(nowStamp) == "number" and nowStamp - lastStamp < 1 then
+            if type(lastStamp) == "number" and type(nowStamp) == "number" and nowStamp - lastStamp < Core.WHISPER_REPEAT_WINDOW then
                 Addon.fastWhisperStreak = (Addon.fastWhisperStreak or 0) + 1
             else
                 Addon.fastWhisperStreak = 0
             end
-            if (Addon.fastWhisperStreak or 0) >= 2 then
+            if (Addon.fastWhisperStreak or 0) >= Core.WHISPER_REPEAT_STREAK_LIMIT then
                 Addon.fastWhisperStreak = 0
                 row.statusKey = "whisper_failed"
                 row.whisperRetryable = true
@@ -2291,9 +2283,8 @@ local function CancelPendingAuto(row, cancelManual)
     end
 end
 
--- Proactive cleanup: a departed looter's pending auto-whisper can no longer
--- be delivered. The send-boundary guard already blocks it lazily; cancelling
--- here removes the stale "auto in Ns" display immediately.
+-- Proactive cleanup: drop the stale "auto in Ns" display for departed
+-- looters (the send-boundary guard already blocks delivery lazily).
 function Addon.CancelPendingAutoForDeparted(departed)
     if type(departed) ~= "table" or type(Addon.state) ~= "table" then
         return
@@ -3008,10 +2999,8 @@ StartNextInspectRequest = function()
         return
     end
     if CanInspectRangeClean(unit) == false then
-        -- Out of range is not an inspection failure and must not spend the
-        -- bounded retry budget. Rotate to the back so other units proceed,
-        -- then resume with a longer delay. Repeated passes fail over to the
-        -- normal retry path exactly once per cycle, keeping this bounded.
+        -- Out of range spends no retries: rotate to the back, resume later,
+        -- and fail over to the normal retry path after repeated passes.
         request.rangePasses = (request.rangePasses or 0) + 1
         if request.rangePasses > MAX_INSPECT_RETRIES then
             request.rangePasses = nil
@@ -3216,7 +3205,7 @@ function Addon.ScheduleWarbandRecheck(row, metadata)
     if type(row) ~= "table" or type(metadata) ~= "table" then
         return
     end
-    if metadata.bindType ~= 2 and metadata.bindType ~= 3 then
+    if metadata.bindType ~= Core.BIND_ON_EQUIP and metadata.bindType ~= Core.BIND_ON_USE then
         return
     end
     if metadata.isAccountBound == true or metadata.isAccountBoundUntilEquipped == true then
@@ -3230,7 +3219,7 @@ function Addon.ScheduleWarbandRecheck(row, metadata)
     local generation = Addon.lootGeneration or 0
     local itemLink = row.itemLink
     -- One bounded recheck inside the 1-2s binding-resolution window.
-    C_Timer.After(1.5, function()
+    C_Timer.After(Addon.warbandRecheckDelay, function()
         if row.warbandRecheckToken ~= token then
             return
         end
@@ -4873,11 +4862,8 @@ local function ArmDropdownPreviewHooks()
     end
 end
 
--- WHY eager-commit: leaving settings (Back, window close, loot arrival keeps
--- the panel open but Back always saves) deliberately persists the focused
--- whisper draft, mirroring how every other settings control applies
--- instantly. A Save/Discard confirmation step was considered too invasive
--- for a single text field, so Back keeps its save-on-exit contract.
+-- WHY eager-commit: leaving settings always saves the focused whisper
+-- draft, like every other control applies instantly. No Save/Discard step.
 function Addon.CommitFocusedWhisperTemplate()
     if Addon.whisperEditBox and Addon.whisperTemplateFocused and not Addon.committingWhisperTemplate then
         Addon.committingWhisperTemplate = true
@@ -5103,10 +5089,8 @@ CreateSettingsUI = function()
     frame.whisperResetButton:SetSize(58, 22)
     Addon.StyleButton(frame.whisperResetButton, false)
     frame.whisperResetButton:SetScript("OnClick", function()
-        -- One stray click used to erase a customized whisper template.
-        -- The first click only arms a 5-second confirmation ("Reset?"); only
-        -- a second click inside that window restores the default template.
-        -- Typing a new draft disarms the pending confirmation.
+        -- Two-click reset: the first click arms ("Reset?"), the second
+        -- inside 5s restores the default; typing disarms.
         local armedAt = tonumber(Addon.whisperResetArmedAt)
         if armedAt and Now() - armedAt <= 5 then
             Addon.whisperResetArmedAt = nil
