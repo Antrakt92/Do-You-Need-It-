@@ -39,7 +39,7 @@ Auto-whisper is **off by default**. If enabled, it waits 10 seconds by default; 
 
 Use `{item}` in a custom message, for example: `Hi, do you need {item}?` If the completed message is too long or contains invalid characters, the row explains the problem. Edit the message and use Ask again.
 
-Language defaults to **Auto**, following your client locale. English and Russian have the most complete text. German, Spanish, French, Italian, Brazilian Portuguese, Korean, and Simplified/Traditional Chinese are selectable, with English fallback for untranslated labels. Font and language pickers preview on hover and restore the saved choice if closed without a selection. Bundled LibSharedMedia and Blizzard fonts provide font choices and Cyrillic fallback.
+Language defaults to **Auto**, following your client locale. English and Russian have the most complete text. German, Spanish (Spain/Mexico), French, Italian, Brazilian Portuguese, Korean, and Simplified/Traditional Chinese are selectable, with English fallback for untranslated labels. Font and language pickers preview on hover and restore the saved choice if closed without a selection. Bundled LibSharedMedia and Blizzard fonts provide font choices and Cyrillic fallback.
 
 ## Commands
 
@@ -49,13 +49,14 @@ Language defaults to **Auto**, following your client locale. English and Russian
 | `/dyni settings` | Open settings. |
 | `/dyni auto on` / `/dyni auto off` | Enable or disable automatic whispers. |
 | `/dyni delay <seconds>` | Set the delay, clamped to 3–30 seconds. |
-| `/dyni clear` | Clear current rows while keeping saved history. |
+| `/dyni clear` | Clear current live/session rows while keeping saved history. |
 | `/dyni resetpos` | Center the window without resetting settings or history. |
 | `/dyni history` | Cycle history views. |
 | `/dyni scan` | Queue a group equipment scan. |
 | `/dyni test` | Preview sample rows without whispers or saved demo loot. |
 | `/dyni status` | Print settings, build, and layout. |
 | `/dyni debug on` | Save the last 20 loot-processing diagnostic entries. |
+| `/dyni debug off` | Stop saving diagnostic entries and clear saved diagnostics. |
 | `/dyni diag` | Print the newest diagnostic entries. |
 
 ## Help and development

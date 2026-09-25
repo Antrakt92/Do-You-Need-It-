@@ -40,9 +40,9 @@ try {
         throw "luac5.1 syntax check failed with exit code $LASTEXITCODE"
     }
 
-    $tocText = Get-Content -LiteralPath .\DoYouNeedIt.toc -Raw
-    $coreText = Get-Content -LiteralPath .\DoYouNeedIt_Core.lua -Raw
-    $readmeText = Get-Content -LiteralPath .\README.md -Raw
+    $tocText = Get-Content -LiteralPath .\DoYouNeedIt.toc -Raw -Encoding UTF8
+    $coreText = Get-Content -LiteralPath .\DoYouNeedIt_Core.lua -Raw -Encoding UTF8
+    $readmeText = Get-Content -LiteralPath .\README.md -Raw -Encoding UTF8
     if ($tocText -notmatch '(?m)^##\s*Version:\s*(\S+)\s*$') {
         throw "DoYouNeedIt.toc is missing ## Version"
     }
@@ -98,7 +98,7 @@ try {
     }
     if ($releaseWorkflowText -notmatch 'github\.run_attempt\s*!=\s*1' -or
         $releaseWorkflowText -notmatch 'dyni-release-\$\{\{\s*github\.ref_name\s*\}\}' -or
-        $releaseWorkflowText -notmatch '\^v\(\[0-9\]\+\\\.\[0-9\]\+\\\.\[0-9\]\+\)\$' -or
+        $releaseWorkflowText -notmatch '\^v\(0\|\[1-9\]\[0-9\]\*\)\\\.\(0\|\[1-9\]\[0-9\]\*\)\\\.\(0\|\[1-9\]\[0-9\]\*\)\$' -or
         $releaseWorkflowText -notmatch 'refs/tags/\$env:GITHUB_REF_NAME\^\{commit\}' -or
         $releaseWorkflowText -notmatch '\$env:GITHUB_SHA' -or
         $releaseWorkflowText -notmatch 'git merge-base --is-ancestor') {
@@ -132,6 +132,9 @@ try {
         $retryWorkflowText -notmatch 'persist-credentials:\s*false' -or
         [regex]::Matches($retryWorkflowText, '-ZipPath\b').Count -lt 2) {
         throw "CurseForge retry workflow is not bound to an explicitly confirmed exact tag"
+    }
+    if ($retryWorkflowText -notmatch '\^v\(0\|\[1-9\]\[0-9\]\*\)\\\.\(0\|\[1-9\]\[0-9\]\*\)\\\.\(0\|\[1-9\]\[0-9\]\*\)\$') {
+        throw "CurseForge retry workflow must use the canonical release tag format without leading zeros"
     }
     foreach ($releaseGuard in @(
         '.\scripts\check-release-policy.ps1',
@@ -199,6 +202,10 @@ try {
             throw "Third-party notice hash does not match the normalized library hash: $noticePath"
         }
     }
+    $expectedTopLicenseHash = '331FA945F01A0692888FF4122D5FE45E32F2274D531CE8FE2356749BDE7D4125'
+    if ((Get-NormalizedTextFileSha256 -Path 'LICENSE') -cne $expectedTopLicenseHash) {
+        throw "Top-level addon license text changed: LICENSE"
+    }
     $expectedLicenseHashes = @{
         'LICENSES/CallbackHandler-1.0-BSD-2-Clause.txt' = 'BB630CB510B8EBAFC0F04C82A2BA1D21BB13598DB5B45C890185E71E96E5D933'
         'LICENSES/LibSharedMedia-3.0-LGPL-2.1.txt' = '20E50FE7AAE3E56378EBF0417D9DE904F55A0E61E4DF315333E632A4D3555D95'
@@ -253,6 +260,7 @@ try {
                 "DoYouNeedIt/libs/CallbackHandler-1.0/CallbackHandler-1.0.lua",
                 "DoYouNeedIt/libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua",
                 "DoYouNeedIt/media/icon.png",
+                "DoYouNeedIt/README.md",
                 "DoYouNeedIt/CHANGELOG.md",
                 "DoYouNeedIt/LICENSE",
                 "DoYouNeedIt/THIRD-PARTY-NOTICES.md",
@@ -311,22 +319,39 @@ try {
 
     $forbidden = @(
         'C:\Users',
-        'Documents\GitHub\WOW',
+        'C:/Users',
+        'Documents\GitHub',
+        'WOW\',
         'Codex',
         'superpowers',
         'AGENTS.md',
         'CLAUDE.md',
         'AUDIT.md',
         'PLAN.md',
+        'NOTES.md',
+        'TASKS.md',
+        'TODO.md',
         'do-you-need-it-meta'
     )
 
+    # The definition lines above are the only allowed occurrence of these
+    # markers in this file; the rest of this file is scanned as well.
     $files = git ls-files |
-        Where-Object { $_ -ne 'scripts/check.ps1' } |
         ForEach-Object { Get-Item -LiteralPath $_ }
 
     foreach ($pattern in $forbidden) {
-        $matches = $files | Select-String -SimpleMatch -Pattern $pattern
+        if ($pattern -ceq 'NOTES.md') {
+            # Standalone mentions only: the release temp file release-notes.md is legitimate.
+            $matches = $files | Select-String -Pattern '(?<![A-Za-z0-9_-])NOTES\.md'
+        }
+        else {
+            $matches = $files | Select-String -SimpleMatch -Pattern $pattern
+        }
+        $matches = @($matches | Where-Object {
+            -not ($_.Path -match 'scripts[/\\]check\.ps1$' -and
+                ($_.Line -match ("^\s*'" + [regex]::Escape($pattern) + "',?\s*$") -or
+                 $_.Line -match '\$pattern -ceq'))
+        })
         if ($matches) {
             $matches | ForEach-Object {
                 Write-Error "Forbidden public-source text '$pattern' in $($_.Path):$($_.LineNumber)"
