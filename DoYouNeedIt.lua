@@ -6046,6 +6046,11 @@ function Addon.RunSelfTest(mode)
             and sessAllBefore == sessAllAfter and autoqBefore == autoqAfter
             and pendingBefore == pendingAfter and queueClean
     end
+    -- Live equipment scan kick: the same QueueEquipmentScan the /dyni scan
+    -- branch uses, only the source tag is honest about the caller. Queued
+    -- only — completion lands async in diagnostics (see /dyni diag), so the
+    -- report records the queued depth; cache/pending above stay pre-kick.
+    local scanKickQueued = QueueEquipmentScan("selftest", false)
     local finishedAt = CleanNumber(Now()) or 0
 
     local report = {
@@ -6083,6 +6088,9 @@ function Addon.RunSelfTest(mode)
             cleaned = demoCleaned,
             untouched = demoUntouched,
         },
+        scan = {
+            queued = scanKickQueued,
+        },
     }
     _G.DoYouNeedItSelfTest = { version = 1, finishedAt = finishedAt, report = report }
 
@@ -6102,6 +6110,8 @@ function Addon.RunSelfTest(mode)
     Print("selftest: demo rows=" .. tostring(demoBuilt) .. " rendered=" .. tostring(demoRendered)
         .. " cleaned=" .. (demoCleaned and "ok" or "FAIL")
         .. " untouched=" .. (demoUntouched and "ok" or "FAIL"))
+    Print("selftest: scan queued=" .. tostring(scanKickQueued)
+        .. " (completion lands async in diagnostics — see /dyni diag)")
     Print("selftest: re-show this report with /dyni selftest show")
     Addon.ShowSelfTestCopy()
     Addon.selfTestActive = false
@@ -6153,6 +6163,9 @@ function Addon.BuildSelfTestCopyLines(saved)
         .. " rendered=" .. tostring(CleanNumber(demoBlock.rendered) or 0)
         .. " cleaned=" .. ((demoBlock.cleaned == true) and "ok" or "FAIL")
         .. " untouched=" .. ((demoBlock.untouched == true) and "ok" or "FAIL")
+    local scanBlock = (type(report.scan) == "table") and report.scan or {}
+    copyLines[#copyLines + 1] = "DYNI1: scan queued=" .. tostring(CleanNumber(scanBlock.queued) or 0)
+        .. " (async completion in diagnostics — see /dyni diag)"
     local stageTokens = {}
     if type(report.stages) == "table" then
         for stageName, stageCount in pairs(report.stages) do
