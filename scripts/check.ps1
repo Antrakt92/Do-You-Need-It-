@@ -21,7 +21,8 @@ try {
     }
     foreach ($regression in @(
         'runtime_item_regressions.lua', 'runtime_loot_regressions.lua', 'runtime_ui_regressions.lua',
-        'runtime_navigation.lua', 'runtime_policy_regressions.lua', 'runtime_filters.lua'
+        'runtime_navigation.lua', 'runtime_policy_regressions.lua', 'runtime_filters.lua',
+        'runtime_selftest.lua'
     )) {
         & lua5.1 (Join-Path tests $regression)
         if ($LASTEXITCODE -ne 0) {
