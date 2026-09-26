@@ -23,8 +23,15 @@ end
 local function withPopup(h)
     h.env.StaticPopupDialogs = {}
     h.popupShown = {}
-    h.env.StaticPopup_Show = function(name)
+    h.popupBox = h:newFrame("EditBox")
+    h.env.StaticPopup_Show = function(name, _, _, data)
         h.popupShown[#h.popupShown + 1] = name
+        -- Faithful to the client: showing fires OnShow with the popup text
+        -- as data, which pours it into the dialog box and marks it poured.
+        local dialog = h.env.StaticPopupDialogs[name]
+        if type(dialog) == "table" and type(dialog.OnShow) == "function" then
+            dialog.OnShow({ editBox = h.popupBox }, data)
+        end
         return {}
     end
 end
@@ -357,6 +364,30 @@ function tests.selftestAddsNoSlashCommandGlobals()
     equal(after[1], "SLASH_DOYOUNEEDIT1", "canonical slash global is intact after selftest")
     equal(h.env.SlashCmdList.DOYOUNEEDIT2, nil, "no second slash handler is registered")
     truthy(hasMessage(h, "/dyni selftest show"), "selftest run advertises the re-show command")
+end
+
+function tests.selftestCopyPrefersPopupDataOverStaleText()
+    local h = fresh()
+    withPopup(h)
+    h:slash("selftest")
+    local dialog = copyDialog(h)
+    local box = h:newFrame("EditBox")
+    dialog.OnShow({ editBox = box }, "DATA-PARAM-TEXT")
+    equal(box:GetText(), "DATA-PARAM-TEXT", "popup data wins over the stored copy text")
+    local boxUpper = h:newFrame("EditBox")
+    dialog.OnShow({ EditBox = boxUpper }, "UPPER-VARIANT-TEXT")
+    equal(boxUpper:GetText(), "UPPER-VARIANT-TEXT", "EditBox field variant also pours")
+end
+
+function tests.selftestCopyFallsBackWhenBoxIsMissing()
+    local h = fresh()
+    withPopup(h)
+    h:slash("selftest")
+    h.popupBox = {}
+    h:resetSideEffects()
+    h:slash("selftest show")
+    truthy(hasMessage(h, "did not accept text"), "boxless popup reports the pour failure")
+    truthy(#exportLines(h) > 0, "boxless popup falls back to the full chat export")
 end
 
 local failed = 0
