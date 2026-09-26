@@ -49,5 +49,26 @@ Assert-RefCase "moved annotated tag" @("$commit`t$direct", "$tagObject`t$peeled"
 Assert-RefCase "unexpected ref" @("$commit`t refs/heads/main") "unexpected release ref"
 Assert-RefCase "malformed ref" @("invalid") "malformed release ref"
 Assert-RefCase "remote read failure" @() "Could not resolve exact remote release tag" 2
+
+# The workflows extract the full version via $Matches[1]; prove the
+# canonical tag pattern in release.yml captures all of MAJOR.MINOR.PATCH
+# (a group-1 that holds only MAJOR broke every release once before).
+$workflowTagPattern = Select-String -LiteralPath (Join-Path $PSScriptRoot "../.github/workflows/release.yml") -Pattern "GITHUB_REF_NAME -notmatch '(.*)'" |
+    Select-Object -First 1 -ExpandProperty Matches |
+    ForEach-Object { $_.Groups[1].Value }
+if (-not $workflowTagPattern) {
+    throw "release workflow tag pattern not found"
+}
+foreach ($tagCase in @(
+    @{ Tag = "v0.5.2"; Expected = "0.5.2" },
+    @{ Tag = "v10.20.30"; Expected = "10.20.30" }
+)) {
+    if ($tagCase.Tag -notmatch $workflowTagPattern -or $Matches[1] -ne $tagCase.Expected) {
+        throw "tag extraction failed for $($tagCase.Tag): got '$($Matches[1])'"
+    }
+}
+if ("v01.02.03" -match $workflowTagPattern) {
+    throw "tag pattern accepts leading zeros"
+}
 $global:LASTEXITCODE = 0
-Write-Output "Release ref checks passed (12 cases)."
+Write-Output "Release ref checks passed (14 cases)."

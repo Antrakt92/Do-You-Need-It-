@@ -37,6 +37,12 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "luac5.1 syntax check failed with exit code $LASTEXITCODE"
     }
+    # Lua 5.1 chunks allow ~200 top-level locals; the main runtime file is
+    # near the ceiling, so fail the gate before the client does.
+    $mainLocalCount = @(Select-String -LiteralPath .\DoYouNeedIt.lua -Pattern '^local ').Count
+    if ($mainLocalCount -ge 200) {
+        throw "DoYouNeedIt.lua has $mainLocalCount top-level locals (Lua 5.1 limit ~200)"
+    }
 
     $tocText = Get-Content -LiteralPath .\DoYouNeedIt.toc -Raw -Encoding UTF8
     $coreText = Get-Content -LiteralPath .\DoYouNeedIt_Core.lua -Raw -Encoding UTF8
@@ -96,7 +102,7 @@ try {
     }
     if ($releaseWorkflowText -notmatch 'github\.run_attempt\s*!=\s*1' -or
         $releaseWorkflowText -notmatch 'dyni-release-\$\{\{\s*github\.ref_name\s*\}\}' -or
-        $releaseWorkflowText -notmatch '\^v\(0\|\[1-9\]\[0-9\]\*\)\\\.\(0\|\[1-9\]\[0-9\]\*\)\\\.\(0\|\[1-9\]\[0-9\]\*\)\$' -or
+        $releaseWorkflowText -notmatch '\^v\(\(0\|\[1-9\]\[0-9\]\*\)\\\.\(0\|\[1-9\]\[0-9\]\*\)\\\.\(0\|\[1-9\]\[0-9\]\*\)\)\$' -or
         $releaseWorkflowText -notmatch 'refs/tags/\$env:GITHUB_REF_NAME\^\{commit\}' -or
         $releaseWorkflowText -notmatch '\$env:GITHUB_SHA' -or
         $releaseWorkflowText -notmatch 'git merge-base --is-ancestor') {
@@ -131,7 +137,7 @@ try {
         [regex]::Matches($retryWorkflowText, '-ZipPath\b').Count -lt 2) {
         throw "CurseForge retry workflow is not bound to an explicitly confirmed exact tag"
     }
-    if ($retryWorkflowText -notmatch '\^v\(0\|\[1-9\]\[0-9\]\*\)\\\.\(0\|\[1-9\]\[0-9\]\*\)\\\.\(0\|\[1-9\]\[0-9\]\*\)\$') {
+    if ($retryWorkflowText -notmatch '\^v\(\(0\|\[1-9\]\[0-9\]\*\)\\\.\(0\|\[1-9\]\[0-9\]\*\)\\\.\(0\|\[1-9\]\[0-9\]\*\)\)\$') {
         throw "CurseForge retry workflow must use the canonical release tag format without leading zeros"
     }
     foreach ($releaseGuard in @(
