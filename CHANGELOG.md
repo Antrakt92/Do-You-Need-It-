@@ -4,6 +4,7 @@
 
 ### Added
 
+- In-game self-checks: `/dyni selftest` collects environment, settings, geometry, diagnostics, and cache state, renders isolated demo rows (including Cyrillic) without touching live history or whispers, kicks a live equipment scan, and shows a copyable `DYNI1:` report with a re-show command; combat runs are refused with guidance.
 - Delayed automatic whispers now queue with pacing and a single send in flight; rapid repeats suspected as throttling stay retryable instead of showing Sent.
 - Out-of-range inspection waits without spending retries, parks rows, and resumes on roster updates.
 - Pending whispers for departed looters are cancelled proactively when the roster changes.
@@ -14,6 +15,7 @@
 - Warband and account-bound gear stays hidden even when its binding resolves late; own loot never shows Ask, including encounter loot and item names with brackets.
 - Ask eligibility follows class armor and weapon proficiency; roster updates no longer wipe the equipment cache.
 - The window stays above other UI, tooltips are guarded, the whisper template resets in two clicks, columns follow the font size, and sliders save on release.
+- The `/dyni` help lists core commands; advanced commands moved to the README.
 - History titles re-render in the active language; Korean Jamo, warband labels, and legacy Russian statuses are covered.
 
 ### Fixed
