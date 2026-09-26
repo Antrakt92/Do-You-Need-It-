@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.6.0 - 26-Sep-2026 — Steadier loot and quieter whispers
+
+### Added
+
+- Delayed automatic whispers now queue with pacing and a single send in flight; rapid repeats suspected as throttling stay retryable instead of showing Sent.
+- Out-of-range inspection waits without spending retries, parks rows, and resumes on roster updates.
+- Pending whispers for departed looters are cancelled proactively when the roster changes.
+
+### Improved
+
+- The most detailed item variant wins across encounter, chat, and bonus-loot events, including after reload; bonus-loot links are never overwritten by ordinary events.
+- Warband and account-bound gear stays hidden even when its binding resolves late; own loot never shows Ask, including encounter loot and item names with brackets.
+- Ask eligibility follows class armor and weapon proficiency; roster updates no longer wipe the equipment cache.
+- The window stays above other UI, tooltips are guarded, the whisper template resets in two clicks, columns follow the font size, and sliders save on release.
+- History titles re-render in the active language; Korean Jamo, warband labels, and legacy Russian statuses are covered.
+
+### Fixed
+
+- Manual Ask during binding rechecks, retry budget burned out of range, empty-roster wipes when zoning, split Mythic+ chest groups, and secret-value errors in combat.
+- Release tag parsing, Lua tooling pins, and public-source hygiene checks.
+
 ## 0.5.2 - 24-Sep-2026 — PTR compatibility and complete package notices
 
 ### Updated

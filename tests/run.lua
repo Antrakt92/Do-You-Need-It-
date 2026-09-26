@@ -1135,7 +1135,7 @@ assertEqual(badNumericDiagnostic.stage, "bad_numeric", "diagnostics keep safe st
 assertEqual(badNumericDiagnostic.at, nil, "diagnostics drop NaN timestamps")
 assertEqual(badNumericDiagnostic.attempt, nil, "diagnostics drop infinite counters")
 
-assertEqual(Core.VERSION, "0.5.2", "core exposes current version")
+assertEqual(Core.VERSION, "0.6.0", "core exposes current version")
 
 local function readFile(path)
     local handle = assert(io.open(path, "rb"))
@@ -1147,7 +1147,7 @@ end
 local toc = readFile("DoYouNeedIt.toc")
 assertTruthy(toc:find("## Title: Do You Need It?", 1, true), "toc title present")
 assertTruthy(toc:find("## Interface: 120100, 120105", 1, true), "toc interface supports Retail 12.1.0 and Midnight 12.1.5 PTR")
-assertTruthy(toc:find("## Version: 0.5.2", 1, true), "toc version present")
+assertTruthy(toc:find("## Version: 0.6.0", 1, true), "toc version present")
 assertTruthy(toc:find("## IconTexture: Interface\\AddOns\\DoYouNeedIt\\media\\icon.png", 1, true), "toc addon list icon present")
 assertTruthy(toc:find("## SavedVariables: DoYouNeedItDB", 1, true), "toc saved variables present")
 assertTruthy(toc:find("DoYouNeedIt_Core.lua", 1, true), "toc loads core first")
