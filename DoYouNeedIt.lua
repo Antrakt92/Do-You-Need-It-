@@ -6352,7 +6352,7 @@ local function HandleSlash(message)
             Addon.RunSelfTest(sub)
         end
     else
-        Print("commands: /dyni, /dyni settings, /dyni resetpos, /dyni test, /dyni scan, /dyni auto on|off, /dyni delay <seconds>, /dyni clear, /dyni history, /dyni debug on|off, /dyni diag, /dyni status, /dyni selftest [show|stop]")
+        Print("commands: /dyni, /dyni settings, /dyni scan, /dyni history, /dyni clear, /dyni resetpos, /dyni auto on|off, /dyni selftest [show|stop]; full list: README")
     end
 end
 

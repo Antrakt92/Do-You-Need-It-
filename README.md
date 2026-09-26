@@ -48,17 +48,22 @@ Language defaults to **Auto**, following your client locale. English and Russian
 | `/dyni` | Toggle the loot window. |
 | `/dyni settings` | Open settings. |
 | `/dyni auto on` / `/dyni auto off` | Enable or disable automatic whispers. |
-| `/dyni delay <seconds>` | Set the delay, clamped to 3–30 seconds. |
 | `/dyni clear` | Clear current live/session rows while keeping saved history. |
 | `/dyni resetpos` | Center the window without resetting settings or history. |
 | `/dyni history` | Cycle history views. |
 | `/dyni scan` | Queue a group equipment scan. |
+| `/dyni selftest` | Run a self-check and print a chat summary. |
+
+### Advanced commands
+
+| Command | Action |
+|---|---|
 | `/dyni test` | Preview sample rows without whispers or saved demo loot. |
-| `/dyni status` | Print settings, build, and layout. |
 | `/dyni debug on` | Save the last 20 loot-processing diagnostic entries. |
 | `/dyni debug off` | Stop saving diagnostic entries and clear saved diagnostics. |
 | `/dyni diag` | Print the newest diagnostic entries. |
-| `/dyni selftest` | Run a self-check and print a chat summary. |
+| `/dyni status` | Print settings, build, and layout. |
+| `/dyni delay <seconds>` | Set the delay, clamped to 3–30 seconds. |
 
 ## Help and development
 
