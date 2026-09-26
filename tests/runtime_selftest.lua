@@ -20,6 +20,30 @@ local function fresh()
     return h
 end
 
+local function withPopup(h)
+    h.env.StaticPopupDialogs = {}
+    h.popupShown = {}
+    h.env.StaticPopup_Show = function(name)
+        h.popupShown[#h.popupShown + 1] = name
+        return {}
+    end
+end
+
+local function copyDialog(h)
+    local dialogs = h.env.StaticPopupDialogs
+    truthy(type(dialogs) == "table", "popup table exists after show")
+    local dialog = dialogs["DOYOUNEED_SELFTEST_COPY"]
+    truthy(type(dialog) == "table", "copy dialog is registered")
+    return dialog
+end
+
+local function dialogText(h)
+    local dialog = copyDialog(h)
+    local box = h:newFrame("EditBox")
+    dialog.OnShow({ editBox = box })
+    return box:GetText()
+end
+
 local function exportLines(h)
     local lines = {}
     for _, message in ipairs(h.messages) do
@@ -52,18 +76,17 @@ end
 
 local tests = {}
 
-function tests.selftestSlashRunsOutOfCombatAndPersistsCompactReport()
+function tests.selftestSlashOpensCopyWindowAndKeepsChatSlim()
     local h = fresh()
+    withPopup(h)
     h:slash("selftest")
-    local lines = exportLines(h)
-    truthy(#lines >= 5, "selftest prints a multi-line machine-readable block")
-    for _, line in ipairs(lines) do
-        truthy(#line <= 210, "export line stays within chat limits")
-        truthy(line:find("=", 1, true), "export line carries key=value payload")
-    end
-    truthy(hasMessage(h, "DYNI1: v=1"), "export block carries the versioned prefix")
-    truthy(hasMessage(h, "DYNI1: nocheck="), "export block honestly lists uncovered areas")
+    equal(#h.popupShown, 1, "run opens the copy window once")
+    equal(h.popupShown[1], "DOYOUNEED_SELFTEST_COPY", "run opens the canonical copy dialog")
+    equal(#h.messages, 6, "chat stays slim when the copy window opens")
+    equal(#exportLines(h), 0, "full export block leaves chat for the copy window")
     truthy(hasMessage(h, "NOT checked"), "human summary states what was not verified")
+    truthy(hasMessage(h, "copy window opened"), "chat points at the copy window")
+    truthy(hasMessage(h, "/dyni selftest show"), "chat advertises the re-show command")
     local saved = h.env.DoYouNeedItSelfTest
     equal(type(saved), "table", "selftest persists one report table")
     equal(saved.version, 1, "stored report carries version 1")
@@ -78,17 +101,93 @@ function tests.selftestSlashRunsOutOfCombatAndPersistsCompactReport()
     truthy(reportKeys <= 30, "stored report stays capped in size")
 end
 
+function tests.selftestCopyDialogCarriesFullExportPayload()
+    local h = fresh()
+    withPopup(h)
+    h:slash("selftest")
+    local dialog = copyDialog(h)
+    equal(dialog.hasEditBox, true, "copy dialog provides an edit box")
+    equal(dialog.hideOnEscape, true, "copy dialog closes with Escape")
+    equal(dialog.editBoxWidth, 320, "copy dialog uses a wide edit box")
+    local text = dialogText(h)
+    truthy(text:find("DYNI1: v=1", 1, true), "copy text carries the versioned prefix")
+    truthy(text:find("DYNI1: nocheck=", 1, true), "copy text honestly lists uncovered areas")
+    local textLines = 0
+    for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+        textLines = textLines + 1
+        truthy(#line <= 185, "copy text lines stay copy-friendly")
+        truthy(line:find("=", 1, true), "copy text lines carry key=value payload")
+    end
+    truthy(textLines >= 6, "copy text carries the full export block")
+    dialog.OnShow({})
+    equal(dialog.OnShow ~= nil, true, "dialog show handler tolerates a missing edit box")
+end
+
+function tests.selftestFallsBackToChatWithoutPopupApi()
+    local h = fresh()
+    h:slash("selftest")
+    local lines = exportLines(h)
+    truthy(#lines >= 6, "fallback prints the full export block to chat")
+    for _, line in ipairs(lines) do
+        truthy(line:find("=", 1, true), "fallback lines carry key=value payload")
+    end
+    truthy(hasMessage(h, "DYNI1: v=1"), "fallback keeps the versioned prefix")
+    truthy(hasMessage(h, "copy window unavailable"), "fallback explains the missing window")
+end
+
 function tests.selftestSlashRefusesInCombatWithoutPersisting()
     local h = fresh()
+    withPopup(h)
     h.env.InCombatLockdown = function() return true end
     h:slash("selftest")
     truthy(hasMessage(h, "out-of-combat"), "combat run refuses with a clear reason")
-    equal(#exportLines(h), 0, "refused run prints no export block")
+    equal(#h.popupShown, 0, "refused run opens no window")
     equal(h.env.DoYouNeedItSelfTest, nil, "refused run persists nothing")
+end
+
+function tests.selftestShowDefersCopyWindowUntilCombatEnds()
+    local h = fresh()
+    withPopup(h)
+    local combat = false
+    h.env.InCombatLockdown = function() return combat end
+    h:slash("selftest")
+    equal(#h.popupShown, 1, "initial run opens the copy window")
+    combat = true
+    h:resetSideEffects()
+    h:slash("selftest show")
+    truthy(hasMessage(h, "deferred until combat ends"), "combat show defers with a clear reason")
+    equal(#h.popupShown, 1, "deferred show opens no window yet")
+    combat = false
+    h:fire("PLAYER_REGEN_ENABLED")
+    equal(#h.popupShown, 2, "combat exit opens the deferred copy window")
+    truthy(hasMessage(h, "copy window opened"), "deferred window announces itself")
+end
+
+function tests.selftestShowWithoutReportPrintsHint()
+    local h = fresh()
+    withPopup(h)
+    h:slash("selftest show")
+    truthy(hasMessage(h, "no stored report"), "show without a report explains itself")
+    equal(#h.popupShown, 0, "show without a report opens no window")
+end
+
+function tests.selftestShowReshowsWithoutRerunning()
+    local h = fresh()
+    withPopup(h)
+    h:slash("selftest")
+    local firstStamp = h.env.DoYouNeedItSelfTest.finishedAt
+    h:resetSideEffects()
+    h.popupShown = {}
+    h:slash("selftest show")
+    equal(#h.popupShown, 1, "show reopens the copy window")
+    equal(h.env.DoYouNeedItSelfTest.finishedAt, firstStamp, "show does not rerun collection")
+    truthy(hasMessage(h, "copy window opened"), "reshow announces itself")
+    equal(hasMessage(h, "NOT checked"), false, "reshow stays quiet apart from the window hint")
 end
 
 function tests.selftestLeavesDebugOffDiagnosticsPurged()
     local h = fresh()
+    withPopup(h)
     h:slash("selftest")
     equal(h.env.DoYouNeedItDB.diagnostics, nil, "selftest never persists diagnostics while debug is off")
     h:resetSideEffects()
@@ -99,18 +198,28 @@ function tests.selftestLeavesDebugOffDiagnosticsPurged()
     equal(h.env.DoYouNeedItDB.diagnostics, nil, "debug off still purges saved diagnostics after selftest")
 end
 
-function tests.selftestStopDiscardsStoredReport()
+function tests.selftestStopDiscardsStoredReportAndPendingWindow()
     local h = fresh()
+    withPopup(h)
+    local combat = false
+    h.env.InCombatLockdown = function() return combat end
     h:slash("selftest")
     truthy(h.env.DoYouNeedItSelfTest ~= nil, "run stores a report first")
-    h:resetSideEffects()
+    combat = true
+    h:slash("selftest show")
+    truthy(hasMessage(h, "deferred until combat ends"), "window deferral is armed first")
     h:slash("selftest stop")
     equal(h.env.DoYouNeedItSelfTest, nil, "stop discards the stored report")
     truthy(hasMessage(h, "stopped"), "stop confirms the discard")
+    combat = false
+    local shownBefore = #h.popupShown
+    h:fire("PLAYER_REGEN_ENABLED")
+    equal(#h.popupShown, shownBefore, "stop cancels the deferred window")
 end
 
 function tests.selftestStageSummaryCountsWithoutPayload()
     local h = fresh()
+    withPopup(h)
     h:slash("debug on")
     h:resetSideEffects()
     local item = h:addItem(31801, { name = "Selftest Stage Sword" })
@@ -132,6 +241,8 @@ function tests.selftestStageSummaryCountsWithoutPayload()
     equal(counted, saved.report.diagN, "stage counts add up to the buffer size")
     equal(saved.report.itemLink, nil, "stage summary carries no loot payload")
     equal(saved.report.looter, nil, "stage summary carries no looter payload")
+    local text = dialogText(h)
+    truthy(text:find("DYNI1: stages", 1, true), "copy text carries the stage summary")
 end
 
 function tests.selftestAddsNoSlashCommandGlobals()
@@ -144,7 +255,7 @@ function tests.selftestAddsNoSlashCommandGlobals()
     equal(#after, 1, "selftest adds no slash globals")
     equal(after[1], "SLASH_DOYOUNEEDIT1", "canonical slash global is intact after selftest")
     equal(h.env.SlashCmdList.DOYOUNEEDIT2, nil, "no second slash handler is registered")
-    truthy(hasMessage(h, "/dyni selftest") == false, "selftest run does not spam the command help")
+    truthy(hasMessage(h, "/dyni selftest show"), "selftest run advertises the re-show command")
 end
 
 local failed = 0
