@@ -235,10 +235,25 @@ local function SafeCall(fn, ...)
 end
 
 local function Now()
+    -- WHY: both clocks can hand back secret-tagged values in combat; a raw
+    -- secret must never flow into arithmetic, comparisons, or SavedVariables.
+    -- Each clock is read through pcall plus the secret adapter and must yield
+    -- a clean number, otherwise the next clock is tried; nil means "no
+    -- trustworthy time" and callers with a fail-closed path (auto-whisper
+    -- pump) re-arm instead of dispatching.
     if type(GetServerTime) == "function" then
-        return GetServerTime()
+        local ok, value = pcall(GetServerTime)
+        if ok and type(value) == "number" and value == value and not IsSecret(value) then
+            return value
+        end
     end
-    return time()
+    if type(time) == "function" then
+        local ok, value = pcall(time)
+        if ok and type(value) == "number" and value == value and not IsSecret(value) then
+            return value
+        end
+    end
+    return nil
 end
 
 local function SafeUnitName(unit)
@@ -638,14 +653,19 @@ local function GetCharacterDropsDB(create)
 end
 
 local function RecordDiagnostic(stage, fields)
+    -- Debug-off records nothing anywhere: neither persisted nor in-memory,
+    -- so /dyni diag keeps reporting "off" instead of serving stale rows.
+    if not ShouldPersistDiagnostics() then
+        return nil
+    end
     Addon.diagnostics = type(Addon.diagnostics) == "table" and Addon.diagnostics or {}
     fields = type(fields) == "table" and fields or {}
 
     local entry = {
-        stage = stage,
+        stage = CleanString(stage) or "unknown",
         at = Now(),
-        instanceName = Addon.currentInstanceName or SafeInstanceName(),
-        encounterName = Addon.currentEncounterName,
+        instanceName = CleanString(Addon.currentInstanceName) or CleanString(SafeInstanceName()),
+        encounterName = CleanString(Addon.currentEncounterName),
     }
     for key, value in pairs(fields) do
         if not IsSecret(value) then
@@ -2016,6 +2036,48 @@ local function SaveDB()
     ) or {}
     local sessionRows = Addon.state and Core.SnapshotRowsForSave(Addon.state.sessionRows, settings.maxSessionRows) or {}
     local sessionAllRows = Addon.state and Core.SnapshotRowsForSave(Addon.state.sessionAllRows, settings.maxSessionRows) or {}
+    -- Main-side secret sweep: snapshots copy clean primitives by type, but a
+    -- secret-tagged string/number/boolean survives type checks, so any saved
+    -- row field the secret adapter still flags is dropped before persisting.
+    local function sweepSecretsFromSavedRows(list)
+        if type(list) ~= "table" then
+            return
+        end
+        for index = 1, #list do
+            local row = list[index]
+            if type(row) == "table" then
+                for key, value in pairs(row) do
+                    local valueType = type(value)
+                    if (valueType == "string" or valueType == "number" or valueType == "boolean")
+                        and IsSecret(value) then
+                        row[key] = nil
+                    end
+                end
+            end
+        end
+    end
+    local function sweepSecretsFromSavedHistory(groups)
+        if type(groups) ~= "table" then
+            return
+        end
+        for index = 1, #groups do
+            local group = groups[index]
+            if type(group) == "table" then
+                for key, value in pairs(group) do
+                    local valueType = type(value)
+                    if (valueType == "string" or valueType == "number" or valueType == "boolean")
+                        and IsSecret(value) then
+                        group[key] = nil
+                    end
+                end
+                sweepSecretsFromSavedRows(group.rows)
+                sweepSecretsFromSavedRows(group.allRows)
+            end
+        end
+    end
+    sweepSecretsFromSavedRows(sessionRows)
+    sweepSecretsFromSavedRows(sessionAllRows)
+    sweepSecretsFromSavedHistory(history)
     DoYouNeedItDB.settings = settings
     characterDB.history = history
     characterDB.sessionRows = sessionRows
@@ -2201,10 +2263,36 @@ local function SendWhisper(row, isAuto)
         return
     end
     local target = row.looter
+    if isAuto ~= true then
+        -- A manual Ask fired inside the pacing gap of a fresh automatic
+        -- dispatch waits out the remainder instead of bursting: same-tick
+        -- manual streaks still send immediately (chat-throttle backstop
+        -- below keeps them retryable), so only post-auto manuals defer.
+        local nowStamp = Now()
+        local lastDispatch = Addon.lastDispatchAt
+        if Addon.lastDispatchWasAuto == true and type(lastDispatch) == "number"
+            and type(nowStamp) == "number" and nowStamp - lastDispatch < 1.5 then
+            row.statusKey = "sending"
+            row.statusSeconds = nil
+            row.statusText = nil
+            SaveDB()
+            RefreshRows()
+            C_Timer.After(lastDispatch + 1.5 - nowStamp, function()
+                if not IsRowStillTracked(row) then
+                    return
+                end
+                SendWhisper(row, false)
+            end)
+            return
+        end
+    end
     local token = {}
     row.whisperInFlight = true
     row.whisperToken = token
     row.whisperIsAuto = isAuto == true
+    row.dispatchStartedAt = Now()
+    Addon.lastDispatchAt = row.dispatchStartedAt
+    Addon.lastDispatchWasAuto = isAuto == true
     row.statusKey = isAuto and "auto_sending" or "sending"
     row.statusSeconds = nil
     row.statusText = nil
@@ -2313,24 +2401,79 @@ end
 
 -- Proactive cleanup: drop the stale "auto in Ns" display for departed
 -- looters (the send-boundary guard already blocks delivery lazily).
+-- Departed full names match tracked rows by full name AND by short form
+-- (before "-"): intake may store either variant depending on whether the
+-- realm was known, so both directions are compared.
 function Addon.CancelPendingAutoForDeparted(departed)
     if type(departed) ~= "table" or type(Addon.state) ~= "table" then
         return
     end
-    local changed = false
+    local function shortName(name)
+        if type(name) ~= "string" or name == "" then
+            return nil
+        end
+        return name:match("^([^-]+)") or name
+    end
+    local departedFull, departedShort = {}, {}
     for index = 1, #departed do
         local name = departed[index]
         if type(name) == "string" and name ~= "" then
-            Addon.FindTrackedLootRowMatching(name, function(row)
-                if type(row) == "table" and (row.pendingAutoWhisper == true or row.statusKey == "auto_pending") then
-                    CancelPendingAuto(row)
-                    changed = true
-                end
-                return false
-            end)
+            departedFull[name] = true
+            local short = shortName(name)
+            if short then
+                departedShort[short] = true
+            end
+        end
+    end
+    if not next(departedFull) then
+        return
+    end
+    local cancelled, changed = {}, false
+    local function cancelList(list)
+        if type(list) ~= "table" then
+            return
+        end
+        for index = 1, #list do
+            local row = list[index]
+            local rowShort = type(row) == "table" and shortName(row.looter) or nil
+            local rowLooter = type(row) == "table" and row.looter or nil
+            if type(row) == "table" and not cancelled[row]
+                and (row.pendingAutoWhisper == true or row.statusKey == "auto_pending")
+                and ((type(rowLooter) == "string" and departedFull[rowLooter] == true)
+                    or (rowShort ~= nil and departedShort[rowShort] == true)) then
+                CancelPendingAuto(row)
+                cancelled[row] = true
+                changed = true
+            end
+        end
+    end
+    local state = Addon.state
+    cancelList(state.currentRows)
+    cancelList(state.allRows)
+    cancelList(state.sessionRows)
+    cancelList(state.sessionAllRows)
+    if type(state.history) == "table" then
+        for index = 1, #state.history do
+            local group = state.history[index]
+            if type(group) == "table" then
+                cancelList(group.rows)
+                cancelList(group.allRows)
+            end
         end
     end
     if changed then
+        -- Evict cancelled rows from the auto queue like CancelAllPendingAuto
+        -- does, but keep survivors dispatchable.
+        if type(Addon.autoWhisperQueue) == "table" then
+            local kept = {}
+            for index = 1, #Addon.autoWhisperQueue do
+                local row = Addon.autoWhisperQueue[index]
+                if not cancelled[row] then
+                    kept[#kept + 1] = row
+                end
+            end
+            Addon.autoWhisperQueue = kept
+        end
         SaveDB()
         RefreshRows()
     end
@@ -2594,11 +2737,64 @@ function Addon.PumpAutoWhisperQueue()
         return
     end
     local now = Now()
-    -- Cap in-flight automatic sends at one: a queued row waits while the
-    -- active automatic send has not resolved yet.
+    if type(now) ~= "number" then
+        -- Fail-closed without trustworthy time: keep the queue untouched and
+        -- retry on the pacing gap instead of dispatching blindly.
+        Addon.autoWhisperPumpScheduled = true
+        C_Timer.After(Addon.AutoWhisperGap(), Addon.PumpAutoWhisperQueue)
+        return
+    end
+    local stalled = false
+    local function failStalledWhisper(row)
+        -- Backstop for sends whose zero-delay chat callback never ran: free
+        -- the row as a retryable failure instead of wedging the pacing cap,
+        -- and defuse its pending auto so the pump cannot redispatch it.
+        -- 10s is an order of magnitude past the normal same-tick resolve.
+        if type(row) ~= "table" or row.whisperInFlight ~= true then
+            return
+        end
+        local startedAt = row.dispatchStartedAt
+        if type(startedAt) ~= "number" or now - startedAt <= 10 then
+            return
+        end
+        row.whisperInFlight = false
+        row.whisperToken = nil
+        row.whisperIsAuto = nil
+        row.dispatchStartedAt = nil
+        row.pendingAutoWhisper = false
+        row.autoToken = nil
+        row.statusKey = "whisper_failed"
+        row.statusSeconds = nil
+        row.statusText = nil
+        row.whisperRetryable = true
+        RecordDiagnostic("whisper_stalled", {
+            looter = row.looter,
+            itemLink = row.itemLink,
+        })
+        stalled = true
+    end
+    local function sweepStalledWhispers(list)
+        if type(list) ~= "table" then
+            return
+        end
+        for index = 1, #list do
+            failStalledWhisper(list[index])
+        end
+    end
+    sweepStalledWhispers(Addon.autoWhisperQueue)
+    sweepStalledWhispers(Addon.state.currentRows)
+    sweepStalledWhispers(Addon.state.allRows)
+    sweepStalledWhispers(Addon.state.sessionRows)
+    sweepStalledWhispers(Addon.state.sessionAllRows)
+    if stalled then
+        SaveDB()
+        RefreshRows()
+    end
+    -- Cap in-flight sends at one: a queued row waits while ANY active send
+    -- (automatic or manual Ask) has not resolved yet.
     for index = 1, #Addon.autoWhisperQueue do
         local queued = Addon.autoWhisperQueue[index]
-        if type(queued) == "table" and queued.whisperInFlight == true and queued.whisperIsAuto == true then
+        if type(queued) == "table" and queued.whisperInFlight == true then
             Addon.autoWhisperPumpScheduled = true
             C_Timer.After(Addon.AutoWhisperGap(), Addon.PumpAutoWhisperQueue)
             return
@@ -2609,14 +2805,13 @@ function Addon.PumpAutoWhisperQueue()
         if type(row) == "table" and row.pendingAutoWhisper == true and row.autoToken ~= nil
             and IsRowStillTracked(row) and Addon.state.settings.autoWhisper == true
             and row.unsafe ~= true and row.askable ~= false and not Core.IsHiddenLootRow(row) then
-            local last = Addon.autoWhisperLastDispatchAt
-            if type(last) == "number" and type(now) == "number" and now - last < 1.5 then
+            local last = Addon.lastDispatchAt
+            if type(last) == "number" and now - last < 1.5 then
                 table.insert(Addon.autoWhisperQueue, 1, row)
                 Addon.autoWhisperPumpScheduled = true
                 C_Timer.After((last + 1.5 - now) + (Addon.AutoWhisperGap() - 1.5), Addon.PumpAutoWhisperQueue)
                 return
             end
-            Addon.autoWhisperLastDispatchAt = now
             SendWhisper(row, true)
             break
         end
@@ -3164,6 +3359,13 @@ StartNextInspectRequest = function()
 end
 
 CompleteActiveInspectRequest = function(guid)
+    -- WHY this completion path intentionally runs even in combat while the
+    -- request path parks: every read here is secret-safe (GUID/unit/links
+    -- resolve through SafeCall plus Clean* adapters, never raw comparisons),
+    -- and the only protected effect downstream (auto-whisper chat) always
+    -- goes through a deferred C_Timer.After(0) clean-stack send per the API
+    -- contract. Rows that still lack links re-park via ScheduleInspectRetry
+    -- into combatInspectRows, so completing changes no combat behavior.
     local request = Addon.inspectActive
     if not request or request.guid ~= guid then
         return false

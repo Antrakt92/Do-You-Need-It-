@@ -501,6 +501,24 @@ function Harness:resetSideEffects()
     self.notifyInspectCalls = {}
     self.clearInspectCalls = 0
     self.inventoryReadCalls = {}
+    self.failNotifyInspectOnce = false
+end
+
+-- Deterministic pacing helper for policy/loot tests only: replaces the
+-- visible math.random with a fixed value (0 removes AutoWhisperGap jitter).
+-- Pass nil to restore the real math table. Existing suites never call this.
+function Harness:stubRandom(value)
+    if value == nil then
+        self.env.math = nil
+        return
+    end
+    local realMath = math
+    local stub = {}
+    setmetatable(stub, { __index = realMath })
+    stub.random = function()
+        return value
+    end
+    self.env.math = stub
 end
 
 function Harness:fireLoot(looterName, itemLink)
@@ -874,6 +892,16 @@ function Harness.new(options)
     env.C_Item = {
         GetItemInfoInstant = function(itemLink)
             local itemID, itemType, itemSubType, equipLoc, icon, classID, subclassID = self:itemInfo(itemLink)
+            local info = self.items[linkItemID(itemLink)] or {}
+            if info.secretValues == true then
+                -- WHY: instant class/slot fields are consumed through
+                -- Clean*/safeTonumber guards, so they can be secret-tagged
+                -- like the detailed quality/level/bind values. itemID stays
+                -- clean: it is an identity key compared with == downstream.
+                equipLoc = self:secretValue("instant-equipLoc:" .. tostring(itemID))
+                classID = self:secretValue("instant-classID:" .. tostring(itemID))
+                subclassID = self:secretValue("instant-subclassID:" .. tostring(itemID))
+            end
             return itemID, itemType, itemSubType, equipLoc, icon, classID, subclassID
         end,
         GetItemInfo = function(itemLink)
