@@ -74,6 +74,34 @@ local function slashGlobals(h)
     return found
 end
 
+local function frameTextPresent(h, needle)
+    for _, frame in ipairs(h.frames) do
+        if type(frame.text) == "string" and frame.text:find(needle, 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
+local function dbHasTestRows(h)
+    local seen, found = {}, false
+    local function scan(value, depth)
+        if found or depth > 6 or type(value) ~= "table" or seen[value] then
+            return
+        end
+        seen[value] = true
+        if value.isTest == true then
+            found = true
+            return
+        end
+        for _, child in pairs(value) do
+            scan(child, depth + 1)
+        end
+    end
+    scan(h.env.DoYouNeedItDB, 0)
+    return found
+end
+
 local tests = {}
 
 function tests.selftestSlashOpensCopyWindowAndKeepsChatSlim()
@@ -82,11 +110,12 @@ function tests.selftestSlashOpensCopyWindowAndKeepsChatSlim()
     h:slash("selftest")
     equal(#h.popupShown, 1, "run opens the copy window once")
     equal(h.popupShown[1], "DOYOUNEED_SELFTEST_COPY", "run opens the canonical copy dialog")
-    equal(#h.messages, 6, "chat stays slim when the copy window opens")
+    equal(#h.messages, 7, "chat stays slim when the copy window opens")
     equal(#exportLines(h), 0, "full export block leaves chat for the copy window")
     truthy(hasMessage(h, "NOT checked"), "human summary states what was not verified")
     truthy(hasMessage(h, "copy window opened"), "chat points at the copy window")
     truthy(hasMessage(h, "/dyni selftest show"), "chat advertises the re-show command")
+    truthy(hasMessage(h, "demo rows=4 rendered=4"), "chat reports the demo render verdict")
     local saved = h.env.DoYouNeedItSelfTest
     equal(type(saved), "table", "selftest persists one report table")
     equal(saved.version, 1, "stored report carries version 1")
@@ -118,7 +147,8 @@ function tests.selftestCopyDialogCarriesFullExportPayload()
         truthy(#line <= 185, "copy text lines stay copy-friendly")
         truthy(line:find("=", 1, true), "copy text lines carry key=value payload")
     end
-    truthy(textLines >= 6, "copy text carries the full export block")
+    truthy(text:find("DYNI1: demo rows=4 rendered=4", 1, true), "copy text carries the demo verdict")
+    truthy(textLines >= 7, "copy text carries the full export block")
     dialog.OnShow({})
     equal(dialog.OnShow ~= nil, true, "dialog show handler tolerates a missing edit box")
 end
@@ -143,6 +173,34 @@ function tests.selftestSlashRefusesInCombatWithoutPersisting()
     truthy(hasMessage(h, "out-of-combat"), "combat run refuses with a clear reason")
     equal(#h.popupShown, 0, "refused run opens no window")
     equal(h.env.DoYouNeedItSelfTest, nil, "refused run persists nothing")
+    equal(h.env.DoYouNeedItFrame:IsShown(), false, "refused run never shows the loot window")
+end
+
+function tests.selftestDemoPhaseRendersRealRowsAndCleansUp()
+    local h = fresh()
+    withPopup(h)
+    h:slash("selftest")
+    local demo = h.env.DoYouNeedItSelfTest.report.demo
+    equal(type(demo), "table", "report carries a demo section")
+    equal(demo.rows, 4, "demo builds four isolated rows")
+    equal(demo.rendered, 4, "demo renders every built row through the real layout")
+    equal(demo.cleaned, true, "demo phase reports a clean teardown")
+    equal(demo.untouched, true, "demo phase reports live state untouched")
+    truthy(frameTextPresent(h, "Тестовый меч"), "cyrillic item name passes through the real render")
+    truthy(frameTextPresent(h, "Демолутер"), "cyrillic looter name passes through the real render")
+    truthy(frameTextPresent(h, "Demo Long Link Item"), "long link row passes through the real render")
+    equal(#h:visibleRows(), 0, "cleanup restores an empty current view")
+    equal(h.env.DoYouNeedItFrame:IsShown(), false, "cleanup restores the hidden window")
+end
+
+function tests.selftestDemoPhaseLeavesLiveStateUntouched()
+    local h = fresh()
+    withPopup(h)
+    h:slash("selftest")
+    equal(dbHasTestRows(h), false, "saved state never stores demo rows")
+    equal(#h.sentMessages, 0, "demo rows never queue whispers")
+    equal(#h.timers, 0, "demo phase schedules no timers")
+    equal(#h:visibleRows(), 0, "no demo row survives cleanup")
 end
 
 function tests.selftestShowDefersCopyWindowUntilCombatEnds()
