@@ -401,6 +401,31 @@ local function RegisterButtonFont(button, size, flags, stable, maxSize)
 end
 
 local function BuildFontsList(locale)
+    locale = Core.ResolveActiveLocale(locale or ActiveLocale(), ClientLocale())
+    -- Paint-pass cache (Addon fields, not new locals): every repaint asks
+    -- for the list several times, so reuse it within one RefreshRows pass
+    -- for the same locale. The shared-media name fingerprint below is the
+    -- version key: a changed font set still rebuilds instead of going stale.
+    local pass = Addon.fontListPass or 0
+    local cache = Addon.fontListCache
+    if cache and cache.pass == pass and cache.locale == locale and type(cache.fonts) == "table" then
+        return cache.fonts
+    end
+    local names
+    if LSM and type(LSM.List) == "function" and type(LSM.Fetch) == "function" then
+        names = LSM:List("font")
+    end
+    local parts = {}
+    if type(names) == "table" then
+        for index = 1, #names do
+            parts[#parts + 1] = tostring(names[index])
+        end
+    end
+    local namesKey = table.concat(parts, "\001")
+    if cache and cache.locale == locale and cache.namesKey == namesKey and type(cache.fonts) == "table" then
+        cache.pass = pass
+        return cache.fonts
+    end
     local fonts = {}
     local seen = {}
 
@@ -432,7 +457,6 @@ local function BuildFontsList(locale)
     end
 
     if LSM and type(LSM.List) == "function" and type(LSM.Fetch) == "function" then
-        local names = LSM:List("font")
         if type(names) == "table" then
             for index = 1, #names do
                 local name = names[index]
@@ -443,6 +467,7 @@ local function BuildFontsList(locale)
             end
         end
     end
+    Addon.fontListCache = { pass = pass, locale = locale, namesKey = namesKey, fonts = fonts }
     return fonts
 end
 
@@ -509,7 +534,10 @@ ApplyCurrentFont = function()
     local stableFont
     local dynamicFonts
     local dynamicFallbacks = {}
-    local selectedSize = tonumber(settings.fontSize) or 12
+    -- Painters follow an uncommitted slider drag; stable readers
+    -- (scheduler, status, saves) keep using settings directly.
+    local previewSize = Addon.sliderPreview and Addon.sliderPreview.fontSize
+    local selectedSize = tonumber(previewSize) or tonumber(settings.fontSize) or 12
     for index = 1, #Addon.fontStrings do
         local entry = Addon.fontStrings[index]
         if entry and entry.fontString and type(entry.fontString.SetFont) == "function" then
@@ -569,7 +597,10 @@ MaybeAutoSwitchFont = function()
 
     local fallback = FindCompatibleAvailableFont(settings.font, requiredGlyph, fonts, clientLocale)
     if fallback and not Core.SameFontPath(fallback, settings.font) then
-        if currentFont and not settings.fontBeforeAutoSwitch then
+        -- Remember the pre-fallback path even when it is already gone
+        -- (shared-media set replaced mid-session): otherwise the original
+        -- can never be restored on re-registration.
+        if not settings.fontBeforeAutoSwitch then
             settings.fontBeforeAutoSwitch = settings.font
         end
         settings.font = fallback
@@ -1818,6 +1849,9 @@ local function RefreshRows()
         return
     end
 
+    -- New paint pass: same-locale font-list lookups below reuse one build.
+    Addon.fontListPass = (Addon.fontListPass or 0) + 1
+
     if Addon.contentMode == "settings" then
         Addon.SetLootChromeShown(false)
         Addon.HideLootRows()
@@ -1859,12 +1893,24 @@ local function RefreshRows()
     local columnWidths = Addon.LootColumnWidths()
     local dropX = 18 + columnWidths.looter + 8
     local equippedX = dropX + columnWidths.drop + 10
+    -- Trade starts exactly where the scaled equipped column ends (456 at
+    -- font 12); the fixed header offset above would let a wider equipped
+    -- column overlap the Trade header at larger fonts. The trade block
+    -- itself scales with the body font like the other columns so longer
+    -- transfer labels (ru "Передача: вероятно") keep a fitting box.
+    local tradeX = equippedX + columnWidths.equipped
+    local tradeScale = Core.ResolveFontSize(11, Addon.state.settings.fontSize) / 11
+    local tradeWidth = math.min(220, math.max(110, math.floor(110 * tradeScale + 0.5)))
+    local tradeHeaderWidth = math.min(90, math.max(58, math.floor(58 * tradeScale + 0.5)))
+    local tradeInfoHeight = math.min(24, math.max(11, math.floor(11 * tradeScale + 0.5)))
     Addon.frame.columnPlayer:SetWidth(columnWidths.looter)
     Addon.frame.columnDrop:SetWidth(columnWidths.drop)
     Addon.frame.columnEquipped:SetWidth(columnWidths.equipped)
+    Addon.frame.columnTrade:SetWidth(tradeHeaderWidth)
     Addon.frame.columnPlayer.columnX = 18
     Addon.frame.columnDrop.columnX = dropX
     Addon.frame.columnEquipped.columnX = equippedX
+    Addon.frame.columnTrade.columnX = tradeX
     for _, header in ipairs(Addon.columnHeaders) do
         header:ClearAllPoints()
         header:SetPoint("TOPLEFT", Addon.frame, "TOPLEFT", header.columnX, -68 - extraSize)
@@ -1917,7 +1963,6 @@ local function RefreshRows()
             rowFrame.equippedLink:SetHeight(bodyHeight + 3)
             rowFrame.equippedLink2:SetHeight(bodyHeight + 3)
             rowFrame.whisper:SetHeight(math.max(16, bodyHeight + 3))
-            rowFrame.tradeInfo:SetHeight(Core.ResolveFontSize(9, Addon.state.settings.fontSize) + 2)
             rowFrame.looter:SetText(row.looter or "?")
             ApplyLooterClassColor(rowFrame.looter, EnsureRowClassToken(row))
             rowFrame.drop:ClearAllPoints()
@@ -1962,6 +2007,16 @@ local function RefreshRows()
             local tradeStatusKey = Core.GetTradeStatusKey(row)
             rowFrame.trade:SetText(Core.GetTradeStatusText(row, ActiveLocale()))
             Addon.ApplyTradeStatusColor(rowFrame.trade, tradeStatusKey)
+            -- Trade shares the second row line with the status text: the
+            -- block keeps the row right edge while its scaled width grows
+            -- left, and the status yields so the two boxes never overlap.
+            rowFrame.trade:ClearAllPoints()
+            rowFrame.trade:SetPoint("BOTTOMRIGHT", rowFrame, "BOTTOMRIGHT", -6, 2)
+            rowFrame.trade:SetWidth(tradeWidth)
+            rowFrame.status:SetWidth((ROW_WIDTH - 6 - tradeWidth) - 8 - 6)
+            rowFrame.tradeInfo:ClearAllPoints()
+            rowFrame.tradeInfo:SetPoint("BOTTOMRIGHT", rowFrame, "BOTTOMRIGHT", -6, 1)
+            rowFrame.tradeInfo:SetSize(tradeWidth, tradeInfoHeight)
             rowFrame.tradeInfo.tooltipText = Core.GetTradeStatusTooltip(row, ActiveLocale())
             rowFrame.tradeInfo:Show()
             rowFrame.dropLink.itemLink = FirstItemLink(row.itemLink)
@@ -4767,7 +4822,8 @@ function Addon.LayoutSettings()
     if not frame then
         return
     end
-    local size = Addon.state.settings.fontSize
+    local layoutPreview = Addon.sliderPreview and Addon.sliderPreview.fontSize
+    local size = tonumber(layoutPreview) or Addon.state.settings.fontSize
     local extra = math.max(0, size - 12)
     local height = SETTINGS_WINDOW_HEIGHT + extra * 13
     frame:SetHeight(height - 66)
@@ -4827,12 +4883,12 @@ RefreshSettingsControls = function()
     end
     if Addon.delaySlider then
         Addon.updatingControls = true
-        Addon.delaySlider:SetValue(settings.autoDelay)
+        Addon.delaySlider:SetValue((Addon.sliderPreview and Addon.sliderPreview.delay) or settings.autoDelay)
         Addon.updatingControls = false
         ConfigureSliderTemplateLabels(Addon.delaySlider, L("Low"), L("High"))
     end
     if Addon.delayValue then
-        Addon.delayValue:SetText(settings.autoDelay .. "s")
+        Addon.delayValue:SetText(((Addon.sliderPreview and Addon.sliderPreview.delay) or settings.autoDelay) .. "s")
     end
     if Addon.whisperLabel then
         Addon.whisperLabel:SetText(L("Whisper text:"))
@@ -4842,7 +4898,8 @@ RefreshSettingsControls = function()
     end
     if Addon.whisperResetButton then
         local armedAt = tonumber(Addon.whisperResetArmedAt)
-        if armedAt and Now() - armedAt > 5 then
+        local now = Now()
+        if armedAt and type(now) == "number" and now - armedAt > 5 then
             Addon.whisperResetArmedAt = nil
             armedAt = nil
         end
@@ -4863,12 +4920,12 @@ RefreshSettingsControls = function()
     end
     if Addon.fontSizeSlider then
         Addon.updatingControls = true
-        Addon.fontSizeSlider:SetValue(settings.fontSize)
+        Addon.fontSizeSlider:SetValue((Addon.sliderPreview and Addon.sliderPreview.fontSize) or settings.fontSize)
         Addon.updatingControls = false
         ConfigureSliderTemplateLabels(Addon.fontSizeSlider, L("Low"), L("High"))
     end
     if Addon.fontSizeValue then
-        Addon.fontSizeValue:SetText(settings.fontSize)
+        Addon.fontSizeValue:SetText((Addon.sliderPreview and Addon.sliderPreview.fontSize) or settings.fontSize)
     end
     if Addon.languageDropdown then
         SetDropdownTextSafe(Addon.languageDropdown, CurrentLanguageLabel())
@@ -4906,22 +4963,37 @@ local function ScheduleSettingsControlsRefresh()
 end
 
 local function SetFontSize(value, previewOnly)
-    Addon.state.settings.fontSize = tonumber(value) or Addon.state.settings.fontSize
-    Addon.state.settings = Core.NormalizeSettings(Addon.state.settings)
+    local number = tonumber(value)
     if previewOnly then
-        Addon.pendingSliderSave = true
-    else
-        SaveDB()
+        -- Drag ticks stage in Addon.sliderPreview: live settings (with
+        -- their scheduler/status readers) stay on the saved size while
+        -- painters follow the preview. Bounds mirror NormalizeSettings.
+        Addon.sliderPreview = Addon.sliderPreview or {}
+        Addon.sliderPreview.fontSize = math.floor(math.min(24, math.max(8, number or Addon.state.settings.fontSize)) + 0.5)
+        ApplyCurrentFont()
+        RefreshSettingsControls()
+        return
     end
+    Addon.state.settings.fontSize = number or Addon.state.settings.fontSize
+    Addon.state.settings = Core.NormalizeSettings(Addon.state.settings)
+    SaveDB()
     ApplyCurrentFont()
     RefreshSettingsControls()
 end
 
 function Addon.CommitSliderChanges()
-    if not Addon.pendingSliderSave then
+    local preview = Addon.sliderPreview
+    if type(preview) ~= "table" or (preview.delay == nil and preview.fontSize == nil) then
         return
     end
-    Addon.pendingSliderSave = nil
+    Addon.sliderPreview = nil
+    if preview.delay ~= nil then
+        Addon.state.settings.autoDelay = preview.delay
+    end
+    if preview.fontSize ~= nil then
+        Addon.state.settings.fontSize = preview.fontSize
+    end
+    Addon.state.settings = Core.NormalizeSettings(Addon.state.settings)
     SaveDB()
     RefreshRows()
     RefreshSettingsControls()
@@ -5014,7 +5086,8 @@ end
 
 function Addon.FontPickerMetrics()
     local settings = Addon.state and Addon.state.settings or {}
-    local buttonHeight = math.max(22, Core.ResolveFontSize(12, settings.fontSize) + 4)
+    local pickerPreview = Addon.sliderPreview and Addon.sliderPreview.fontSize
+    local buttonHeight = math.max(22, Core.ResolveFontSize(12, tonumber(pickerPreview) or settings.fontSize) + 4)
     local metrics = { cols = 3, buttonWidth = 160, buttonHeight = buttonHeight, pad = 8, scrollbarWidth = 22 }
     metrics.visibleRows = math.max(1, math.floor(308 / buttonHeight))
     metrics.frameWidth = metrics.cols * metrics.buttonWidth + metrics.pad * 2 + metrics.scrollbarWidth
@@ -5293,6 +5366,8 @@ function Addon.EnterLootMode()
     if leavingSettings then
         Addon.CommitFocusedWhisperTemplate()
         Addon.CommitSliderChanges()
+        -- An armed template reset belongs to the settings screen.
+        Addon.whisperResetArmedAt = nil
         HideFontPicker()
         SafeCall(CloseDropDownMenus)
         CancelSettingsPreview()
@@ -5506,7 +5581,8 @@ CreateSettingsUI = function()
         -- Two-click reset: the first click arms ("Reset?"), the second
         -- inside 5s restores the default; typing disarms.
         local armedAt = tonumber(Addon.whisperResetArmedAt)
-        if armedAt and Now() - armedAt <= 5 then
+        local now = Now()
+        if armedAt and type(now) == "number" and now - armedAt <= 5 then
             Addon.whisperResetArmedAt = nil
             Addon.whisperTemplateFocused = false
             SetWhisperTemplate(nil)
@@ -5686,17 +5762,23 @@ SetAutoWhisper = function(enabled)
 end
 
 SetDelay = function(value, quiet, previewOnly)
-    local old = Addon.state.settings.autoDelay
-    Addon.state.settings.autoDelay = tonumber(value) or old
-    Addon.state.settings = Core.NormalizeSettings(Addon.state.settings)
+    local number = tonumber(value)
     if previewOnly then
-        Addon.pendingSliderSave = true
-    else
-        SaveDB()
+        -- See SetFontSize: drag ticks stage here, release/close commits.
+        Addon.sliderPreview = Addon.sliderPreview or {}
+        local bounds = Addon.state.settings
+        Addon.sliderPreview.delay = math.floor(math.min(bounds.maxDelay, math.max(bounds.minDelay, number or bounds.autoDelay)) + 0.5)
+        RefreshRows()
+        RefreshSettingsControls()
+        return
     end
+    local old = Addon.state.settings.autoDelay
+    Addon.state.settings.autoDelay = number or old
+    Addon.state.settings = Core.NormalizeSettings(Addon.state.settings)
+    SaveDB()
     RefreshRows()
     RefreshSettingsControls()
-    if not quiet and Addon.state.settings.autoDelay ~= tonumber(value) then
+    if not quiet and Addon.state.settings.autoDelay ~= number then
         Print("delay must be between " .. Addon.state.settings.minDelay .. " and " .. Addon.state.settings.maxDelay .. " seconds")
     end
 end
@@ -5813,7 +5895,8 @@ local function HandleSlash(message)
             .. ", diagnostics=" .. tostring(#(Addon.diagnostics or {}))
             .. ", build=" .. tostring(Core.VERSION)
             .. ", locale=" .. tostring(Core.ResolveActiveLocale(Addon.state.settings.forceLocale, ClientLocale()))
-            .. ", font=" .. tostring(FindFontName(Addon.state.settings.font))
+            .. ", font=" .. tostring(FindFontName(Addon.ValidatedDisplayFont()))
+            .. ", fontSize=" .. tostring(Addon.state.settings.fontSize)
             .. ", layout=" .. tostring(layoutWidth) .. "x" .. tostring(layoutHeight))
     else
         Print("commands: /dyni, /dyni settings, /dyni resetpos, /dyni test, /dyni scan, /dyni auto on|off, /dyni delay <seconds>, /dyni clear, /dyni history, /dyni debug on|off, /dyni diag, /dyni status")

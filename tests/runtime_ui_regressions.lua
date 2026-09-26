@@ -567,17 +567,212 @@ local function testWhisperResetNeedsConfirmation()
     assertEqual(h.env.DoYouNeedItDB.settings.whisperTemplate, "Final {item} draft", "typing a new draft disarms the pending reset")
 end
 
+local function testFontListCacheBoundsSharedMediaLookups()
+    local h = Harness.new({ lsmFonts = {
+        { name = "Friz Quadrata TT", path = "Fonts\\FRIZQT__.TTF" },
+        { name = "Arial Narrow", path = "Fonts\\ARIALN.TTF" },
+    } })
+    local listCalls, fetchCalls = 0, 0
+    local rawLibStub = h.env.LibStub
+    h.env.LibStub = function(name, silent)
+        local lib = rawLibStub(name, silent)
+        if name == "LibSharedMedia-3.0" and type(lib) == "table" and not lib._dyniCounted then
+            lib._dyniCounted = true
+            local rawList, rawFetch = lib.List, lib.Fetch
+            lib.List = function(self, kind)
+                listCalls = listCalls + 1
+                return rawList(self, kind)
+            end
+            lib.Fetch = function(self, kind, fontName, noDefault)
+                fetchCalls = fetchCalls + 1
+                return rawFetch(self, kind, fontName, noDefault)
+            end
+        end
+        return lib
+    end
+    h:loadAddon()
+    -- Cyrillic looter forces the per-row dynamic glyph fallback, so every
+    -- repaint rebuilds the font list without a cache.
+    h:setUnit("party1", { name = "Игрок", realm = "Ravencrest", guid = "CacheGUID", classToken = "PALADIN" })
+    addRealGear(h, 22531)
+    h:slash("settings")
+    h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
+    assertTruthy(#h:visibleRows() > 0, "precondition: cyrillic loot row is visible")
+    listCalls, fetchCalls = 0, 0
+    for _ = 1, 20 do
+        h:slash("delay 11")
+    end
+    assertTruthy(fetchCalls <= 5, "font cache bounds shared-media fetches during repaint storm (got " .. tostring(fetchCalls) .. ")")
+    assertTruthy(listCalls <= 25, "font cache bounds shared-media listings during repaint storm (got " .. tostring(listCalls) .. ")")
+    -- Dropping a shared-media font must invalidate the cache on next paint.
+    table.remove(h.options.lsmFonts, 2)
+    local fetchesBefore = fetchCalls
+    h:slash("delay 12")
+    assertTruthy(fetchCalls > fetchesBefore, "changed shared-media set rebuilds the font list")
+    assertTruthy(#h:visibleRows() > 0, "loot still paints after a font disappears mid-session")
+end
+
+local function testAutoSwitchRestoresReregisteredFont()
+    local elvishPath = "Interface\\AddOns\\ElvUI\\Media\\Fonts\\ElvUI.ttf"
+    local baseFonts = {
+        { name = "Friz Quadrata TT", path = "Fonts\\FRIZQT__.TTF" },
+        { name = "Arial Narrow", path = "Fonts\\ARIALN.TTF" },
+    }
+    local withElvish = {
+        baseFonts[1],
+        baseFonts[2],
+        { name = "ElvUI", path = elvishPath },
+    }
+    local first = Harness.new({ lsmFonts = withElvish, db = { settings = { font = elvishPath } } })
+    first:loadAddon()
+    assertEqual(first.env.DoYouNeedItDB.settings.font, elvishPath, "registered shared-media font survives load")
+    addRealGear(first, 22511)
+    assertEqual(first:visibleRows()[1].drop.font, elvishPath, "loot uses the registered shared-media font")
+
+    local second = Harness.new({ lsmFonts = baseFonts, db = first.env.DoYouNeedItDB })
+    second:loadAddon()
+    second:slash("delay 11")
+    assertEqual(second.env.DoYouNeedItDB.settings.font, "Fonts\\FRIZQT__.TTF", "unregistered font falls back instead of painting blind")
+    assertEqual(second.env.DoYouNeedItDB.settings.fontBeforeAutoSwitch, elvishPath,
+        "pre-fallback font is remembered even when it is already unavailable")
+
+    local third = Harness.new({ lsmFonts = withElvish, db = second.env.DoYouNeedItDB })
+    third:loadAddon()
+    third:slash("delay 12")
+    assertEqual(third.env.DoYouNeedItDB.settings.font, elvishPath, "reregistered font is restored")
+    assertEqual(third.env.DoYouNeedItDB.settings.fontBeforeAutoSwitch, nil, "restored font clears the auto-switch memory")
+    addRealGear(third, 22512)
+    assertEqual(third:visibleRows()[1].drop.font, elvishPath, "loot uses the restored font")
+end
+
+local function testTradeBlockScalesWithFont()
+    local Core = nil
+    for _, size in ipairs({ 20, 21, 22, 23, 24 }) do
+        local h = Harness.new({ db = { settings = { forceLocale = "ruRU", fontSize = size, font = "Fonts\\ARIALN.TTF" } } })
+        h:loadAddon()
+        Core = Core or h.env.DoYouNeedItCore
+        addRealGear(h, 22540 + size)
+        local row = h:visibleRows()[1]
+        -- Fit model: average Cyrillic advance is about half the point size;
+        -- the trade box must cover the longest transfer label.
+        local function fits(text, boxWidth)
+            local _, chars = text:gsub("[^\128-\191]", "")
+            return chars * Core.ResolveFontSize(9, size) / 2 <= boxWidth
+        end
+        for _, statusKey in ipairs({ "trade_confirmed", "trade_likely", "trade_no", "trade_unknown" }) do
+            row.row.tradeStatusKey = statusKey
+            h:slash("delay 11")
+            row = h:visibleRows()[1]
+            local expected = Core.GetTradeStatusText(row.row, "ruRU")
+            assertEqual(row.trade:GetText(), expected, "russian transfer status renders at font " .. size)
+            assertTruthy(expected ~= Core.GetTradeStatusText(row.row, "enUS"), "transfer status is localized at font " .. size)
+            assertTruthy(fits(row.trade:GetText(), row.trade:GetWidth()),
+                "russian transfer label fits its box at font " .. size .. ": " .. row.trade:GetText())
+        end
+        -- Exact scaled widths at the sampled ends of the range.
+        if size == 20 or size == 24 then
+            local scale = Core.ResolveFontSize(11, size) / 11
+            local tradeWidth = math.min(220, math.max(110, math.floor(110 * scale + 0.5)))
+            local headerWidth = math.min(90, math.max(58, math.floor(58 * scale + 0.5)))
+            assertEqual(row.trade:GetWidth(), tradeWidth, "trade value width scales at font " .. size)
+            assertEqual(row.tradeInfo:GetWidth(), tradeWidth, "trade hover width scales at font " .. size)
+            assertEqual(h.env.DoYouNeedItFrame.columnTrade:GetWidth(), headerWidth, "trade header width scales at font " .. size)
+            assertEqual(row.tradeInfo:GetHeight(), math.min(24, math.max(11, math.floor(11 * scale + 0.5))),
+                "trade hover height scales at font " .. size)
+            -- Second-line boxes stay disjoint: status yields to the trade block.
+            local statusLeft = row.looter.points[1][4] + row.status.points[1][4]
+            assertTruthy(statusLeft + row.status:GetWidth() <= 504 - tradeWidth,
+                "status and scaled trade boxes do not overlap at font " .. size)
+        end
+    end
+end
+
+local function testTradeColumnFollowsEquippedColumn()
+    local h = tooltipHarness(1)
+    local main = h.env.DoYouNeedItFrame
+    local function headerRight(header)
+        return header.points[1][4] + (header:GetWidth() or 0)
+    end
+    assertEqual(main.columnDrop.points[1][4], 116, "default drop header anchor")
+    assertEqual(main.columnEquipped.points[1][4], 306, "default equipped header anchor")
+    assertEqual(main.columnTrade.points[1][4], 456, "trade header starts where the equipped column ends")
+    assertTruthy(headerRight(main.columnEquipped) <= main.columnTrade.points[1][4],
+        "equipped and trade headers do not overlap at default font")
+    local row = h:visibleRows()[1]
+    -- Trade block keeps the row right edge while its font-scaled width
+    -- grows left; the header stays pinned to the equipped column end.
+    assertEqual(row.trade.points[1][1], "BOTTOMRIGHT", "trade value keeps the row right edge")
+    assertEqual(row.trade:GetWidth(), 110, "trade value keeps its default width at default font")
+    assertEqual(row.tradeInfo.points[1][1], "BOTTOMRIGHT", "trade hover keeps the row right edge")
+    assertEqual(row.tradeInfo:GetWidth(), 110, "trade hover keeps its default width at default font")
+    assertEqual(row.tradeInfo:GetHeight(), 11, "trade hover keeps single-line height at default font")
+    h:slash("settings")
+    h.env.DoYouNeedItSettingsFrame.fontSizeSlider:SetValue(24)
+    h.env.DoYouNeedItSettingsFrame.fontSizeSlider:FireScript("OnMouseUp")
+    h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
+    assertEqual(main.columnDrop.points[1][4], 136, "large-font drop header anchor")
+    assertEqual(main.columnEquipped.points[1][4], 346, "large-font equipped header anchor")
+    assertEqual(main.columnTrade.points[1][4], 506, "trade header follows the equipped column end at large font")
+    assertTruthy(headerRight(main.columnEquipped) <= main.columnTrade.points[1][4],
+        "equipped and trade headers do not overlap at large font")
+    row = h:visibleRows()[1]
+    assertEqual(row.trade:GetWidth(), 220, "trade value width scales at large font")
+    assertEqual(row.tradeInfo:GetWidth(), 220, "trade hover width scales at large font")
+    assertEqual(row.tradeInfo:GetHeight(), 23, "trade hover grows with the font")
+    -- Second-line boxes stay disjoint: status yields to the trade block,
+    -- whose right edge sits at the row right margin.
+    local statusLeft = row.looter.points[1][4] + row.status.points[1][4]
+    assertTruthy(statusLeft + row.status:GetWidth() <= 504 - row.trade:GetWidth(),
+        "status and trade row boxes do not overlap")
+end
+
+local function testLeavingSettingsDisarmsWhisperReset()
+    local h = Harness.new()
+    h:loadAddon()
+    h:slash("settings")
+    local settings = h.env.DoYouNeedItSettingsFrame
+    settings.whisperResetButton:FireScript("OnClick")
+    assertEqual(settings.whisperResetButton:GetText(), "Reset?", "precondition: first reset click arms confirmation")
+    settings.back:FireScript("OnClick")
+    h:slash("settings")
+    settings = h.env.DoYouNeedItSettingsFrame
+    assertEqual(settings.whisperResetButton:GetText(), "Reset", "leaving settings disarms the reset confirmation")
+    settings.whisperResetButton:FireScript("OnClick")
+    assertEqual(settings.whisperResetButton:GetText(), "Reset?", "precondition: reset rearms inside settings")
+    h.now = "not-a-time"
+    h:slash("delay 11")
+    assertEqual(settings.whisperResetButton:GetText(), "Reset?", "unreadable clock keeps the armed reset without errors")
+    settings.whisperResetButton:FireScript("OnClick")
+    assertEqual(settings.whisperResetButton:GetText(), "Reset?", "unreadable clock never confirms a reset")
+    assertEqual(h.env.DoYouNeedItDB.settings.whisperTemplate, "Hey, do you need {item}?",
+        "unreadable clock keeps the saved whisper template")
+end
+
+local function testCommitSliderChangesWithoutPreviewIsNoop()
+    local h = Harness.new()
+    h:loadAddon()
+    h:slash("delay 10")
+    h:slash("settings")
+    local before = h.env.DoYouNeedItDB.settings
+    h.env.DoYouNeedItSettingsFrame.delaySlider:FireScript("OnMouseUp")
+    h.env.DoYouNeedItSettingsFrame.fontSizeSlider:FireScript("OnMouseUp")
+    assertEqual(h.env.DoYouNeedItDB.settings, before, "slider release without a drag saves nothing")
+    assertEqual(h.env.DoYouNeedItDB.settings.autoDelay, 10, "slider release without a drag keeps the delay")
+    assertEqual(h.env.DoYouNeedItDB.settings.fontSize, 12, "slider release without a drag keeps the font size")
+end
+
 local function testSlidersPersistOnRelease()
     local h = Harness.new()
     h:loadAddon()
     h:slash("delay 10")
     h:slash("settings")
     local settings = h.env.DoYouNeedItSettingsFrame
-    -- SaveDB reassigns the settings table, so identity (not the live value,
-    -- which previews already mutate) tells a preview tick from a real save.
+    -- Slider drags stage in Addon.sliderPreview: the saved settings (and
+    -- their scheduler/status readers) stay stable until release or close.
     local savedBefore = h.env.DoYouNeedItDB.settings
     settings.delaySlider:SetValue(15)
     assertEqual(h.env.DoYouNeedItDB.settings, savedBefore, "delay drag previews without saving")
+    assertEqual(h.env.DoYouNeedItDB.settings.autoDelay, 10, "delay drag keeps the saved delay stable")
     assertEqual(settings.delayValue:GetText(), "15s", "delay drag updates its readout")
     settings.delaySlider:FireScript("OnMouseUp")
     assertTruthy(h.env.DoYouNeedItDB.settings ~= savedBefore, "delay release persists the value")
@@ -585,11 +780,52 @@ local function testSlidersPersistOnRelease()
     local fontSavedBefore = h.env.DoYouNeedItDB.settings
     settings.fontSizeSlider:SetValue(20)
     assertEqual(h.env.DoYouNeedItDB.settings, fontSavedBefore, "font-size drag previews without saving")
+    assertEqual(h.env.DoYouNeedItDB.settings.fontSize, 12, "font-size drag keeps the saved size stable")
     settings.fontSizeSlider:FireScript("OnMouseUp")
     assertEqual(h.env.DoYouNeedItDB.settings.fontSize, 20, "font-size release stores the dragged value")
     settings.delaySlider:SetValue(18)
     settings.back:FireScript("OnClick")
     assertEqual(h.env.DoYouNeedItDB.settings.autoDelay, 18, "leaving settings persists an unreleased drag")
+end
+
+local function testSliderPreviewNeverLeaksIntoScheduler()
+    local h = Harness.new()
+    h:loadAddon()
+    h:slash("auto on")
+    h:slash("delay 10")
+    addRealGear(h, 22561)
+    h:slash("settings")
+    local settings = h.env.DoYouNeedItSettingsFrame
+    settings.delaySlider:SetValue(25)
+    assertEqual(settings.delayValue:GetText(), "25s", "precondition: delay preview readout follows the drag")
+    -- SaveDB stores the live settings table by reference, so saved delay
+    -- stability proves the scheduler (which reads live settings) is stable.
+    assertEqual(h.env.DoYouNeedItDB.settings.autoDelay, 10, "delay drag keeps the saved delay stable")
+    h:slash("status")
+    local found
+    for _, message in ipairs(h.messages) do
+        if message:find("delay=10s", 1, true) then
+            found = true
+        end
+    end
+    assertEqual(found, true, "status reports the saved delay during preview")
+    settings.fontSizeSlider:SetValue(20)
+    assertEqual(h.env.DoYouNeedItDB.settings.fontSize, 12, "font-size drag keeps the saved size stable")
+    local painted = h:findFrame(function(frame) return frame.row ~= nil end)
+    assertTruthy(painted, "precondition: loot row frame exists behind settings")
+    assertEqual(painted.drop.fontSize, 19, "font-size drag still previews on loot text")
+    -- Committing the preview feeds the scheduler normally afterwards.
+    settings.delaySlider:FireScript("OnMouseUp")
+    assertEqual(h.env.DoYouNeedItDB.settings.autoDelay, 25, "release commits the previewed delay")
+    settings.back:FireScript("OnClick")
+    addRealGear(h, 22563)
+    local committed
+    for _, frame in ipairs(h:visibleRows()) do
+        if frame.row.statusSeconds == 25 then
+            committed = true
+        end
+    end
+    assertEqual(committed, true, "rows arriving after commit use the committed delay")
 end
 
 local function testWheelIgnoredInSettings()
@@ -628,6 +864,27 @@ local function testColumnWidthsScaleWithFont()
     local headerTop = -(main.columnPlayer.points[1][5] or 0)
     local rowTop = -(row.points[1][5] or 0)
     assertTruthy(headerTop < rowTop, "column headers stay above large-font rows")
+end
+
+local function testStatusReportsValidatedFontAndSize()
+    local h = Harness.new({ db = { settings = { fontSize = 20 } } })
+    h:loadAddon()
+    h:slash("status")
+    local foundFont, foundSize, foundLayout
+    for _, message in ipairs(h.messages) do
+        if message:find("font=Friz Quadrata TT", 1, true) then
+            foundFont = true
+        end
+        if message:find("fontSize=20", 1, true) then
+            foundSize = true
+        end
+        if message:find("layout=540x300", 1, true) then
+            foundLayout = true
+        end
+    end
+    assertEqual(foundFont, true, "status reports the validated display font name")
+    assertEqual(foundSize, true, "status reports the configured font size")
+    assertEqual(foundLayout, true, "status keeps reporting the live window size")
 end
 
 local function testStatusReportsLiveLayout()
@@ -677,10 +934,18 @@ local tests = {
     { "main window toplevel and geometry", testMainWindowToplevelAndGeometry },
     { "guarded text tooltips", testTextTooltipsUseGuardedHelper },
     { "whisper reset confirmation", testWhisperResetNeedsConfirmation },
+    { "leaving settings disarms whisper reset", testLeavingSettingsDisarmsWhisperReset },
     { "slider release persistence", testSlidersPersistOnRelease },
+    { "slider commit without preview is noop", testCommitSliderChangesWithoutPreviewIsNoop },
+    { "slider preview never leaks into scheduler", testSliderPreviewNeverLeaksIntoScheduler },
     { "wheel ignored in settings", testWheelIgnoredInSettings },
     { "column widths scale with font", testColumnWidthsScaleWithFont },
+    { "trade block scales with font", testTradeBlockScalesWithFont },
+    { "trade column follows equipped", testTradeColumnFollowsEquippedColumn },
+    { "auto-switch restores reregistered font", testAutoSwitchRestoresReregisteredFont },
+    { "font list cache bounds lookups", testFontListCacheBoundsSharedMediaLookups },
     { "status live layout", testStatusReportsLiveLayout },
+    { "status validated font and size", testStatusReportsValidatedFontAndSize },
     { "reset position without storage", testResetPositionWithMissingDB },
     { "broken font fallback", testBrokenFontFallsBackToCompatible },
     { "Russian settings font coverage", testRussianClientSettingsUseGlyphCapableFont },

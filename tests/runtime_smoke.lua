@@ -399,6 +399,7 @@ local function testNonLatinLootTextUsesGlyphCapableFont()
         { name = "Игрок", lsmFonts = nil, expected = "Fonts\\ARIALN.TTF" },
         { name = "플레이어", lsmFonts = { { name = "Noto Sans CJK", path = notoPath } }, expected = notoPath },
         { name = "玩家", lsmFonts = { { name = "Noto Sans CJK", path = notoPath } }, expected = notoPath },
+        { name = "プレイヤー", lsmFonts = { { name = "Noto Sans CJK", path = notoPath } }, expected = notoPath },
     }
     for _, case in ipairs(cases) do
         local fonts = {

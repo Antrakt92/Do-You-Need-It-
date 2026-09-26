@@ -651,6 +651,16 @@ local LEGACY_STATUS_TEXT_TO_KEY = {
     ["auto sending"] = "auto_sending",
     ["whisper failed"] = "whisper_failed",
     ["test row"] = "test_row",
+    -- Rendered ruRU labels, kept so carried-over saves map back to keys.
+    ["кандидат"] = "candidate",
+    ["отправлено"] = "sent",
+    ["авто отправлено"] = "auto_sent",
+    ["отправка"] = "sending",
+    ["авто-отправка"] = "auto_sending",
+    ["виспер не отправлен"] = "whisper_failed",
+    ["тест"] = "test_row",
+    ["Отпр."] = "sent",
+    ["Отпр..."] = "sending",
 }
 
 local TRANSIENT_STATUS_KEYS = {
@@ -1117,6 +1127,12 @@ function Core.GetTextGlyphRequirement(text)
         return GLYPH_CYR
     end
     if text:find(HANGUL_UTF8_LEAD_PATTERN) then
+        return GLYPH_HANGUL
+    end
+    -- Hangul Jamo U+1100-U+11FF encodes as E1 84 80-E1 87 BF. Lead E1
+    -- alone would also match Myanmar/Ethiopic, so the second byte is
+    -- constrained to 0x84-0x87 (U+10FF ends in 0x83, U+1200 starts 0x88).
+    if text:find("\225[\132-\135]") then
         return GLYPH_HANGUL
     end
     if text:find(CJK_UTF8_LEAD_PATTERN) then
