@@ -6200,7 +6200,7 @@ function Addon.BuildSelfTestCopyLines(saved)
         end
         copyLines[#copyLines + 1] = stageLine
     end
-    copyLines[#copyLines + 1] = "DYNI1: nocheck=loot,whisper,tradeTimer"
+    copyLines[#copyLines + 1] = "DYNI1: nocheck=live-loot,inspect-timing,whisper-delivery,roster"
     return copyLines
 end
 
