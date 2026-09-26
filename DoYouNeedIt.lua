@@ -5799,6 +5799,8 @@ function Addon.RunSelfTest(mode)
     local sub = string.lower(CleanString(mode) or "")
     if sub == "stop" or Addon.selfTestActive == true then
         Addon.selfTestActive = false
+        Addon.selfTestCopyPendingAfterCombat = false
+        Addon.selfTestCopyText = nil
         _G.DoYouNeedItSelfTest = nil
         Print("selftest stopped; stored report discarded")
         return
@@ -5957,43 +5959,134 @@ function Addon.RunSelfTest(mode)
         .. " hist=" .. tostring(historyGroups)
         .. " scanq=" .. tostring(scanQueue) .. " inspq=" .. tostring(inspectQueue)
         .. " autoq=" .. tostring(autoQueue))
-    Print("selftest: checked env,settings,geometry,commands,diagbuffer,cache,queues,group")
     Print("selftest: NOT checked: live loot,Ask whispers,trade detection (needs real group drops)")
-    Print("DYNI1: v=1 build=" .. build .. " toc=" .. tocVersion
-        .. " iface=" .. tostring(iface) .. " locale=" .. activeLocale)
-    Print("DYNI1: sv=" .. (dbOk and "ok" or "FAIL")
-        .. " settings=" .. (settingsOk and "ok" or "FAIL")
-        .. " geom=" .. (geomOk and "ok" or "FAIL")
-        .. " slash=" .. (slashOk and "ok" or "FAIL")
-        .. " diag=" .. (diagHealthy and "ok" or "FAIL"))
-    Print("DYNI1: group=" .. groupKind .. " size=" .. tostring(rosterSize)
-        .. " rows=" .. tostring(sessionRows) .. " all=" .. tostring(sessionAll)
-        .. " hist=" .. tostring(historyGroups))
-    Print("DYNI1: cache=" .. tostring(cacheEntries) .. " pending=" .. tostring(pendingBuckets)
-        .. " scanq=" .. tostring(scanQueue) .. " inspq=" .. tostring(inspectQueue)
-        .. " autoq=" .. tostring(autoQueue) .. " dgn=" .. tostring(diagCount))
+    Print("selftest: re-show this report with /dyni selftest show")
+    Addon.ShowSelfTestCopy()
+    Addon.selfTestActive = false
+end
+
+-- Builds the full DYNI1 export block from a stored selftest report. Report
+-- fields are re-cleaned on the way out, so only plain values can reach the
+-- copy window or the chat fallback.
+function Addon.BuildSelfTestCopyLines(saved)
+    if type(saved) ~= "table" or type(saved.report) ~= "table" then
+        return nil
+    end
+    local report = saved.report
+    local build = CleanString(report.build) or "unknown"
+    local tocVersion = CleanString(report.toc) or "unknown"
+    local iface = CleanNumber(report.iface) or 0
+    local activeLocale = CleanString(report.locale) or "unknown"
+    local finishedAt = CleanNumber(saved.finishedAt) or 0
+    local groupKind = CleanString(report.group) or "unknown"
+    local rosterSize = CleanNumber(report.roster) or 0
+    local sessionRows = CleanNumber(report.rows) or 0
+    local sessionAll = CleanNumber(report.all) or 0
+    local historyGroups = CleanNumber(report.hist) or 0
+    local cacheEntries = CleanNumber(report.cache) or 0
+    local pendingBuckets = CleanNumber(report.pending) or 0
+    local scanQueue = CleanNumber(report.scanq) or 0
+    local inspectQueue = CleanNumber(report.inspq) or 0
+    local autoQueue = CleanNumber(report.autoq) or 0
+    local diagCount = CleanNumber(report.diagN) or 0
+
+    local copyLines = {
+        "DYNI1: v=1 build=" .. build .. " toc=" .. tocVersion
+            .. " iface=" .. tostring(iface) .. " locale=" .. activeLocale
+            .. " at=" .. tostring(finishedAt),
+        "DYNI1: sv=" .. ((report.sv == true) and "ok" or "FAIL")
+            .. " settings=" .. ((report.settings == true) and "ok" or "FAIL")
+            .. " geom=" .. ((report.geom == true) and "ok" or "FAIL")
+            .. " slash=" .. ((report.slash == true) and "ok" or "FAIL")
+            .. " diag=" .. ((report.diag == true) and "ok" or "FAIL"),
+        "DYNI1: group=" .. groupKind .. " size=" .. tostring(rosterSize)
+            .. " rows=" .. tostring(sessionRows) .. " all=" .. tostring(sessionAll)
+            .. " hist=" .. tostring(historyGroups),
+        "DYNI1: cache=" .. tostring(cacheEntries) .. " pending=" .. tostring(pendingBuckets)
+            .. " scanq=" .. tostring(scanQueue) .. " inspq=" .. tostring(inspectQueue)
+            .. " autoq=" .. tostring(autoQueue) .. " dgn=" .. tostring(diagCount),
+    }
     local stageTokens = {}
-    for stageName in pairs(stageCounts) do
-        stageTokens[#stageTokens + 1] = stageName .. "=" .. tostring(stageCounts[stageName])
+    if type(report.stages) == "table" then
+        for stageName, stageCount in pairs(report.stages) do
+            local cleanStage = CleanString(stageName)
+            local cleanCount = CleanNumber(stageCount)
+            if cleanStage and cleanCount then
+                cleanStage = string.sub(cleanStage, 1, 40):gsub("%s", "_")
+                stageTokens[#stageTokens + 1] = cleanStage .. "=" .. tostring(cleanCount)
+            end
+        end
     end
     table.sort(stageTokens)
     local stageLine = "DYNI1: stages"
     if #stageTokens == 0 then
-        Print(stageLine .. "=none")
+        copyLines[#copyLines + 1] = stageLine .. "=none"
     else
         for tokenIndex = 1, #stageTokens do
             local piece = ((tokenIndex == 1) and " " or ",") .. stageTokens[tokenIndex]
             if string.len(stageLine) + string.len(piece) > 170 then
-                Print(stageLine)
+                copyLines[#copyLines + 1] = stageLine
                 stageLine = "DYNI1: stages+" .. stageTokens[tokenIndex]
             else
                 stageLine = stageLine .. piece
             end
         end
-        Print(stageLine)
+        copyLines[#copyLines + 1] = stageLine
     end
-    Print("DYNI1: nocheck=loot,whisper,tradeTimer")
-    Addon.selfTestActive = false
+    copyLines[#copyLines + 1] = "DYNI1: nocheck=loot,whisper,tradeTimer"
+    return copyLines
+end
+
+-- Shows the stored selftest report in a copy-friendly dialog. Combat defers
+-- through the existing PLAYER_REGEN_ENABLED resume path (no new ticker);
+-- when the popup API is unavailable the full block falls back to chat.
+function Addon.ShowSelfTestCopy()
+    local saved = _G.DoYouNeedItSelfTest
+    if type(saved) ~= "table" or type(saved.report) ~= "table" then
+        Print("selftest: no stored report; run /dyni selftest")
+        return
+    end
+    if CleanBoolean(SafeCall(InCombatLockdown)) == true then
+        Addon.selfTestCopyPendingAfterCombat = true
+        Print("selftest: copy window deferred until combat ends")
+        return
+    end
+    Addon.selfTestCopyPendingAfterCombat = false
+    local copyLines = Addon.BuildSelfTestCopyLines(saved)
+    if type(copyLines) ~= "table" or #copyLines == 0 then
+        Print("selftest: stored report is unreadable; run /dyni selftest")
+        return
+    end
+    Addon.selfTestCopyText = table.concat(copyLines, "\n")
+    if type(StaticPopupDialogs) == "table" and type(StaticPopup_Show) == "function" then
+        if StaticPopupDialogs["DOYOUNEED_SELFTEST_COPY"] == nil then
+            StaticPopupDialogs["DOYOUNEED_SELFTEST_COPY"] = {
+                text = "Do You Need It? self-check report (select all, Ctrl+C):",
+                button1 = (type(CLOSE) == "string" and CLOSE) or "Close",
+                hasEditBox = true,
+                editBoxWidth = 320,
+                timeout = 0,
+                whileDead = true,
+                hideOnEscape = true,
+                OnShow = function(self)
+                    local box = self.editBox
+                    if box then
+                        box:SetText(Addon.selfTestCopyText or "")
+                        SafeCall(box.SetFocus, box)
+                        SafeCall(box.HighlightText, box)
+                    end
+                end,
+            }
+        end
+        if SafeCall(StaticPopup_Show, "DOYOUNEED_SELFTEST_COPY") ~= nil then
+            Print("selftest: copy window opened; select all and press Ctrl+C to copy")
+            return
+        end
+    end
+    for lineIndex = 1, #copyLines do
+        Print(copyLines[lineIndex])
+    end
+    Print("selftest: copy window unavailable; full report above")
 end
 
 local function HandleSlash(message)
@@ -6106,9 +6199,13 @@ local function HandleSlash(message)
             .. ", layout=" .. tostring(layoutWidth) .. "x" .. tostring(layoutHeight))
     elseif command == "selftest" then
         local sub = string.lower(CleanString(rest) or "")
-        Addon.RunSelfTest(sub)
+        if sub == "show" then
+            Addon.ShowSelfTestCopy()
+        else
+            Addon.RunSelfTest(sub)
+        end
     else
-        Print("commands: /dyni, /dyni settings, /dyni resetpos, /dyni test, /dyni scan, /dyni auto on|off, /dyni delay <seconds>, /dyni clear, /dyni history, /dyni debug on|off, /dyni diag, /dyni status, /dyni selftest")
+        Print("commands: /dyni, /dyni settings, /dyni resetpos, /dyni test, /dyni scan, /dyni auto on|off, /dyni delay <seconds>, /dyni clear, /dyni history, /dyni debug on|off, /dyni diag, /dyni status, /dyni selftest [show|stop]")
     end
 end
 
@@ -6237,6 +6334,10 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         QueueEquipmentScan("entering_world", true)
     elseif event == "PLAYER_REGEN_ENABLED" then
         Addon.ResumeInspectWorkAfterCombat(3)
+        if Addon.selfTestCopyPendingAfterCombat then
+            Addon.selfTestCopyPendingAfterCombat = nil
+            Addon.ShowSelfTestCopy()
+        end
         if Addon.rosterScanPendingAfterCombat then
             Addon.rosterScanPendingAfterCombat = nil
             QueueEquipmentScan("group_roster_update", true)
