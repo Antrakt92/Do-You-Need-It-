@@ -58,6 +58,7 @@ Language defaults to **Auto**, following your client locale. English and Russian
 | `/dyni debug on` | Save the last 20 loot-processing diagnostic entries. |
 | `/dyni debug off` | Stop saving diagnostic entries and clear saved diagnostics. |
 | `/dyni diag` | Print the newest diagnostic entries. |
+| `/dyni selftest` | Run a self-check and print a chat summary. |
 
 ## Help and development
 
