@@ -110,7 +110,7 @@ function tests.selftestSlashOpensCopyWindowAndKeepsChatSlim()
     h:slash("selftest")
     equal(#h.popupShown, 1, "run opens the copy window once")
     equal(h.popupShown[1], "DOYOUNEED_SELFTEST_COPY", "run opens the canonical copy dialog")
-    equal(#h.messages, 7, "chat stays slim when the copy window opens")
+    equal(#h.messages, 8, "chat stays slim when the copy window opens")
     equal(#exportLines(h), 0, "full export block leaves chat for the copy window")
     truthy(hasMessage(h, "NOT checked"), "human summary states what was not verified")
     truthy(hasMessage(h, "copy window opened"), "chat points at the copy window")
@@ -227,6 +227,49 @@ function tests.selftestShowWithoutReportPrintsHint()
     h:slash("selftest show")
     truthy(hasMessage(h, "no stored report"), "show without a report explains itself")
     equal(#h.popupShown, 0, "show without a report opens no window")
+end
+
+function tests.selftestKicksLiveEquipmentScanWithoutWaiting()
+    local h = fresh()
+    withPopup(h)
+    h:slash("debug on")
+    h:resetSideEffects()
+    h:slash("selftest")
+    local queuedEntry
+    for _, entry in ipairs(h.env.DoYouNeedItDB.diagnostics or {}) do
+        if entry.stage == "scan_queued" and entry.reason == "selftest" then
+            queuedEntry = entry
+        end
+    end
+    truthy(queuedEntry ~= nil, "scan kick records a selftest scan_queued diagnostic")
+    local saved = h.env.DoYouNeedItSelfTest
+    truthy(saved ~= nil, "scan kick keeps the stored report")
+    equal(type(saved.report.scan), "table", "report carries a scan section")
+    equal(saved.report.scan.queued, queuedEntry.count, "report queued depth matches the kick")
+    truthy(saved.report.scan.queued >= 1, "scan kick queues at least the player unit")
+    equal(saved.report.autoq, 0, "scan kick queues no whispers")
+    equal(#h.sentMessages, 0, "scan kick sends no whispers")
+    truthy(hasMessage(h, "scan queued=" .. tostring(saved.report.scan.queued)), "chat reports the queued depth only")
+    local text = dialogText(h)
+    truthy(text:find("DYNI1: scan queued=" .. tostring(saved.report.scan.queued), 1, true), "copy text carries the queued depth")
+end
+
+function tests.selftestCombatRefusalKicksNoScan()
+    local h = fresh()
+    withPopup(h)
+    h:slash("debug on")
+    h:resetSideEffects()
+    h.env.InCombatLockdown = function() return true end
+    h:slash("selftest")
+    truthy(hasMessage(h, "out-of-combat"), "combat run refuses with a clear reason")
+    equal(h.env.DoYouNeedItSelfTest, nil, "refused run persists nothing")
+    local kicked = false
+    for _, entry in ipairs(h.env.DoYouNeedItDB.diagnostics or {}) do
+        if entry.stage == "scan_queued" and entry.reason == "selftest" then
+            kicked = true
+        end
+    end
+    equal(kicked, false, "refused run kicks no equipment scan")
 end
 
 function tests.selftestShowReshowsWithoutRerunning()
