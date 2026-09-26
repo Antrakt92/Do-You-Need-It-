@@ -5799,6 +5799,7 @@ function Addon.RunSelfTest(mode)
     local sub = string.lower(CleanString(mode) or "")
     if sub == "stop" or Addon.selfTestActive == true then
         Addon.selfTestActive = false
+        Addon.HideSelfTestCopy()
         Addon.selfTestCopyPendingAfterCombat = false
         Addon.selfTestCopyText = nil
         _G.DoYouNeedItSelfTest = nil
@@ -5812,7 +5813,13 @@ function Addon.RunSelfTest(mode)
     Addon.selfTestActive = true
 
     local build = CleanString(Core.VERSION) or "unknown"
-    local tocVersion = CleanString(SafeCall(GetAddOnMetadata, Addon.name, "Version")) or "unknown"
+    -- WHY C_AddOns: the bare GetAddOnMetadata global is gone in Midnight;
+    -- only C_AddOns.GetAddOnMetadata exists. Guarded read, "unknown" fallback.
+    local tocVersion = "unknown"
+    local metadataTable = C_AddOns
+    if type(metadataTable) == "table" and type(metadataTable.GetAddOnMetadata) == "function" then
+        tocVersion = CleanString(SafeCall(metadataTable.GetAddOnMetadata, Addon.name, "Version")) or "unknown"
+    end
     local _ignoredA, _ignoredB, _ignoredC, interfaceBuild = SafeCall(GetBuildInfo)
     local iface = CleanNumber(interfaceBuild) or 0
     local clientLocale = ClientLocale()
@@ -6200,6 +6207,51 @@ end
 -- Shows the stored selftest report in a copy-friendly dialog. Combat defers
 -- through the existing PLAYER_REGEN_ENABLED resume path (no new ticker);
 -- when the popup API is unavailable the full block falls back to chat.
+-- Pours report text into a copy dialog. Returns true only when the text is
+-- visibly in the box. The box is resolved defensively (editBox/EditBox/
+-- global name) because the field name varies across client builds, and the
+-- text travels as StaticPopup data so re-shows cannot serve stale content.
+-- Separated for tests and for the re-show path.
+function Addon.PourSelfTestCopy(frame, text)
+    if type(frame) ~= "table" then return false end
+    local box = frame.editBox or frame.EditBox
+    if type(box) ~= "table" and type(frame.GetName) == "function" then
+        local frameName = SafeCall(frame.GetName, frame)
+        if type(frameName) == "string" and frameName ~= "" then
+            box = _G[frameName .. "EditBox"]
+        end
+    end
+    if type(box) ~= "table" or type(box.SetText) ~= "function" then return false end
+    box:SetText(text or "")
+    SafeCall(box.SetFocus, box)
+    SafeCall(box.HighlightText, box)
+    Addon.selfTestCopyFrame = frame
+    Addon.selfTestCopyPoured = true
+    return true
+end
+
+function Addon.HideSelfTestCopy()
+    Addon.selfTestCopyPoured = false
+    local frame = Addon.selfTestCopyFrame
+    Addon.selfTestCopyFrame = nil
+    if type(frame) == "table" and type(frame.Hide) == "function" then
+        SafeCall(frame.Hide, frame)
+    end
+end
+
+-- Frame visibility across client builds (IsVisible) and the test harness
+-- (IsShown only). Method (not local) to respect the Lua 5.1 chunk budget.
+function Addon.SelfTestCopyFrameVisible(frame)
+    if type(frame) ~= "table" then return false end
+    if type(frame.IsVisible) == "function" then
+        return SafeCall(frame.IsVisible, frame) == true
+    end
+    if type(frame.IsShown) == "function" then
+        return SafeCall(frame.IsShown, frame) == true
+    end
+    return false
+end
+
 function Addon.ShowSelfTestCopy()
     local saved = _G.DoYouNeedItSelfTest
     if type(saved) ~= "table" or type(saved.report) ~= "table" then
@@ -6217,7 +6269,19 @@ function Addon.ShowSelfTestCopy()
         Print("selftest: stored report is unreadable; run /dyni selftest")
         return
     end
-    Addon.selfTestCopyText = table.concat(copyLines, "\n")
+    local copyText = table.concat(copyLines, "\n")
+    Addon.selfTestCopyText = copyText
+    Addon.selfTestCopyPoured = false
+    -- Already visible (for example a re-show): pour straight into the box,
+    -- because StaticPopup_Show skips OnShow for a visible dialog.
+    local oldFrame = Addon.selfTestCopyFrame
+    Addon.selfTestCopyFrame = nil
+    if Addon.SelfTestCopyFrameVisible(oldFrame) then
+        if Addon.PourSelfTestCopy(oldFrame, copyText) then
+            Print("selftest: copy window opened; select all and press Ctrl+C to copy")
+            return
+        end
+    end
     if type(StaticPopupDialogs) == "table" and type(StaticPopup_Show) == "function" then
         if StaticPopupDialogs["DOYOUNEED_SELFTEST_COPY"] == nil then
             StaticPopupDialogs["DOYOUNEED_SELFTEST_COPY"] = {
@@ -6228,20 +6292,22 @@ function Addon.ShowSelfTestCopy()
                 timeout = 0,
                 whileDead = true,
                 hideOnEscape = true,
-                OnShow = function(self)
-                    local box = self.editBox
-                    if box then
-                        box:SetText(Addon.selfTestCopyText or "")
-                        SafeCall(box.SetFocus, box)
-                        SafeCall(box.HighlightText, box)
-                    end
+                OnShow = function(self, data)
+                    local showText = (type(data) == "string" and data ~= "") and data or Addon.selfTestCopyText
+                    Addon.PourSelfTestCopy(self, showText)
+                end,
+                OnHide = function()
+                    Addon.selfTestCopyPoured = false
+                    Addon.selfTestCopyFrame = nil
                 end,
             }
         end
-        if SafeCall(StaticPopup_Show, "DOYOUNEED_SELFTEST_COPY") ~= nil then
+        SafeCall(StaticPopup_Show, "DOYOUNEED_SELFTEST_COPY", nil, nil, copyText)
+        if Addon.selfTestCopyPoured == true then
             Print("selftest: copy window opened; select all and press Ctrl+C to copy")
             return
         end
+        Print("selftest: copy window did not accept text; full report above")
     end
     for lineIndex = 1, #copyLines do
         Print(copyLines[lineIndex])
