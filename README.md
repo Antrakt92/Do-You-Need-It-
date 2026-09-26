@@ -71,6 +71,10 @@ For a loot problem, enable `/dyni debug on` before the drop, then collect `/dyni
 
 See [CONTRIBUTING.md](https://github.com/Antrakt92/Do-You-Need-It-/blob/main/CONTRIBUTING.md) for development checks and packaging.
 
+## More by Antrakt
+- [StatsPro](https://www.curseforge.com/wow/addons/statspro) — customizable stats and gear HUD
+- [ApplicantScout](https://www.curseforge.com/wow/addons/applicantscout-lfg-overlay) — LFG & Party overlay with WCL and RaiderIO context
+
 ## License
 
 The addon code is [MIT licensed](LICENSE). Bundled libraries retain their own licenses; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) and the included `LICENSES/` directory.
