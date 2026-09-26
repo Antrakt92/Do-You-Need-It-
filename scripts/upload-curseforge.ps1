@@ -75,10 +75,11 @@ function Get-ReleaseChangelog {
         $headings[$firstRelease].Groups[1].Value -notmatch "^$([regex]::Escape($Version))(\s|$)") {
         throw "Top changelog release must match version $Version in $resolvedPath"
     }
-    if ($hasUnreleased) {
-        $text = $text.Substring(0, $headings[0].Index) + $text.Substring($headings[1].Index)
-    }
-    return $text.Trim() + "`n"
+    # Release notes carry only the current release entry, not the full
+    # published history. The packaged CHANGELOG.md file itself stays cumulative.
+    $entryStart = $headings[$firstRelease].Index
+    $entryEnd = if ($firstRelease + 1 -lt $headings.Count) { $headings[$firstRelease + 1].Index } else { $text.Length }
+    return $text.Substring($entryStart, $entryEnd - $entryStart).Trim() + "`n"
 }
 
 function Resolve-UploadZip {

@@ -61,25 +61,32 @@ function Assert-PackageCase {
     } elseif ($result.ProjectId -ne 1595368 -or $result.ZipPath -ne $zip) {
         throw "${Name}: unexpected upload metadata"
     } elseif ($result.Metadata.changelog -cne $expectedChangelog) {
-        throw "${Name}: upload must preserve the full changelog history"
+        throw "${Name}: upload must carry the current release notes"
     }
     $script:caseCount++
 }
 
 $reference = $null
 try {
-    $expectedChangelog = ((Get-Content -LiteralPath (Join-Path $repoRoot 'CHANGELOG.md') -Raw -Encoding UTF8) -replace "`r`n?", "`n").Trim() + "`n"
+    $fullChangelog = ((Get-Content -LiteralPath (Join-Path $repoRoot 'CHANGELOG.md') -Raw -Encoding UTF8) -replace "`r`n?", "`n").Trim() + "`n"
+    # Release notes carry only the top release entry; the packaged file stays cumulative.
+    $changelogHeadings = @([regex]::Matches($fullChangelog, '(?m)^##[ \t]+([^\n]+)'))
+    $firstReleaseHeading = 0
+    if ($changelogHeadings.Count -gt 0 -and $changelogHeadings[0].Groups[1].Value.Trim() -ceq 'Unreleased') { $firstReleaseHeading = 1 }
+    $notesStart = $changelogHeadings[$firstReleaseHeading].Index
+    $notesEnd = if ($firstReleaseHeading + 1 -lt $changelogHeadings.Count) { $changelogHeadings[$firstReleaseHeading + 1].Index } else { $fullChangelog.Length }
+    $expectedChangelog = $fullChangelog.Substring($notesStart, $notesEnd - $notesStart).Trim() + "`n"
     & (Join-Path $repoRoot 'scripts/package.ps1') -OutDir $caseRoot
     $referenceZip = @(Get-ChildItem -LiteralPath $caseRoot -Filter '*.zip' -File)[0]
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $reference = [System.IO.Compression.ZipFile]::OpenRead($referenceZip.FullName)
     Assert-PackageCase 'recompressed-valid'
     $customChangelog = Join-Path $caseRoot 'CHANGELOG.md'
-    $futureCopy = $expectedChangelog.Replace("# Changelog`n`n", "# Changelog`n`n## Unreleased`n`n- Future work.`n`n")
+    $futureCopy = $fullChangelog.Replace("# Changelog`n`n", "# Changelog`n`n## Unreleased`n`n- Future work.`n`n")
     [System.IO.File]::WriteAllText($customChangelog, $futureCopy, [System.Text.UTF8Encoding]::new($false))
     $customResult = & $upload -ZipPath $referenceZip.FullName -ChangelogPath $customChangelog -DryRun | ConvertFrom-Json
     if ($customResult.Metadata.changelog -cne $expectedChangelog) {
-        throw 'Future work must be excluded without dropping earlier releases'
+        throw 'Future work must be excluded while keeping the current release notes'
     }
     $caseCount++
     Assert-PackageCase 'invalid-zip' '*'
