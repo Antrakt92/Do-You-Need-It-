@@ -1012,13 +1012,15 @@ function Addon.IsRecentChallengeCompletion()
     return type(completedAt) == "number" and now >= completedAt and now - completedAt <= ENCOUNTER_LOOT_GRACE
 end
 
-function Addon.ScheduleChallengeHistoryFinalize(reason)
+function Addon.ScheduleChallengeHistoryFinalize(reason, rearms)
     if not Addon.state then
         return
     end
 
-    local token = {}
+    rearms = tonumber(rearms) or 0
+    local token = { rearms = rearms }
     Addon.challengeFinalizeToken = token
+    Addon.challengeFinalizeRearms = rearms
     C_Timer.After(Addon.challengeLootFinalizeDelay, function()
         if Addon.challengeFinalizeToken ~= token then
             return
@@ -1029,12 +1031,26 @@ function Addon.ScheduleChallengeHistoryFinalize(reason)
         -- then close only a run that actually owns loot rows.
         Addon.DrainCompletablePendingLoot()
         if Addon.HasCurrentLootRows() then
+            Addon.challengeFinalizeRearms = nil
             RecordDiagnostic("challenge_history_complete", {
                 reason = reason or "challenge_completed",
             })
             Addon.CompleteCurrentGroup(Addon.currentEncounterName)
         elseif Addon.IsRecentChallengeCompletion() then
-            Addon.ScheduleChallengeHistoryFinalize(reason)
+            if (token.rearms or 0) >= 3 then
+                Addon.challengeFinalizeRearms = nil
+                RecordDiagnostic("challenge_history_empty", {
+                    reason = reason or "challenge_completed",
+                    rearms = token.rearms or 0,
+                })
+                return
+            end
+            Addon.ScheduleChallengeHistoryFinalize(reason, (token.rearms or 0) + 1)
+        else
+            Addon.challengeFinalizeRearms = nil
+            RecordDiagnostic("challenge_history_empty", {
+                reason = reason or "challenge_completed",
+            })
         end
     end)
 end
@@ -1494,8 +1510,13 @@ function Addon.InvalidateEquipmentCacheForNames(names)
             end
             local shortName = fullName:match("^([^-]+)")
             if shortName and shortName ~= fullName and Addon.equipmentCache[shortName] ~= nil then
-                Addon.equipmentCache[shortName] = nil
-                removed = removed + 1
+                local roster = Addon.roster
+                local ambiguous = type(roster) == "table" and type(roster.ambiguous) == "table" and roster.ambiguous[shortName] == true
+                local shortOwner = roster and Core.ResolveRosterName(shortName, roster) or nil
+                if not ambiguous and (shortOwner == nil or shortOwner == fullName) then
+                    Addon.equipmentCache[shortName] = nil
+                    removed = removed + 1
+                end
             end
         end
     end
@@ -2034,7 +2055,14 @@ function Addon.RowMergeKey(row)
     -- Identity is id+looter+itemID+timestamp: reloads reuse row IDs, so the
     -- full link is compared only when upgrading an item variant, never to
     -- tell two rows apart.
-    local itemID = tonumber(row.itemID) or Core.ExtractItemID(row.itemLink)
+    local itemID
+    do
+        local ok, number = pcall(tonumber, row.itemID)
+        if ok then
+            itemID = number
+        end
+    end
+    itemID = itemID or Core.ExtractItemID(row.itemLink)
     return tostring(row.id or "")
         .. "\031" .. tostring(row.looter or "")
         .. "\031" .. tostring(itemID or "")
@@ -2378,26 +2406,74 @@ function Addon.FindTrackedLootRow(looter, itemLink)
 end
 
 function Addon.FindTrackedLootRowByItemID(looter, itemID)
-    itemID = tonumber(itemID)
+    do
+        local ok, number = pcall(tonumber, itemID)
+        if ok then
+            itemID = number
+        else
+            itemID = nil
+        end
+    end
     if not itemID then
         return nil
     end
     return Addon.FindTrackedLootRowMatching(looter, function(row)
-        return tonumber(row.itemID) == itemID
+        local rowID
+        do
+            local ok, number = pcall(tonumber, row.itemID)
+            if ok then
+                rowID = number
+            end
+        end
+        return rowID == itemID
     end)
 end
 
 function Addon.UpdateTrackedLootLink(row, itemLink, source)
+    if type(row) == "table" and row.lootSource == "bonus_roll" and source ~= "bonus" then
+        return false
+    end
     if type(row) ~= "table" or type(itemLink) ~= "string" or itemLink == "" or row.itemLink == itemLink then
         return false
     end
-    if source ~= "chat" and type(row.itemLink) == "string" and row.itemLink ~= "" then
-        -- Encounter (or other) links may only replace the tracked link when they
-        -- describe the same item in more detail (longer bonus payload wins).
+    if type(row.itemLink) == "string" and row.itemLink ~= "" then
+        -- All sources share longest-wins: a link may only replace the tracked
+        -- link when it describes the same item in more detail. Equal-length
+        -- duplicates keep the existing link unless the incoming quality color
+        -- proves an upgrade (encounter rare vs chat epic for the same drop).
         local oldID = Core.ExtractItemID(row.itemLink)
         local newID = Core.ExtractItemID(itemLink)
         if not newID or newID ~= oldID or #itemLink <= #row.itemLink then
-            return false
+            local function linkQuality(link)
+                local color = type(link) == "string" and link:match("|c[fF][fF](%x%x%x%x%x%x)") or nil
+                if not color then
+                    return nil
+                end
+                color = color:lower()
+                if color == "9d9d9d" then return 0
+                elseif color == "ffffff" then return 1
+                elseif color == "1eff00" then return 2
+                elseif color == "0070dd" then return 3
+                elseif color == "a335ee" then return 4
+                elseif color == "ff8000" then return 5
+                elseif color == "e6cc80" then return 6
+                elseif color == "00ccff" then return 7
+                else return nil end
+            end
+            local oldQuality = linkQuality(row.itemLink)
+            local newQuality = linkQuality(itemLink)
+            if newID and newID == oldID and newQuality and oldQuality and newQuality > oldQuality then
+                -- Quality upgrade wins despite equal/shorter length; fall through.
+            else
+                if newID and newID == oldID and #itemLink == #row.itemLink then
+                    RecordDiagnostic("duplicate_loot_link_kept", {
+                        looter = row.looter,
+                        itemLink = itemLink,
+                        source = source or "unknown",
+                    })
+                end
+                return false
+            end
         end
     end
 
@@ -2938,6 +3014,7 @@ local function ClearInspectWorkRows()
                 row.inspectPending = false
                 row.inspectToken = nil
                 row.inspectRetryCount = nil
+                row.rangeParked = nil
                 if row.equippedText == EQUIPPED_PENDING then
                     row.equippedText = UNKNOWN_EQUIPPED
                 end
@@ -3004,7 +3081,26 @@ StartNextInspectRequest = function()
         request.rangePasses = (request.rangePasses or 0) + 1
         if request.rangePasses > MAX_INSPECT_RETRIES then
             request.rangePasses = nil
-            FinishInspectRequest(request, "out_of_range", false)
+            local parkedRows = type(request.rows) == "table" and request.rows or {}
+            for index = 1, #parkedRows do
+                local parkedRow = parkedRows[index]
+                if type(parkedRow) == "table" and IsRowStillTracked(parkedRow) then
+                    parkedRow.rangeParked = true
+                    parkedRow.equippedText = EQUIPPED_PENDING
+                end
+            end
+            if Addon.inspectActive == request then
+                Addon.inspectActive = nil
+            end
+            if request.guid and Addon.inspectByGuid[request.guid] == request then
+                Addon.inspectByGuid[request.guid] = nil
+            end
+            if request.scan then
+                RequeueEquipmentScan(request.scan, "out_of_range")
+            end
+            SaveDB()
+            RefreshRows()
+            StartNextInspectRequest()
             return
         end
         Addon.inspectQueue[#Addon.inspectQueue + 1] = request
@@ -3117,7 +3213,10 @@ CompleteActiveInspectRequest = function(guid)
 end
 
 RequestInspectForRow = function(row)
-    if type(row) == "table" then Addon.combatInspectRows[row] = nil end
+    if type(row) == "table" then
+        row.rangeParked = nil
+        Addon.combatInspectRows[row] = nil
+    end
     if not IsRowStillTracked(row) then
         if type(row) == "table" then
             row.inspectPending = false
@@ -3228,6 +3327,19 @@ function Addon.ScheduleWarbandRecheck(row, metadata)
             return
         end
         if row.itemLink ~= itemLink or not IsRowStillTracked(row) then
+            return
+        end
+        -- WHY: IsRowStillTracked includes finalized history groups, but the
+        -- recheck must never mutate history: only live current/session rows
+        -- may be hidden; history rows keep their stored verdict.
+        if type(Addon.state) ~= "table"
+            or not (IsRowInList(Addon.state.currentRows, row)
+                or IsRowInList(Addon.state.allRows, row)
+                or IsRowInList(Addon.state.sessionRows, row)
+                or IsRowInList(Addon.state.sessionAllRows, row)) then
+            return
+        end
+        if row.manualWhispered == true or row.autoWhispered == true or row.whisperInFlight == true then
             return
         end
         local bound, untilEquip = ReadAccountBinding(itemLink)
@@ -3554,13 +3666,45 @@ local function MergeDuplicatePendingLoot(looter, itemLink, context, source)
             and Core.ExtractItemID(bucket.itemLink or pendingLink) == itemID
             and PendingBucketHasLooter(bucket, looter, generation)
         then
-            if source ~= "chat" and #itemLink <= #(bucket.itemLink or pendingLink) then
-                -- Keep the already-tracked detailed variant; merge context only.
-                UpdatePendingWaiterContext(bucket, looter, context)
-                if not ProcessPendingItem(pendingLink, bucket) then
-                    SchedulePendingItemRetry(pendingLink, bucket, 0)
+            if #itemLink <= #(bucket.itemLink or pendingLink) then
+                -- Longest-wins for all sources: keep the detailed variant unless
+                -- the incoming quality color proves an upgrade (rare encounter
+                -- vs epic chat for the same drop).
+                local function pendingLinkQuality(link)
+                    local color = type(link) == "string" and link:match("|c[fF][fF](%x%x%x%x%x%x)") or nil
+                    if not color then
+                        return nil
+                    end
+                    color = color:lower()
+                    if color == "9d9d9d" then return 0
+                    elseif color == "ffffff" then return 1
+                    elseif color == "1eff00" then return 2
+                    elseif color == "0070dd" then return 3
+                    elseif color == "a335ee" then return 4
+                    elseif color == "ff8000" then return 5
+                    elseif color == "e6cc80" then return 6
+                    elseif color == "00ccff" then return 7
+                    else return nil end
                 end
-                return true
+                local existingQuality = pendingLinkQuality(bucket.itemLink or pendingLink)
+                local incomingQuality = pendingLinkQuality(itemLink)
+                if incomingQuality and existingQuality and incomingQuality > existingQuality then
+                    -- Quality upgrade wins; fall through to the split path below.
+                else
+                    if #itemLink == #(bucket.itemLink or pendingLink) then
+                        RecordDiagnostic("pending_duplicate_loot_kept", {
+                            looter = looter,
+                            itemLink = itemLink,
+                            itemID = itemID,
+                            source = source or "unknown",
+                        })
+                    end
+                    UpdatePendingWaiterContext(bucket, looter, context)
+                    if not ProcessPendingItem(pendingLink, bucket) then
+                        SchedulePendingItemRetry(pendingLink, bucket, 0)
+                    end
+                    return true
+                end
             end
             -- A shared generic link can have multiple looters with distinct bonus variants.
             local remaining, target = {}, nil
@@ -3636,6 +3780,16 @@ function Addon.HandleResolvedLoot(looter, itemLink, context, source)
         return
     end
 
+    if not Addon.roster then
+        BuildRoster()
+    end
+    if type(looter) == "string" and Addon.roster then
+        local canonicalLooter = Core.ResolveRosterName(looter, Addon.roster)
+        if type(canonicalLooter) == "string" and canonicalLooter ~= "" then
+            looter = canonicalLooter
+        end
+    end
+
     context = type(context) == "table" and context or BuildDropContext(false)
     context.source = source or context.source
     if context.lootSource == "bonus_roll"
@@ -3659,12 +3813,66 @@ function Addon.HandleResolvedLoot(looter, itemLink, context, source)
             if MergeDuplicatePendingLoot(looter, itemLink, context, source) then
                 return
             end
-            if Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
-                or Addon.UpgradePendingLootToBonus(looter, itemLink, context, source)
+            if context.lootSource == "bonus_roll"
+                and (Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
+                    or Addon.UpgradePendingLootToBonus(looter, itemLink, context, source))
             then
                 return
             end
             local row = Addon.FindTrackedLootRow(looter, itemLink) or Addon.FindTrackedLootRowByItemID(looter, duplicateItemID)
+            if not row then
+                local function baseName(name)
+                    return type(name) == "string" and name:match("^([^-]+)") or nil
+                end
+                local function lootersCanonicallyEqual(left, right)
+                    if left == right then
+                        return true
+                    end
+                    if Addon.roster then
+                        local leftCanonical = Core.ResolveRosterName(left, Addon.roster)
+                        local rightCanonical = Core.ResolveRosterName(right, Addon.roster)
+                        if leftCanonical and leftCanonical == right then
+                            return true
+                        end
+                        if rightCanonical and rightCanonical == left then
+                            return true
+                        end
+                        if leftCanonical and rightCanonical and leftCanonical == rightCanonical then
+                            return true
+                        end
+                    end
+                    local leftBase = baseName(left)
+                    local rightBase = baseName(right)
+                    return leftBase ~= nil and leftBase == rightBase
+                end
+                local function findLegacyRow()
+                    if type(Addon.state) ~= "table" then
+                        return nil
+                    end
+                    local lists = { Addon.state.allRows, Addon.state.currentRows, Addon.state.sessionAllRows, Addon.state.sessionRows }
+                    for listIndex = 1, #lists do
+                        local list = lists[listIndex]
+                        if type(list) == "table" then
+                            for rowIndex = #list, 1, -1 do
+                                local candidate = list[rowIndex]
+                                if type(candidate) == "table" then
+                                    local candidateItemID = candidate.itemID or Core.ExtractItemID(candidate.itemLink)
+                                    if candidateItemID and candidateItemID == duplicateItemID and candidate.timestamp == context.timestamp
+                                        and lootersCanonicallyEqual(candidate.looter, looter) then
+                                        return candidate
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    return nil
+                end
+                local legacyRow = findLegacyRow()
+                if legacyRow then
+                    legacyRow.looter = looter
+                    row = legacyRow
+                end
+            end
             if Addon.UpdateTrackedLootLink(row, itemLink, source) then
                 RecordDiagnostic("duplicate_loot_link_updated", {
                     looter = looter,
@@ -3674,6 +3882,10 @@ function Addon.HandleResolvedLoot(looter, itemLink, context, source)
                 })
                 SaveDB()
                 RefreshRows()
+                local recheckMetadata = ReadItemMetadata(itemLink)
+                if recheckMetadata then
+                    Addon.ScheduleWarbandRecheck(row, recheckMetadata)
+                end
             end
             RecordDiagnostic("duplicate_loot", {
                 looter = looter,
@@ -5522,6 +5734,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             Addon.currentEncounterStartedAt = nil
             Addon.challengeCompletedAt = nil
             Addon.challengeFinalizeToken = nil
+            Addon.challengeFinalizeRearms = nil
             Addon.recentEncounterFinalizeToken = nil
             InvalidatePendingLoot()
         end
@@ -5537,6 +5750,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "CHALLENGE_MODE_START" then
         Addon.challengeCompletedAt = nil
         Addon.challengeFinalizeToken = nil
+        Addon.challengeFinalizeRearms = nil
         Addon.recentEncounterFinalizeToken = nil
         QueueEquipmentScan("challenge_start", true)
     elseif event == "CHALLENGE_MODE_COMPLETED" then
@@ -5545,11 +5759,40 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "CHALLENGE_MODE_RESET" then
         Addon.challengeCompletedAt = nil
         Addon.challengeFinalizeToken = nil
+        Addon.challengeFinalizeRearms = nil
         Addon.recentEncounterFinalizeToken = nil
     elseif event == "GROUP_ROSTER_UPDATE" then
+        local previousCount = #(Addon.rosterEntries or {})
         local departed = BuildRoster()
+        local currentEntries = Addon.rosterEntries or {}
+        local currentSolo = #currentEntries == 1 and type(currentEntries[1]) == "table" and currentEntries[1].unit == "player"
+        local stillGrouped = CleanBoolean(SafeCall(IsInGroup)) == true or CleanBoolean(SafeCall(IsInRaid)) == true
+        if previousCount > 1 and currentSolo and stillGrouped then
+            return
+        end
         Addon.CancelPendingAutoForDeparted(departed)
         Addon.InvalidateEquipmentCacheForNames(departed)
+        if type(Addon.state) == "table" then
+            local parked = {}
+            local function collectParked(list)
+                if type(list) ~= "table" then
+                    return
+                end
+                for index = 1, #list do
+                    local parkedRow = list[index]
+                    if type(parkedRow) == "table" and parkedRow.rangeParked == true then
+                        parked[#parked + 1] = parkedRow
+                    end
+                end
+            end
+            collectParked(Addon.state.currentRows)
+            collectParked(Addon.state.allRows)
+            collectParked(Addon.state.sessionRows)
+            collectParked(Addon.state.sessionAllRows)
+            for index = 1, #parked do
+                RequestInspectForRow(parked[index])
+            end
+        end
         if InCombatLockdown and InCombatLockdown() then
             -- Pause in combat: cache is already trimmed, the shared combat-end
             -- wakeup requeues the scan.

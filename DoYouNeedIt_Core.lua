@@ -406,7 +406,7 @@ local UNIVERSAL_EQUIP_LOCS = {
 -- ever denies. Known gaps resolve to false (never ask); allowed or unknown
 -- combinations stay unknown (nil) so a silent API can never grant Ask.
 local WEAPON_PROFICIENCY_BY_CLASS = {
-    WARRIOR = { [0] = true, [1] = true, [4] = true, [5] = true, [6] = true, [7] = true, [8] = true, [10] = true, [13] = true, [15] = true },
+    WARRIOR = { [0] = true, [1] = true, [2] = true, [3] = true, [4] = true, [5] = true, [6] = true, [7] = true, [8] = true, [10] = true, [13] = true, [15] = true, [18] = true },
     PALADIN = { [0] = true, [1] = true, [4] = true, [5] = true, [6] = true, [7] = true, [8] = true },
     HUNTER = { [0] = true, [1] = true, [2] = true, [3] = true, [6] = true, [7] = true, [8] = true, [10] = true, [13] = true, [15] = true, [18] = true },
     ROGUE = { [0] = true, [2] = true, [3] = true, [4] = true, [7] = true, [13] = true, [15] = true, [18] = true },
@@ -724,6 +724,14 @@ end
 
 local function snapshotRowForSave(row)
     local saved = copyPrimitiveFields(row, PERSISTED_ROW_KEYS)
+    if type(saved.id) ~= "string" or saved.id == "" then
+        saved.id = ""
+    end
+    if type(saved.timestamp) ~= "number" then
+        if type(row) == "table" and row.timestamp == nil then
+            saved.timestamp = 0
+        end
+    end
     local statusKey = resolveRowStatus(row, false)
     if statusKey then
         if TRANSIENT_STATUS_KEYS[statusKey] then
@@ -1968,7 +1976,7 @@ local function rowMergeKey(row)
         return nil
     end
     local id = type(row.id) == "string" and row.id or ""
-    local itemID = tonumber(row.itemID) or Core.ExtractItemID(row.itemLink)
+    local itemID = safeTonumber(row.itemID) or Core.ExtractItemID(row.itemLink)
     -- Identity is id+looter+itemID+timestamp; the full link only upgrades
     -- variants below, never tells rows apart.
     return id .. "\031" .. tostring(row.looter or "") .. "\031"
@@ -1992,7 +2000,7 @@ function Core.UpgradeRowLinkToDetailed(stored, incoming)
     if not newID then
         return false
     end
-    local oldID = tonumber(stored.itemID) or Core.ExtractItemID(oldLink)
+    local oldID = safeTonumber(stored.itemID) or Core.ExtractItemID(oldLink)
     if oldID ~= nil and oldID ~= newID then
         return false
     end

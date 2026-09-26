@@ -46,8 +46,8 @@ end
 
 function tests.pendingBonusVariantPreservesSourceAndLink()
     local h = fresh(false)
-    local generic = "|cff0070dd|Hitem:29003:::::::::::::|h[Generic]|h|r"
-    local full = "|cffa335ee|Hitem:29003:::::::::::::|h[Full]|h|r"
+    local generic = "|cffa335ee|Hitem:29003:::::::::::::|h[Drop]|h|r"
+    local full = "|cffa335ee|Hitem:29003::::::::::::1:9999:|h[Drop]|h|r"
     h:addItem(29003, { cacheLoaded = false })
     h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 29003, generic, 1, "Otherplayer", "PALADIN")
     h:fireBonusLoot("Otherplayer", full)
@@ -61,8 +61,8 @@ end
 
 function tests.pendingOrdinaryVariantPreservesLink()
     local h = fresh(false)
-    local generic = "|cff0070dd|Hitem:29004:::::::::::::|h[Generic]|h|r"
-    local full = "|cffa335ee|Hitem:29004:::::::::::::|h[Full]|h|r"
+    local generic = "|cffa335ee|Hitem:29004:::::::::::::|h[Drop]|h|r"
+    local full = "|cffa335ee|Hitem:29004::::::::::::1:9999:|h[Drop]|h|r"
     h:addItem(29004, { cacheLoaded = false })
     h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 29004, generic, 1, "Otherplayer", "PALADIN")
     h:fireLoot("Otherplayer", full)
@@ -336,6 +336,74 @@ function tests.challengeFinalizeDrainsCompletablePending()
     equal(#h.env.DoYouNeedItDB.sessionAllRows, 1, "challenge finalize drains a bucket whose item data just resolved")
 end
 
+function tests.challengeFinalizeCapsRearmsWithoutLoot()
+    local h = fresh(false)
+    h:slash("debug on")
+    h:fire("CHALLENGE_MODE_COMPLETED")
+    local runs = h:runTimers(10, 100)
+    equal(runs <= 4, true, "challenge finalize caps re-arms at three (initial plus three)")
+    equal(#h.timers, 0, "capped finalize stops scheduling")
+    equal(#(h.env.DoYouNeedItDB.history or {}), 0, "empty run creates no history group")
+    local foundEmpty = false
+    for _, entry in ipairs(h.env.DoYouNeedItDB.diagnostics or {}) do
+        if entry.stage == "challenge_history_empty" then
+            foundEmpty = true
+            break
+        end
+    end
+    equal(foundEmpty, true, "empty finalize records challenge_history_empty")
+end
+
+function tests.challengeFinalizeEmptyWhenGraceExpired()
+    local h = fresh(false)
+    h:slash("debug on")
+    h:fire("CHALLENGE_MODE_COMPLETED")
+    h.now = h.now + 200
+    h:runTimers(10, 10)
+    equal(#(h.env.DoYouNeedItDB.history or {}), 0, "expired run creates no history")
+    local foundEmpty = false
+    for _, entry in ipairs(h.env.DoYouNeedItDB.diagnostics or {}) do
+        if entry.stage == "challenge_history_empty" then
+            foundEmpty = true
+            break
+        end
+    end
+    equal(foundEmpty, true, "expired finalize records challenge_history_empty")
+end
+
+function tests.instanceChangeCancelsChallengeFinalize()
+    local h = fresh(false)
+    h:fireLoot("Otherplayer", h:addItem(29105, { name = "M+ Drop" }))
+    h:fire("CHALLENGE_MODE_COMPLETED")
+    h.instanceName = "Next Dungeon"
+    h:fire("PLAYER_ENTERING_WORLD")
+    h:runTimers(10, 100)
+    equal(#(h.env.DoYouNeedItDB.history or {}), 1, "instance change finalizes current loot once and cancels pending challenge finalize")
+end
+
+function tests.legacyRowsWithoutIdsMergeToDetailed()
+    local generic = "|cffa335ee|Hitem:29204:::::::::::::|h[Legacy Drop]|h|r"
+    local h = Harness.new()
+    h.units.player.realm = nil
+    h:loadAddon()
+    h:addItem(29204, { name = "Legacy Drop" })
+    h.env.DoYouNeedItDB.characters["Player-Ravencrest"] = {
+        sessionRows = {
+            { looter = "Otherplayer-Ravencrest", itemLink = generic, itemID = 29204 },
+        },
+        sessionAllRows = {
+            { looter = "Otherplayer-Ravencrest", itemLink = generic, itemID = 29204 },
+        },
+        history = {},
+    }
+    h.units.player.realm = "Ravencrest"
+    h:fire("PLAYER_ENTERING_WORLD")
+    local merged = h.env.DoYouNeedItDB.characters["Player-Ravencrest"].sessionAllRows
+    equal(#merged, 1, "legacy row without ids survives reload")
+    equal(type(merged[1].id), "string", "legacy row defaults to a string id for stable merge keys")
+    equal(type(merged[1].timestamp), "number", "legacy row defaults to a numeric timestamp for stable merge keys")
+end
+
 function tests.trackedEncounterDetailUpgradesChatGeneric()
     local h = fresh(false)
     local generic = "|cffa335ee|Hitem:29020:::::::::::::|h[Generic Drop]|h|r"
@@ -358,6 +426,89 @@ function tests.trackedGenericEncounterCannotDowngradeChatDetail()
     h:runTimers(0, 10)
     equal(#h.env.DoYouNeedItDB.sessionAllRows, 1, "downgrade attempt keeps one drop")
     equal(h.env.DoYouNeedItDB.sessionAllRows[1].itemLink, full, "generic encounter data cannot downgrade tracked chat detail")
+end
+
+function tests.trackedChatDetailSurvivesLaterChatGeneric()
+    local h = fresh(false)
+    local generic = "|cffa335ee|Hitem:29061:::::::::::::|h[Generic Drop]|h|r"
+    local full = "|cffa335ee|Hitem:29061::::::::::::1:9999:|h[Detailed Drop]|h|r"
+    h:addItem(29061, { name = "Detailed Drop" })
+    h:fireLoot("Otherplayer", full)
+    h:fireLoot("Otherplayer", generic)
+    h:runTimers(0, 10)
+    equal(#h.env.DoYouNeedItDB.sessionAllRows, 1, "chat downgrade keeps one drop")
+    equal(h.env.DoYouNeedItDB.sessionAllRows[1].itemLink, full, "later chat generic cannot downgrade tracked chat detail")
+end
+
+function tests.trackedChatGenericUpgradesToLaterChatDetail()
+    local h = fresh(false)
+    local generic = "|cffa335ee|Hitem:29062:::::::::::::|h[Generic Drop]|h|r"
+    local full = "|cffa335ee|Hitem:29062::::::::::::1:9999:|h[Detailed Drop]|h|r"
+    h:addItem(29062, { name = "Detailed Drop" })
+    h:fireLoot("Otherplayer", generic)
+    h:fireLoot("Otherplayer", full)
+    h:runTimers(0, 10)
+    equal(#h.env.DoYouNeedItDB.sessionAllRows, 1, "chat upgrade keeps one drop")
+    equal(h.env.DoYouNeedItDB.sessionAllRows[1].itemLink, full, "later chat detail upgrades tracked chat generic")
+end
+
+function tests.duplicateHealsLegacyShortLooterToCanonical()
+    local h = fresh(false)
+    local item = h:addItem(29070, { name = "Canonical Drop" })
+    h:fireLoot("Otherplayer", item)
+    equal(#h.env.DoYouNeedItDB.sessionAllRows, 1, "canonical drop is tracked")
+    local row = h:visibleRows()[1].row
+    equal(row.looter, "Otherplayer-Ravencrest", "fresh loot uses canonical looter")
+    row.looter = "Otherplayer"
+    h:fireLoot("Otherplayer", item)
+    h:runTimers(0, 10)
+    equal(#h.env.DoYouNeedItDB.sessionAllRows, 1, "duplicate keeps one drop")
+    equal(row.looter, "Otherplayer-Ravencrest", "duplicate heals legacy short looter to canonical")
+    equal(h.env.DoYouNeedItDB.sessionAllRows[1].looter, "Otherplayer-Ravencrest", "saved row uses canonical looter")
+end
+
+function tests.pendingEncounterDetailSurvivesLaterChatGeneric()
+    local h = fresh(false)
+    local generic = "|cffa335ee|Hitem:29063:::::::::::::|h[Generic Drop]|h|r"
+    local full = "|cffa335ee|Hitem:29063::::::::::::1:9999:|h[Detailed Drop]|h|r"
+    h:addItem(29063, { name = "Pending Detail", cacheLoaded = false })
+    h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 29063, full, 1, "Otherplayer", "PALADIN")
+    h:fireLoot("Otherplayer", generic)
+    h.items[29063].cacheLoaded = true
+    h:runTimers(0, 30)
+    equal(#h.env.DoYouNeedItDB.sessionAllRows, 1, "pending downgrade keeps one drop")
+    equal(h.env.DoYouNeedItDB.sessionAllRows[1].itemLink, full, "later chat generic cannot downgrade pending encounter detail")
+end
+
+function tests.bonusLinkSurvivesAllSourceOrders()
+    local generic = "|cffa335ee|Hitem:29050:::::::::::::|h[Generic Drop]|h|r"
+    local detailed = "|cffa335ee|Hitem:29050::::::::::::1:9999:|h[Detailed Drop]|h|r"
+    local orders = {
+        { "encounter", "chat", "bonus" },
+        { "encounter", "bonus", "chat" },
+        { "chat", "encounter", "bonus" },
+        { "chat", "bonus", "encounter" },
+        { "bonus", "encounter", "chat" },
+        { "bonus", "chat", "encounter" },
+    }
+    for _, order in ipairs(orders) do
+        local h = fresh(false)
+        h:addItem(29050, { name = "Bonus Guard Drop" })
+        for _, kind in ipairs(order) do
+            if kind == "encounter" then
+                h:fire("ENCOUNTER_LOOT_RECEIVED", 123, 29050, generic, 1, "Otherplayer", "PALADIN")
+            elseif kind == "chat" then
+                h:fireLoot("Otherplayer", generic)
+            else
+                h:fireBonusLoot("Otherplayer", detailed)
+            end
+        end
+        h:runTimers(0, 30)
+        local label = "order " .. table.concat(order, ",")
+        equal(#h.env.DoYouNeedItDB.sessionAllRows, 1, label .. " keeps one drop")
+        equal(h.env.DoYouNeedItDB.sessionAllRows[1].itemLink, detailed, label .. " preserves bonus link")
+        equal(h.env.DoYouNeedItDB.sessionAllRows[1].lootSource, "bonus_roll", label .. " preserves bonus source")
+    end
 end
 
 function tests.bracketItemNameExtractsFullLink()
