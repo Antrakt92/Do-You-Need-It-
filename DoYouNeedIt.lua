@@ -5913,6 +5913,139 @@ function Addon.RunSelfTest(mode)
     local scanScheduled = Addon.equipmentScanScheduled == true
     local inspectGen = CleanNumber(Addon.inspectGeneration) or 0
     local lootGen = CleanNumber(Addon.lootGeneration) or 0
+
+    -- Demo render phase: isolated demo rows through the real client render
+    -- path (window, fonts, geometry, tooltips), then full cleanup. Live
+    -- history, session, whisper queue, and pending loot are only read, never
+    -- written: rows are built on a detached state like /dyni test examples,
+    -- so inspect, whisper, history, and chat pipelines are never entered.
+    -- Skipped while the settings screen owns the window (EnterLootMode
+    -- would commit and close the user's settings draft).
+    local demoBuilt, demoRendered = 0, 0
+    local demoCleaned, demoUntouched = true, true
+    if Addon.contentMode ~= "settings" then
+        demoCleaned, demoUntouched = false, false
+        local histBefore = #(Addon.state and Addon.state.history or {})
+        local sessBefore = #(Addon.state and Addon.state.sessionRows or {})
+        local sessAllBefore = #(Addon.state and Addon.state.sessionAllRows or {})
+        local autoqBefore = #(Addon.autoWhisperQueue or {})
+        local pendingBefore = 0
+        if type(Addon.pendingItems) == "table" then
+            for demoKey in pairs(Addon.pendingItems) do pendingBefore = pendingBefore + 1 end
+        end
+        local viewBefore, histIndexBefore, scrollBefore = Addon.selectedView, Addon.selectedHistoryIndex, Addon.rowScrollOffset
+        local wasShown = Addon.frame and CleanBoolean(SafeCall(Addon.frame.IsShown, Addon.frame)) == true or false
+        local phaseOk = pcall(function()
+            CreateUI()
+            local demoState = Core.CreateState(Addon.state.settings)
+            local function addDemoRow(entry, askable)
+                entry.isTest = true
+                entry.instanceName = Addon.currentInstanceName or SafeInstanceName()
+                entry.timestamp = Now()
+                entry.unsafe = false
+                return Core.AddVisibleRow(demoState, entry, askable)
+            end
+            addDemoRow({
+                looter = "Demolooter",
+                itemLink = "|cff0070dd|Hitem:49101:::::::::::::|h[Demo Askable Axe]|h|r",
+                equipLoc = "INVTYPE_WEAPON",
+                itemID = 49101,
+                reason = "candidate",
+                statusKey = "test_row",
+                equippedText = "Equipped: |cff1eff00|Hitem:25:::::::::::::|h[Worn Shortsword]|h|r",
+                tradeStatusKey = "trade_likely",
+            }, true)
+            addDemoRow({
+                looter = "Demolooter",
+                itemLink = "|cffa335ee|Hitem:49102:::::::::::::|h[Demo Bound Chest]|h|r",
+                equipLoc = "INVTYPE_CHEST",
+                itemID = 49102,
+                reason = "bind_on_pickup",
+                statusKey = "bind_on_pickup",
+                equippedText = UNKNOWN_EQUIPPED,
+                tradeStatusKey = "trade_unknown",
+            }, false)
+            addDemoRow({
+                looter = "Демолутер",
+                itemLink = "|cffa335ee|Hitem:49103:::::::::::::|h[Тестовый меч]|h|r",
+                equipLoc = "INVTYPE_WEAPON",
+                itemID = 49103,
+                reason = "candidate",
+                statusKey = "test_row",
+                equippedText = UNKNOWN_EQUIPPED,
+                tradeStatusKey = "trade_likely",
+            }, true)
+            addDemoRow({
+                looter = "Demolooter",
+                itemLink = "|cffa335ee|Hitem:49104::::::::120:253::5:1:2:3:4:5|h[Demo Long Link Item With A Very Long Name]|h|r",
+                equipLoc = "INVTYPE_CLOAK",
+                itemID = 49104,
+                reason = "candidate",
+                statusKey = "test_row",
+                equippedText = UNKNOWN_EQUIPPED,
+                tradeStatusKey = "trade_unknown",
+            }, false)
+            demoBuilt = #(demoState.allRows or {})
+            if demoBuilt ~= 4 then
+                error("demo build mismatch")
+            end
+            Addon.demoRows = demoState.allRows
+            Addon.selectedView = "current"
+            Addon.selectedHistoryIndex = nil
+            Addon.rowScrollOffset = 0
+            Addon.EnterLootMode()
+            RefreshRows()
+            Addon.frame:Show()
+            demoRendered = 0
+            local firstLink, firstOwner = nil, nil
+            for index = 1, MAX_VISIBLE_ROWS do
+                local rowFrame = Addon.rowFrames[index]
+                if rowFrame and CleanBoolean(SafeCall(rowFrame.IsShown, rowFrame)) == true and rowFrame.row then
+                    demoRendered = demoRendered + 1
+                    if not firstLink and rowFrame.dropLink and rowFrame.dropLink.itemLink then
+                        firstLink, firstOwner = rowFrame.dropLink.itemLink, rowFrame.dropLink
+                    end
+                end
+            end
+            if demoRendered ~= demoBuilt then
+                error("demo render mismatch")
+            end
+            if not Addon.frame:IsShown() then
+                error("demo window hidden")
+            end
+            -- Tooltip code path directly (no mouse): show plus hide.
+            if firstOwner and firstLink then
+                ShowItemTooltip(firstOwner, firstLink)
+                HideItemTooltip()
+            end
+        end)
+        Addon.demoRows = nil
+        Addon.selectedView = viewBefore
+        Addon.selectedHistoryIndex = histIndexBefore
+        Addon.rowScrollOffset = scrollBefore or 0
+        local cleanupOk = pcall(RefreshRows)
+        if Addon.frame and not wasShown then
+            Addon.frame:Hide()
+        end
+        local histAfter = #(Addon.state and Addon.state.history or {})
+        local sessAfter = #(Addon.state and Addon.state.sessionRows or {})
+        local sessAllAfter = #(Addon.state and Addon.state.sessionAllRows or {})
+        local autoqAfter = #(Addon.autoWhisperQueue or {})
+        local pendingAfter = 0
+        if type(Addon.pendingItems) == "table" then
+            for demoKey in pairs(Addon.pendingItems) do pendingAfter = pendingAfter + 1 end
+        end
+        local queueClean = true
+        for queueIndex = 1, #(Addon.autoWhisperQueue or {}) do
+            if type(Addon.autoWhisperQueue[queueIndex]) == "table" and Addon.autoWhisperQueue[queueIndex].isTest then
+                queueClean = false
+            end
+        end
+        demoCleaned = phaseOk and cleanupOk and Addon.demoRows == nil
+        demoUntouched = histBefore == histAfter and sessBefore == sessAfter
+            and sessAllBefore == sessAllAfter and autoqBefore == autoqAfter
+            and pendingBefore == pendingAfter and queueClean
+    end
     local finishedAt = CleanNumber(Now()) or 0
 
     local report = {
@@ -5944,6 +6077,12 @@ function Addon.RunSelfTest(mode)
         inspGen = inspectGen,
         lootGen = lootGen,
         stages = stageCounts,
+        demo = {
+            rows = demoBuilt,
+            rendered = demoRendered,
+            cleaned = demoCleaned,
+            untouched = demoUntouched,
+        },
     }
     _G.DoYouNeedItSelfTest = { version = 1, finishedAt = finishedAt, report = report }
 
@@ -5959,7 +6098,10 @@ function Addon.RunSelfTest(mode)
         .. " hist=" .. tostring(historyGroups)
         .. " scanq=" .. tostring(scanQueue) .. " inspq=" .. tostring(inspectQueue)
         .. " autoq=" .. tostring(autoQueue))
-    Print("selftest: NOT checked: live loot,Ask whispers,trade detection (needs real group drops)")
+    Print("selftest: NOT checked: live loot,inspect timing,whisper delivery,roster changes (demo rows only)")
+    Print("selftest: demo rows=" .. tostring(demoBuilt) .. " rendered=" .. tostring(demoRendered)
+        .. " cleaned=" .. (demoCleaned and "ok" or "FAIL")
+        .. " untouched=" .. (demoUntouched and "ok" or "FAIL"))
     Print("selftest: re-show this report with /dyni selftest show")
     Addon.ShowSelfTestCopy()
     Addon.selfTestActive = false
@@ -6006,6 +6148,11 @@ function Addon.BuildSelfTestCopyLines(saved)
             .. " scanq=" .. tostring(scanQueue) .. " inspq=" .. tostring(inspectQueue)
             .. " autoq=" .. tostring(autoQueue) .. " dgn=" .. tostring(diagCount),
     }
+    local demoBlock = (type(report.demo) == "table") and report.demo or {}
+    copyLines[#copyLines + 1] = "DYNI1: demo rows=" .. tostring(CleanNumber(demoBlock.rows) or 0)
+        .. " rendered=" .. tostring(CleanNumber(demoBlock.rendered) or 0)
+        .. " cleaned=" .. ((demoBlock.cleaned == true) and "ok" or "FAIL")
+        .. " untouched=" .. ((demoBlock.untouched == true) and "ok" or "FAIL")
     local stageTokens = {}
     if type(report.stages) == "table" then
         for stageName, stageCount in pairs(report.stages) do
