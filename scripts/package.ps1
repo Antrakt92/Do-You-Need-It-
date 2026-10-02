@@ -33,6 +33,9 @@ foreach ($line in Get-Content -LiteralPath $tocPath) {
 if (-not $version) {
     throw "Could not read addon version from $tocPath"
 }
+if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+    throw 'Package version must use canonical MAJOR.MINOR.PATCH format'
+}
 
 $resolvedOutDir = if ([System.IO.Path]::IsPathRooted($OutDir)) {
     $OutDir
@@ -52,12 +55,33 @@ function Copy-PackageFile {
         [string]$RelativePath
     )
 
-    $source = Join-Path $repoRoot $RelativePath
+    if ([System.IO.Path]::IsPathRooted($RelativePath) -or $RelativePath.Contains(':') -or
+        $RelativePath -match '(^|[\\/])\.\.?([\\/]|$)' -or
+        $RelativePath -match '^(\.git|\.github|\.idea|\.vscode|tests|scripts)([\\/]|$)' -or
+        $RelativePath -match '(^|[\\/])\.env[^\\/]*([\\/]|$)') {
+        throw "Unsafe package path: $RelativePath"
+    }
+    $source = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $RelativePath))
+    $destination = [System.IO.Path]::GetFullPath((Join-Path $addonRoot $RelativePath))
+    $sourcePrefix = [System.IO.Path]::GetFullPath($repoRoot).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    $destinationPrefix = [System.IO.Path]::GetFullPath($addonRoot).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $source.StartsWith($sourcePrefix, [System.StringComparison]::OrdinalIgnoreCase) -or
+        -not $destination.StartsWith($destinationPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Unsafe package path: $RelativePath"
+    }
     if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
         throw "Package source file is missing: $RelativePath"
     }
+    # Lexical containment alone does not constrain a file below a junction.
+    $inspectedPath = $source
+    while ($inspectedPath.StartsWith($sourcePrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $component = Get-Item -LiteralPath $inspectedPath -Force
+        if (($component.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Unsafe package path through a link: $RelativePath"
+        }
+        $inspectedPath = Split-Path -Parent $inspectedPath
+    }
 
-    $destination = Join-Path $addonRoot $RelativePath
     $destinationDir = Split-Path -Parent $destination
     New-Item -ItemType Directory -Path $destinationDir -Force | Out-Null
     Copy-Item -LiteralPath $source -Destination $destination -Force
@@ -163,5 +187,10 @@ try {
     Write-Host "Created $zipPath"
 }
 finally {
-    Remove-Item -LiteralPath $stagingRoot -Recurse -Force -ErrorAction SilentlyContinue
+    $resolvedStaging = [System.IO.Path]::GetFullPath($stagingRoot)
+    $outputPrefix = [System.IO.Path]::GetFullPath($resolvedOutDir).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $resolvedStaging.StartsWith($outputPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Package cleanup escaped the output directory'
+    }
+    Remove-Item -LiteralPath $resolvedStaging -Recurse -Force -ErrorAction SilentlyContinue
 }
