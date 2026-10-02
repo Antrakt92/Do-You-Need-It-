@@ -243,14 +243,16 @@ local function Now()
     -- pump) re-arm instead of dispatching.
     if type(GetServerTime) == "function" then
         local ok, value = pcall(GetServerTime)
-        if ok and type(value) == "number" and value == value and not IsSecret(value) then
-            return value
+        if ok and type(value) == "number" then
+            local number = CleanNumber(value)
+            if number then return number end
         end
     end
     if type(time) == "function" then
         local ok, value = pcall(time)
-        if ok and type(value) == "number" and value == value and not IsSecret(value) then
-            return value
+        if ok and type(value) == "number" then
+            local number = CleanNumber(value)
+            if number then return number end
         end
     end
     return nil
@@ -981,6 +983,7 @@ end
 function Addon.CleanupRecentLootKeys(now)
     Addon.recentLootKeys = type(Addon.recentLootKeys) == "table" and Addon.recentLootKeys or {}
     now = type(now) == "number" and now or Now()
+    if not now then return end
     for key, seenAt in pairs(Addon.recentLootKeys) do
         if type(seenAt) ~= "number" or now - seenAt > Addon.recentLootDedupeSeconds then
             Addon.recentLootKeys[key] = nil
@@ -1000,6 +1003,7 @@ function Addon.ShouldSkipDuplicateLoot(looter, itemLink)
     end
 
     local now = Now()
+    if not now then return false, Core.ExtractItemID(itemLink) end
     Addon.CleanupRecentLootKeys(now)
     local itemID = Core.ExtractItemID(itemLink)
     local linkKey = "link\031" .. looter .. "\031" .. itemLink
@@ -1060,7 +1064,7 @@ end
 function Addon.IsRecentChallengeCompletion()
     local completedAt = Addon.challengeCompletedAt
     local now = Now()
-    return type(completedAt) == "number" and now >= completedAt and now - completedAt <= ENCOUNTER_LOOT_GRACE
+    return type(now) == "number" and type(completedAt) == "number" and now >= completedAt and now - completedAt <= ENCOUNTER_LOOT_GRACE
 end
 
 function Addon.ScheduleChallengeHistoryFinalize(reason, rearms)
@@ -1118,6 +1122,7 @@ function Addon.IsRecentEncounterEnd()
     local endedAt = Addon.recentEncounterEndedAt
     local now = Now()
     return type(Addon.currentEncounterName) ~= "string"
+        and type(now) == "number"
         and type(Addon.recentEncounterName) == "string"
         and Addon.recentEncounterName ~= ""
         and type(endedAt) == "number"
@@ -2700,6 +2705,7 @@ function Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
 
     local itemID = Core.ExtractItemID(itemLink)
     local now = context.timestamp or Now()
+    if not now then return false end
     -- Delayed source events may update fresh history, but must not rewrite an older run.
     local row = Addon.FindTrackedLootRowMatching(looter, function(candidate)
         return candidate.lootGeneration == (Addon.lootGeneration or 0)

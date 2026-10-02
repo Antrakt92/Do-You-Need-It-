@@ -67,6 +67,31 @@ function tests.clearCancelsPacedManualAskInRetainedHistory()
 end
 
 
+function tests.lootWithUnavailableClockKeepsProcessing()
+    local h = fresh(false)
+    h:fireLoot("Otherplayer", h:addItem(31505))
+    h:fire("ENCOUNTER_END", 123, "Clock Boss")
+    h:fire("CHALLENGE_MODE_COMPLETED")
+    h.env.GetServerTime = function() return h:secretValue("clock") end
+    h.env.time = function() return h:secretValue("fallback") end
+    h:fireLoot("Secondplayer", h:addItem(31506))
+    equal(#h.env.DoYouNeedItDB.sessionAllRows, 2, "clock failure cannot abort fresh loot processing")
+    h:fireBonusLoot("Otherplayer", h:addItem(31510))
+    equal(#h.env.DoYouNeedItDB.sessionAllRows, 3, "clock failure cannot abort bonus loot processing")
+    h:runTimers(10, 40)
+    equal(#h.env.DoYouNeedItDB.history, 1, "clock failure cannot abort history finalization")
+end
+
+
+function tests.nonFiniteClockUsesFiniteFallback()
+    local h = fresh(false)
+    h.env.GetServerTime = function() return math.huge end
+    h.env.time = function() return h.now end
+    h:fireLoot("Otherplayer", h:addItem(31511))
+    equal(h.env.DoYouNeedItDB.sessionAllRows[1].timestamp, h.now, "non-finite clock uses the clean fallback")
+end
+
+
 function tests.repeatedDelayedBonusEventUsesSourceConfirmationTime()
     local h = fresh(false)
     local item = h:addItem(31301, { name = "Delayed Bonus Sword" })
