@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.1 - 02-Oct-2026 — Loot and history reliability
+## 0.6.2 - 02-Oct-2026 — Loot and history reliability
 
 ### Fixed
 
