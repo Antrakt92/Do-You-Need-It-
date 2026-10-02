@@ -40,7 +40,6 @@ function tests.laterLootWaitsForItsOwnAutoDelay()
     equal(#h.sentMessages, 2, "second drop sends after its own delay")
 end
 
-
 function tests.clearCancelsPacedManualAskInRetainedHistory()
     local h = fresh(true)
     h:fireLoot("Otherplayer", h:addItem(31503))
@@ -66,7 +65,6 @@ function tests.clearCancelsPacedManualAskInRetainedHistory()
     equal(#h.sentMessages, 1, "clear cancels paced manual sends even for retained history")
 end
 
-
 function tests.lootWithUnavailableClockKeepsProcessing()
     local h = fresh(false)
     h:fireLoot("Otherplayer", h:addItem(31505))
@@ -82,7 +80,6 @@ function tests.lootWithUnavailableClockKeepsProcessing()
     equal(#h.env.DoYouNeedItDB.history, 1, "clock failure cannot abort history finalization")
 end
 
-
 function tests.nonFiniteClockUsesFiniteFallback()
     local h = fresh(false)
     h.env.GetServerTime = function() return math.huge end
@@ -91,6 +88,42 @@ function tests.nonFiniteClockUsesFiniteFallback()
     equal(h.env.DoYouNeedItDB.sessionAllRows[1].timestamp, h.now, "non-finite clock uses the clean fallback")
 end
 
+function tests.departedNamesDoNotCancelOtherRealms()
+    local h = fresh(true)
+    h:setUnit("party2", { name = "Otherplayer", realm = "Silvermoon", guid = "OtherRealmGUID", classToken = "MAGE" })
+    h:fire("GROUP_ROSTER_UPDATE")
+    h:fireLoot("Otherplayer-Ravencrest", h:addItem(31507))
+    h:fireLoot("Otherplayer-Silvermoon", h:addItem(31508))
+    h:removeUnit("party1")
+    h:fire("GROUP_ROSTER_UPDATE")
+    local survivor
+    for _, frame in ipairs(h:visibleRows()) do
+        if frame.row.looter == "Otherplayer-Silvermoon" then survivor = frame.row end
+    end
+    if not survivor then error("other-realm row missing") end
+    equal(survivor.pendingAutoWhisper, true, "departure only cancels its own full identity")
+    h:runTimers(5, 100)
+    h:runTimers(0, 20)
+    equal(#h.sentMessages, 1, "surviving namesake still sends")
+    equal(h.sentMessages[1].target, "Otherplayer-Silvermoon", "surviving full name is preserved")
+end
+
+function tests.realDepartureAfterTransientRosterStillCancelsAuto()
+    local h = fresh(true)
+    h:fireLoot("Otherplayer", h:addItem(31509))
+    local row = h:visibleRows()[1].row
+    h:removeUnit("party1")
+    h:removeUnit("party2")
+    h:removeUnit("party3")
+    h:removeUnit("party4")
+    h.env.IsInGroup = function() return true end
+    h:fire("GROUP_ROSTER_UPDATE")
+    equal(row.pendingAutoWhisper, true, "temporary missing units keep the countdown")
+    h.env.IsInGroup = function() return false end
+    h:fire("GROUP_ROSTER_UPDATE")
+    equal(row.pendingAutoWhisper, false, "real departure still compares against the last complete roster")
+    equal(row.statusKey, "candidate", "real departure clears its countdown immediately")
+end
 
 function tests.repeatedDelayedBonusEventUsesSourceConfirmationTime()
     local h = fresh(false)

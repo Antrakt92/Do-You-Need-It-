@@ -716,12 +716,7 @@ local function RecordDiagnostic(stage, fields)
 end
 
 local function BuildRoster()
-    local previous = {}
-    for _, entry in ipairs(Addon.rosterEntries or {}) do
-        if type(entry) == "table" and type(entry.fullName) == "string" then
-            previous[entry.fullName] = true
-        end
-    end
+    local previous = Addon.rosterKnownNames or {}
     local entries = {}
 
     local function addUnit(unit)
@@ -751,6 +746,16 @@ local function BuildRoster()
     end
     Addon.rosterEntries = entries
     Addon.roster = Core.CreateRosterIndex(entries)
+    local previousCount = 0
+    for _ in pairs(previous) do previousCount = previousCount + 1 end
+    local currentSolo = #entries == 1 and entries[1].unit == "player"
+    local stillGrouped = CleanBoolean(SafeCall(IsInGroup)) == true or CleanBoolean(SafeCall(IsInRaid)) == true
+    if previousCount > 1 and currentSolo and stillGrouped then
+        -- Keep the last complete identity set across zoning gaps. The live
+        -- unit index remains empty so a send cannot use stale party tokens.
+        return {}, false
+    end
+    Addon.rosterKnownNames = current
     -- Report departed full names so roster events can invalidate only their
     -- equipment cache instead of wiping fresh entries of the living.
     local departed = {}
@@ -759,7 +764,7 @@ local function BuildRoster()
             departed[#departed + 1] = name
         end
     end
-    return departed
+    return departed, true
 end
 
 local function ResolveUnitForName(name)
@@ -2508,7 +2513,8 @@ function Addon.CancelPendingAutoForDeparted(departed)
             if type(row) == "table" and not cancelled[row]
                 and (row.pendingAutoWhisper == true or row.statusKey == "auto_pending")
                 and ((type(rowLooter) == "string" and departedFull[rowLooter] == true)
-                    or (rowShort ~= nil and departedShort[rowShort] == true)) then
+                    or (rowShort ~= nil and departedShort[rowShort] == true
+                        and (rowLooter == rowShort or departedFull[rowShort] == true))) then
                 CancelPendingAuto(row)
                 cancelled[row] = true
                 changed = true
@@ -6609,12 +6615,8 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         Addon.challengeFinalizeRearms = nil
         Addon.recentEncounterFinalizeToken = nil
     elseif event == "GROUP_ROSTER_UPDATE" then
-        local previousCount = #(Addon.rosterEntries or {})
-        local departed = BuildRoster()
-        local currentEntries = Addon.rosterEntries or {}
-        local currentSolo = #currentEntries == 1 and type(currentEntries[1]) == "table" and currentEntries[1].unit == "player"
-        local stillGrouped = CleanBoolean(SafeCall(IsInGroup)) == true or CleanBoolean(SafeCall(IsInRaid)) == true
-        if previousCount > 1 and currentSolo and stillGrouped then
+        local departed, rosterReady = BuildRoster()
+        if rosterReady == false then
             return
         end
         Addon.CancelPendingAutoForDeparted(departed)
