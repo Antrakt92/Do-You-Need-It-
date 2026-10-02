@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.1 - 02-Oct-2026 — Loot and history reliability
+
+### Fixed
+
+- Preserve delayed loot in its original encounter and retain newer history entries.
+- Resume pending inspections consistently across loot views.
+- Keep exact group identities across realms and loading screens.
+- Preserve individual whisper delays and cancel queued asks when rows are cleared.
+- Handle unavailable timing values safely and reject unsafe package source paths.
+
 ## 0.6.0 - 26-Sep-2026 — Steadier loot and quieter whispers
 
 ### Added
