@@ -2327,15 +2327,22 @@ local function SendWhisper(row, isAuto)
         local lastDispatch = Addon.lastDispatchAt
         if Addon.lastDispatchWasAuto == true and type(lastDispatch) == "number"
             and type(nowStamp) == "number" and nowStamp - lastDispatch < 1.5 then
+            local token = {}
+            row.whisperInFlight = true
+            row.whisperToken = token
+            row.whisperIsAuto = false
             row.statusKey = "sending"
             row.statusSeconds = nil
             row.statusText = nil
             SaveDB()
             RefreshRows()
             C_Timer.After(lastDispatch + 1.5 - nowStamp, function()
-                if not IsRowStillTracked(row) then
+                if row.whisperToken ~= token or not IsRowStillTracked(row) then
                     return
                 end
+                row.whisperInFlight = false
+                row.whisperToken = nil
+                row.whisperIsAuto = nil
                 SendWhisper(row, false)
             end)
             return
@@ -2438,6 +2445,7 @@ local function CancelPendingAuto(row, cancelManual)
     if row then
         row.pendingAutoWhisper = false
         row.autoToken = nil
+        row.autoDelayReady = nil
         if row.whisperInFlight == true and (row.whisperIsAuto == true or cancelManual == true) then
             row.whisperInFlight = false
             row.whisperToken = nil
@@ -2860,6 +2868,10 @@ function Addon.PumpAutoWhisperQueue()
         if type(row) == "table" and row.pendingAutoWhisper == true and row.autoToken ~= nil
             and IsRowStillTracked(row) and Addon.state.settings.autoWhisper == true
             and row.unsafe ~= true and row.askable ~= false and not Core.IsHiddenLootRow(row) then
+            if row.autoDelayReady ~= true then
+                table.insert(Addon.autoWhisperQueue, 1, row)
+                break
+            end
             local last = Addon.lastDispatchAt
             if type(last) == "number" and now - last < 1.5 then
                 table.insert(Addon.autoWhisperQueue, 1, row)
@@ -2886,18 +2898,26 @@ local function ScheduleAutoWhisper(row)
     local token = {}
     row.pendingAutoWhisper = true
     row.autoToken = token
+    row.autoDelayReady = false
     row.statusKey = "auto_pending"
     row.statusSeconds = decision.delay
     row.statusText = nil
     RefreshRows()
 
-    -- FIFO pacing: the head keeps its configured delay, followers dispatch
-    -- through the pump at least 1.5s (+ jitter) apart, one in flight.
+    -- Each drop waits its own configured delay before FIFO pacing can send it.
     Addon.autoWhisperQueue[#Addon.autoWhisperQueue + 1] = row
-    if not Addon.autoWhisperPumpScheduled then
+    local ownsPump = not Addon.autoWhisperPumpScheduled
+    if ownsPump then
         Addon.autoWhisperPumpScheduled = true
-        C_Timer.After(decision.delay, Addon.PumpAutoWhisperQueue)
     end
+    C_Timer.After(decision.delay, function()
+        if row.autoToken == token and row.pendingAutoWhisper == true then
+            row.autoDelayReady = true
+        end
+        if ownsPump or not Addon.autoWhisperPumpScheduled then
+            Addon.PumpAutoWhisperQueue()
+        end
+    end)
 end
 
 function Addon.AddRowToListOnce(list, row)

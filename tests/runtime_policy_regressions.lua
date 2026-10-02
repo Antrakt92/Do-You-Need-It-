@@ -16,6 +16,57 @@ end
 
 local tests = {}
 
+function tests.laterLootWaitsForItsOwnAutoDelay()
+    local h = fresh(true)
+    h:stubRandom(0)
+    h:fireLoot("Otherplayer", h:addItem(31501))
+    local firstDelay
+    for index, timer in ipairs(h.timers) do
+        if timer.delay == 5 then firstDelay = table.remove(h.timers, index); break end
+    end
+    h.now = h.now + 4
+    h:fireLoot("Secondplayer", h:addItem(31502))
+    h.now = h.now + 1
+    firstDelay.callback()
+    h:runTimers(0, 20)
+    equal(#h.sentMessages, 1, "first drop sends after its delay")
+    h.now = h.now + 2
+    h:runTimers(2, 20)
+    h:runTimers(0, 20)
+    equal(#h.sentMessages, 1, "second drop cannot borrow the first drop's delay")
+    h.now = h.now + 2
+    h:runTimers(5, 20)
+    h:runTimers(0, 20)
+    equal(#h.sentMessages, 2, "second drop sends after its own delay")
+end
+
+
+function tests.clearCancelsPacedManualAskInRetainedHistory()
+    local h = fresh(true)
+    h:fireLoot("Otherplayer", h:addItem(31503))
+    h:runTimers(5, 20)
+    h:runTimers(0, 20)
+    equal(#h.sentMessages, 1, "initial auto send establishes pacing")
+    h:fireLoot("Secondplayer", h:addItem(31504))
+    h:fire("ENCOUNTER_END", 123, "Paced History Boss")
+    for index, timer in ipairs(h.timers) do
+        if timer.delay == 10 then table.remove(h.timers, index).callback(); break end
+    end
+    equal(#h.env.DoYouNeedItDB.history, 1, "rows are retained in history")
+    local frame
+    for _, candidate in ipairs(h:visibleRows()) do
+        if candidate.row.looter:find("Secondplayer", 1, true) then frame = candidate end
+    end
+    if not frame then error("retained history row missing") end
+    frame.whisper:FireScript("OnClick")
+    h:slash("clear")
+    h.now = h.now + 2
+    h:runTimers(3, 30)
+    h:runTimers(0, 30)
+    equal(#h.sentMessages, 1, "clear cancels paced manual sends even for retained history")
+end
+
+
 function tests.repeatedDelayedBonusEventUsesSourceConfirmationTime()
     local h = fresh(false)
     local item = h:addItem(31301, { name = "Delayed Bonus Sword" })

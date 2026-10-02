@@ -236,14 +236,17 @@ function tests.autoWhisperQueuePacesSends()
     end
     equal(#h:visibleRows(), 3, "three automatic rows queue in the same tick")
     h:runTimers(3, 10)
+    h:runTimers(0, 10)
     equal(#h.sentMessages, 1, "first automatic whisper sends on schedule")
     h:runTimers(3, 5)
     equal(#h.sentMessages, 1, "no same-tick automatic spam while the pacing gap holds")
     h.now = h.now + 2
     h:runTimers(3, 5)
+    h:runTimers(0, 10)
     equal(#h.sentMessages, 2, "second automatic whisper sends after the pacing gap")
     h.now = h.now + 2
     h:runTimers(3, 5)
+    h:runTimers(0, 10)
     equal(#h.sentMessages, 3, "third automatic whisper sends after its own gap")
     for _, frame in ipairs(h:visibleRows()) do
         equal(frame.row.statusKey, "auto_sent", "paced automatic rows all report sent")
