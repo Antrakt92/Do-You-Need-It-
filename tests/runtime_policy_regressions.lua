@@ -6,8 +6,8 @@ local function equal(actual, expected, message)
     end
 end
 
-local function fresh(auto)
-    local h = Harness.new({ db = { settings = { autoWhisper = auto, autoDelay = 5 } } })
+local function fresh(auto, sessionLimit)
+    local h = Harness.new({ db = { settings = { autoWhisper = auto, autoDelay = 5, maxSessionRows = sessionLimit } } })
     h:loadAddon()
     h.timers = {}
     h:resetSideEffects()
@@ -15,6 +15,39 @@ local function fresh(auto)
 end
 
 local tests = {}
+
+function tests.parkedInspectSpendsOneRetryPerRosterUpdate()
+    local h = fresh(false)
+    h.env.UnitInRange = function() return false end
+    h:fireLoot("Otherplayer", h:addItem(31512))
+    h:runTimers(3, 300)
+    local row = h:visibleRows()[1].row
+    equal(row.rangeParked, true, "out-of-range row parks")
+    h.env.CanInspect = function() return false end
+    h:fire("GROUP_ROSTER_UPDATE")
+    equal(row.inspectRetryCount, 1, "one row shared across views consumes only one retry")
+end
+
+function tests.parkedHistoryInspectResumesAfterSessionEviction()
+    local h = fresh(false, 1)
+    h.env.UnitInRange = function() return false end
+    h:fireLoot("Otherplayer", h:addItem(31513))
+    h:runTimers(3, 300)
+    local row = h:visibleRows()[1].row
+    equal(row.rangeParked, true, "history candidate initially parks")
+    h:fire("ENCOUNTER_END", 123, "Parked Boss")
+    h:runTimers(10, 100)
+    equal(#h.env.DoYouNeedItDB.history, 1, "parked row enters history")
+    h:fireLoot("Otherplayer", h:addItem(31515))
+    h:runTimers(3, 300)
+    equal(#h.env.DoYouNeedItDB.sessionAllRows, 1, "new loot evicts the old session alias")
+    equal(h.env.DoYouNeedItDB.sessionAllRows[1].itemID, 31515, "only the new drop remains in session")
+    h.env.UnitInRange = function() return true end
+    h:setInventoryLink("party1", "MainHandSlot", h:addItem(31514))
+    h:fire("GROUP_ROSTER_UPDATE")
+    equal(row.rangeParked, nil, "history-only parked row resumes on roster changes")
+    if not row.equippedText:find("31514", 1, true) then error("history comparison was not refreshed") end
+end
 
 function tests.laterLootWaitsForItsOwnAutoDelay()
     local h = fresh(true)

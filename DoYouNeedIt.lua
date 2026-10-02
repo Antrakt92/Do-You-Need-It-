@@ -6622,14 +6622,15 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         Addon.CancelPendingAutoForDeparted(departed)
         Addon.InvalidateEquipmentCacheForNames(departed)
         if type(Addon.state) == "table" then
-            local parked = {}
+            local parked, seen = {}, {}
             local function collectParked(list)
                 if type(list) ~= "table" then
                     return
                 end
                 for index = 1, #list do
                     local parkedRow = list[index]
-                    if type(parkedRow) == "table" and parkedRow.rangeParked == true then
+                    if type(parkedRow) == "table" and parkedRow.rangeParked == true and not seen[parkedRow] then
+                        seen[parkedRow] = true
                         parked[#parked + 1] = parkedRow
                     end
                 end
@@ -6638,6 +6639,12 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             collectParked(Addon.state.allRows)
             collectParked(Addon.state.sessionRows)
             collectParked(Addon.state.sessionAllRows)
+            for _, group in ipairs(Addon.state.history or {}) do
+                if type(group) == "table" then
+                    collectParked(group.rows)
+                    collectParked(group.allRows)
+                end
+            end
             for index = 1, #parked do
                 RequestInspectForRow(parked[index])
             end
