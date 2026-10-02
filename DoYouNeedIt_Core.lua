@@ -2165,16 +2165,28 @@ function Core.CompleteCurrentGroup(state, groupMeta)
         allRows = allRows,
     }
 
-    local latest = type(state.history) == "table" and state.history[1] or nil
-    if matchingRecentHistoryGroup(latest, groupMeta) then
+    local latest
+    local closestDistance
+    for index = 1, #(state.history or {}) do
+        local existing = state.history[index]
+        if matchingRecentHistoryGroup(existing, groupMeta) then
+            local distance = math.abs(tonumber(groupMeta.endedAt) - tonumber(existing.endedAt))
+            if not closestDistance or distance < closestDistance then
+                latest, closestDistance = existing, distance
+            end
+        end
+    end
+    if latest then
         latest.rows = appendUniqueRows(latest.rows, rows)
         latest.allRows = appendUniqueRows(latest.allRows, allRows)
         pruneListStart(latest.rows, rowLimit)
         pruneListStart(latest.allRows, rowLimit)
         latest.instanceName = latest.instanceName or group.instanceName
         latest.encounterName = latest.encounterName or group.encounterName
-        latest.startedAt = latest.startedAt or group.startedAt
-        latest.endedAt = group.endedAt or latest.endedAt
+        local oldStart, newStart = asNumber(latest.startedAt, nil), asNumber(group.startedAt, nil)
+        local oldEnd, newEnd = asNumber(latest.endedAt, nil), asNumber(group.endedAt, nil)
+        latest.startedAt = oldStart and newStart and math.min(oldStart, newStart) or oldStart or newStart
+        latest.endedAt = oldEnd and newEnd and math.max(oldEnd, newEnd) or oldEnd or newEnd
         local mergedDropCount = #latest.allRows > 0 and #latest.allRows or #latest.rows
         latest.dropCount = mergedDropCount
         latest.title = groupTitle({
@@ -2188,7 +2200,17 @@ function Core.CompleteCurrentGroup(state, groupMeta)
         return latest
     end
 
-    table.insert(state.history, 1, group)
+    -- Late item metadata must not evict more recent encounters at the cap.
+    local position = 1
+    local endedAt = asNumber(group.endedAt, nil)
+    if endedAt then
+        while position <= #state.history do
+            local existingEnd = asNumber(state.history[position].endedAt, nil)
+            if not existingEnd or existingEnd <= endedAt then break end
+            position = position + 1
+        end
+    end
+    table.insert(state.history, position, group)
     local limit = state.settings and state.settings.maxHistoryGroups or DEFAULTS.maxHistoryGroups
     while #state.history > limit do
         table.remove(state.history)

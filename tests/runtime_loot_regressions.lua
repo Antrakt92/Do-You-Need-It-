@@ -36,6 +36,46 @@ function tests.pendingOldBossLootDoesNotEnterNextBossGroup()
     equal(h.env.DoYouNeedItDB.history[1].encounterName, "Second Boss", "late metadata cannot reorder the latest encounter")
 end
 
+function tests.oldItemLoadAfterNextBossHistoryKeepsBothGroups()
+    local h = fresh(false)
+    local held
+    local function finalize()
+        h:runTimers(0, 100)
+        for index, timer in ipairs(h.timers) do
+            if timer.delay == 10 then table.remove(h.timers, index).callback(); return end
+        end
+        error("missing encounter finalization timer")
+    end
+    local originalFactory = h.env.Item.CreateFromItemID
+    h.env.Item.CreateFromItemID = function(owner, itemID)
+        if itemID == 29312 then
+            return { ContinueOnItemLoad = function(_, callback) held = callback end }
+        end
+        return originalFactory(owner, itemID)
+    end
+    h:fire("ENCOUNTER_START", 411, "First Boss")
+    h:fireLoot("Otherplayer", h:addItem(29311, { name = "Cached First Drop" }))
+    local late = h:addItem(29312, { name = "Late First Drop", cacheLoaded = false })
+    h:fireLoot("Otherplayer", late)
+    h:fire("ENCOUNTER_END", 411, "First Boss")
+    finalize()
+    equal(#h.env.DoYouNeedItDB.history, 1, "first boss history is already stored")
+    h.now = h.now + 20
+    h:fire("ENCOUNTER_START", 412, "Second Boss")
+    h:fireLoot("Secondplayer", h:addItem(29313, { name = "Cached Second Drop" }))
+    h:fire("ENCOUNTER_END", 412, "Second Boss")
+    finalize()
+    equal(h.env.DoYouNeedItDB.history[1].encounterName, "Second Boss", "second history stored before old load")
+    h.items[29312].cacheLoaded = true
+    held()
+    finalize()
+    local history = h.env.DoYouNeedItDB.history
+    equal(#history, 2, "late old item does not create a duplicate boss group")
+    equal(history[1].encounterName, "Second Boss", "new boss stays first after old item load")
+    equal(history[2].encounterName, "First Boss", "old item merges into its original boss")
+    equal(#history[2].allRows, 2, "old group retains cached and late drops")
+end
+
 function tests.autoOffCancelsDeferredSend()
     local h = fresh(true)
     local item = h:addItem(29001, { name = "Deferred Auto Sword" })

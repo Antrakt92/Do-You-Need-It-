@@ -1341,4 +1341,38 @@ do
     assertEqual(saved[2].dropCount, 2, "save preserves the old group's corrected count")
 end
 
+do
+    local delayed = Core.CreateState({ maxHistoryGroups = 2 })
+    Core.AddVisibleRow(delayed, { id = "old", instanceName = "Dungeon", encounterName = "First", timestamp = 10 }, true)
+    local old = Core.CompleteCurrentGroup(delayed, { instanceName = "Dungeon", encounterName = "First", startedAt = 9, endedAt = 12, mergeWindow = 120 })
+    Core.AddVisibleRow(delayed, { id = "new", instanceName = "Dungeon", encounterName = "Second", timestamp = 20 }, true)
+    local newest = Core.CompleteCurrentGroup(delayed, { instanceName = "Dungeon", encounterName = "Second", endedAt = 22, mergeWindow = 120 })
+    Core.AddVisibleRow(delayed, { id = "late", instanceName = "Dungeon", encounterName = "First", timestamp = 11 }, false)
+    local completed = Core.CompleteCurrentGroup(delayed, { instanceName = "Dungeon", encounterName = "Second", endedAt = 25, mergeWindow = 120 })
+    assertEqual(#delayed.history, 2, "late old loot does not duplicate history behind a newer boss")
+    assertEqual(delayed.history[1], newest, "late old loot keeps the newest completed boss first")
+    assertEqual(delayed.history[2], old, "late old loot merges into its retained group")
+    assertEqual(completed, old, "completion returns the actual merged group")
+    assertEqual(#old.allRows, 2, "retained old boss keeps both drops")
+    assertEqual(#old.rows, 1, "late non-askable drop stays outside Ask history")
+    assertEqual(old.endedAt, 12, "late loot does not move the original encounter end backwards")
+    assertEqual(old.startedAt, 9, "late loot preserves the original encounter start")
+    local saved = Core.SnapshotHistoryForSave(delayed.history, 2, 50, 120, "enUS")
+    assertEqual(saved[1].encounterName, "Second", "saving late history preserves newest boss")
+    assertEqual(saved[2].dropCount, 2, "saving preserves the merged old drop count")
+end
+
+do
+    local delayed = Core.CreateState({ maxHistoryGroups = 2 })
+    for index, name in ipairs({ "Second", "Third" }) do
+        Core.AddVisibleRow(delayed, { id = name, instanceName = "Dungeon", encounterName = name, timestamp = index * 20 }, true)
+        Core.CompleteCurrentGroup(delayed, { instanceName = "Dungeon", encounterName = name, endedAt = index * 20 + 1, mergeWindow = 120 })
+    end
+    Core.AddVisibleRow(delayed, { id = "very-late", instanceName = "Dungeon", encounterName = "First", timestamp = 10 }, true)
+    Core.CompleteCurrentGroup(delayed, { instanceName = "Dungeon", encounterName = "Third", endedAt = 50, mergeWindow = 120 })
+    assertEqual(delayed.history[1].encounterName, "Third", "unretained old group cannot displace newest history")
+    assertEqual(delayed.history[2].encounterName, "Second", "history cap evicts oldest encounter instead of newer boss")
+    assertEqual(#delayed.sessionAllRows, 3, "history cap does not delete session loot")
+end
+
 print("tests ok")
