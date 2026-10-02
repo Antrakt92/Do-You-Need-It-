@@ -16,6 +16,26 @@ end
 
 local tests = {}
 
+function tests.pendingOldBossLootDoesNotEnterNextBossGroup()
+    local h = fresh(false)
+    h:fire("ENCOUNTER_START", 401, "First Boss")
+    local old = h:addItem(29301, { name = "Delayed First Boss Drop", cacheLoaded = false })
+    h:fireLoot("Otherplayer", old)
+    h:fire("ENCOUNTER_END", 401, "First Boss")
+    h:fire("ENCOUNTER_START", 402, "Second Boss")
+    h:fireLoot("Secondplayer", h:addItem(29302, { name = "Second Boss Drop" }))
+    h:runTimers(0, 30)
+    h:fire("ENCOUNTER_END", 402, "Second Boss")
+    h:runTimers(10, 100)
+    local owners = {}
+    for _, group in ipairs(h.env.DoYouNeedItDB.history) do
+        for _, row in ipairs(group.allRows) do owners[row.itemID] = group.encounterName end
+    end
+    equal(owners[29301], "First Boss", "delayed metadata preserves its original history owner")
+    equal(owners[29302], "Second Boss", "new encounter keeps its own loot")
+    equal(h.env.DoYouNeedItDB.history[1].encounterName, "Second Boss", "late metadata cannot reorder the latest encounter")
+end
+
 function tests.autoOffCancelsDeferredSend()
     local h = fresh(true)
     local item = h:addItem(29001, { name = "Deferred Auto Sword" })

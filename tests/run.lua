@@ -1321,4 +1321,24 @@ assertEqual(Core.GetHistoryGroupTitle({ instanceName = "Dungeon", rows = { { id 
 assertEqual(Core.GetHistoryGroupTitle(nil, "enUS"), nil, "missing group has no history title")
 assertEqual(Core.GetHistoryGroupTitle({}, "enUS"), nil, "title-less group without names has no history title")
 
+do
+    local split = Core.CreateState({ maxSessionRows = 2, maxHistoryGroups = 2 })
+    Core.AddVisibleRow(split, { id = "first-cached", encounterName = "First", instanceName = "Dungeon", timestamp = 1 }, true)
+    Core.CompleteCurrentGroup(split, { encounterName = "First", instanceName = "Dungeon", endedAt = 2, mergeWindow = 120 })
+    local current = Core.AddVisibleRow(split, { id = "second-cached", encounterName = "Second", instanceName = "Dungeon", timestamp = 3 }, true)
+    Core.AddVisibleRow(split, { id = "first-delayed", encounterName = "First", instanceName = "Dungeon", timestamp = 1.5 }, false)
+    local group = Core.CompleteCurrentGroup(split, { encounterName = "Second", instanceName = "Dungeon", startedAt = 3, endedAt = 4, mergeWindow = 120 })
+    assertEqual(#split.history, 2, "delayed encounter loot merges with its own existing group")
+    assertEqual(group, split.history[1], "current fallback returns the newest encounter")
+    assertEqual(group.allRows[1], current, "current fallback contains the new encounter's row")
+    assertEqual(split.history[2].encounterName, "First", "old context retains the old encounter")
+    assertEqual(#split.history[2].allRows, 2, "old history receives the delayed all-gear drop")
+    assertEqual(#split.history[2].rows, 1, "non-askable delayed drop stays out of askable history")
+    assertEqual(#split.allRows, 0, "mixed completion clears current all-gear rows")
+    assertEqual(#split.currentRows, 0, "mixed completion clears current askable rows")
+    local saved = Core.SnapshotHistoryForSave(split.history, 2, 2, 120, "enUS")
+    assertEqual(saved[1].encounterName, "Second", "save preserves encounter chronology")
+    assertEqual(saved[2].dropCount, 2, "save preserves the old group's corrected count")
+end
+
 print("tests ok")

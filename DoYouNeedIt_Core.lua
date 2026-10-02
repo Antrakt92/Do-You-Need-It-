@@ -2090,6 +2090,63 @@ function Core.CompleteCurrentGroup(state, groupMeta)
     end
 
     groupMeta = type(groupMeta) == "table" and groupMeta or {}
+    -- Item data can arrive after the next encounter starts. Keep the captured
+    -- loot owner instead of attributing a delayed drop to the completion event.
+    local sourceRows = #state.allRows > 0 and state.allRows or state.currentRows
+    local partitions, ordered = {}, {}
+    local rowPartitions = {}
+    local needsPartition = false
+    for index = 1, #sourceRows do
+        local row = sourceRows[index]
+        local instanceName = row.instanceName or groupMeta.instanceName
+        local encounterName = row.encounterName or groupMeta.encounterName
+        local key = (instanceName or "") .. "\031" .. (encounterName or "")
+        local part = partitions[key]
+        if not part then
+            part = { allRows = {}, currentRows = {}, settings = state.settings, history = state.history,
+                order = #ordered + 1,
+                meta = { instanceName = instanceName, encounterName = encounterName,
+                    locale = groupMeta.locale, mergeWindow = groupMeta.mergeWindow } }
+            partitions[key] = part
+            ordered[#ordered + 1] = part
+        end
+        part.allRows[#part.allRows + 1] = row
+        rowPartitions[row] = part
+        if instanceName ~= groupMeta.instanceName or encounterName ~= groupMeta.encounterName then
+            needsPartition = true
+        end
+        local stamp = asNumber(row.timestamp, nil)
+        if stamp then
+            part.meta.startedAt = math.min(part.meta.startedAt or stamp, stamp)
+            part.meta.endedAt = math.max(part.meta.endedAt or stamp, stamp)
+        end
+    end
+    if needsPartition then
+        table.sort(ordered, function(left, right)
+            local leftCurrent = left.meta.instanceName == groupMeta.instanceName and left.meta.encounterName == groupMeta.encounterName
+            local rightCurrent = right.meta.instanceName == groupMeta.instanceName and right.meta.encounterName == groupMeta.encounterName
+            if leftCurrent ~= rightCurrent then return rightCurrent end
+            local leftTime, rightTime = left.meta.endedAt or -math.huge, right.meta.endedAt or -math.huge
+            if leftTime ~= rightTime then return leftTime < rightTime end
+            return left.order < right.order
+        end)
+        for index = 1, #state.currentRows do
+            local row = state.currentRows[index]
+            local part = rowPartitions[row]
+            if part then part.currentRows[#part.currentRows + 1] = row end
+        end
+        local completed
+        for index = 1, #ordered do
+            local part = ordered[index]
+            if part.meta.instanceName == groupMeta.instanceName and part.meta.encounterName == groupMeta.encounterName then
+                part.meta.startedAt = groupMeta.startedAt or part.meta.startedAt
+                part.meta.endedAt = groupMeta.endedAt or part.meta.endedAt
+            end
+            completed = Core.CompleteCurrentGroup(part, part.meta)
+        end
+        state.currentRows, state.allRows = {}, {}
+        return completed
+    end
     local dropCount = #state.allRows > 0 and #state.allRows or #state.currentRows
     local rowLimit = state.settings and state.settings.maxSessionRows or DEFAULTS.maxSessionRows
     local rows = copyList(state.currentRows)
