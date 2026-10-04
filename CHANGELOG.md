@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.3 - 04-Oct-2026 — AddOn list category and complete release history
+
+- Find Do You Need It? under Loot in the AddOn list in every supported client language.
+- Read the complete release history in CurseForge changelogs and GitHub release notes.
+
 ## 0.6.2 - 02-Oct-2026 — Loot and history reliability
 
 ### Fixed
