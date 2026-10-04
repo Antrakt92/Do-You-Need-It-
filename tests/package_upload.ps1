@@ -61,7 +61,7 @@ function Assert-PackageCase {
     } elseif ($result.ProjectId -ne 1595368 -or $result.ZipPath -ne $zip) {
         throw "${Name}: unexpected upload metadata"
     } elseif ($result.Metadata.changelog -cne $expectedChangelog) {
-        throw "${Name}: upload must carry the current release notes"
+        throw "${Name}: upload must carry the complete released history"
     }
     $script:caseCount++
 }
@@ -69,13 +69,12 @@ function Assert-PackageCase {
 $reference = $null
 try {
     $fullChangelog = ((Get-Content -LiteralPath (Join-Path $repoRoot 'CHANGELOG.md') -Raw -Encoding UTF8) -replace "`r`n?", "`n").Trim() + "`n"
-    # Release notes carry only the top release entry; the packaged file stays cumulative.
+    # Preserve every released entry; future work must stay excluded.
     $changelogHeadings = @([regex]::Matches($fullChangelog, '(?m)^##[ \t]+([^\n]+)'))
     $firstReleaseHeading = 0
     if ($changelogHeadings.Count -gt 0 -and $changelogHeadings[0].Groups[1].Value.Trim() -ceq 'Unreleased') { $firstReleaseHeading = 1 }
     $notesStart = $changelogHeadings[$firstReleaseHeading].Index
-    $notesEnd = if ($firstReleaseHeading + 1 -lt $changelogHeadings.Count) { $changelogHeadings[$firstReleaseHeading + 1].Index } else { $fullChangelog.Length }
-    $expectedChangelog = $fullChangelog.Substring($notesStart, $notesEnd - $notesStart).Trim() + "`n"
+    $expectedChangelog = $fullChangelog.Substring($notesStart).Trim() + "`n"
     & (Join-Path $repoRoot 'scripts/package.ps1') -OutDir $caseRoot
     $referenceZip = @(Get-ChildItem -LiteralPath $caseRoot -Filter '*.zip' -File)[0]
     Add-Type -AssemblyName System.IO.Compression.FileSystem
