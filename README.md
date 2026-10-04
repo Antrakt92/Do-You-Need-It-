@@ -54,7 +54,9 @@ Language defaults to **Auto**, following your client locale. English and Russian
 | `/dyni scan` | Queue a group equipment scan. |
 | `/dyni selftest` | Run a self-check and print a chat summary. |
 
-### Advanced commands
+<details>
+<summary>Diagnostics and advanced commands</summary>
+
 
 | Command | Action |
 |---|---|
@@ -64,6 +66,8 @@ Language defaults to **Auto**, following your client locale. English and Russian
 | `/dyni diag` | Print the newest diagnostic entries. |
 | `/dyni status` | Print settings, build, and layout. |
 | `/dyni delay <seconds>` | Set the delay, clamped to 3–30 seconds. |
+
+</details>
 
 ## Help and development
 
