@@ -81,4 +81,12 @@ See [CONTRIBUTING.md](https://github.com/Antrakt92/Do-You-Need-It-/blob/main/CON
 
 ## License
 
-The addon code is [MIT licensed](LICENSE). Bundled libraries retain their own licenses; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) and the included `LICENSES/` directory.
+Do You Need It? is free to use. The project's original code uses the [Antrakt Attribution and CurseForge Rewards License 1.0](https://github.com/Antrakt92/Do-You-Need-It-/blob/main/LICENSE), a custom license based on MIT.
+
+Public forks, ports and projects reusing an original implementation of a significant user-facing feature must credit Antrakt92, name [Do You Need It?](https://www.curseforge.com/wow/addons/do-you-need-it) and link to the original.
+
+If such a project earns CurseForge Reward Points, allocate at least 10% of that project's points in total to the CurseForge account `antrakt92` through Members.
+
+Reusing several Antrakt92 projects does not add percentages. Isolated lines, small helper snippets, standard API calls, independently implemented ideas and compatibility or dependency-only use are exempt from reward sharing and additional public attribution. No separate permission request is needed; CurseForge requires the author to accept the member invitation.
+
+Previously granted MIT permissions remain valid. Third-party code keeps its original license. See [third-party notices](https://github.com/Antrakt92/Do-You-Need-It-/blob/main/THIRD-PARTY-NOTICES.md).

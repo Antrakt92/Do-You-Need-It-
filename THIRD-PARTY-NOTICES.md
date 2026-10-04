@@ -5,8 +5,8 @@ source present in the source tree. The bundled Lua files retain their existing
 whitespace; their content hashes below describe the shipped files. Source revisions, source archives, and
 license texts are pinned below. SHA256 values for text files are computed after
 normalizing line endings to LF, so Windows and Linux checkouts validate the same
-content. The Do You Need It? addon code is MIT-licensed; bundled libraries keep their
-upstream licenses.
+content. The original Do You Need It? addon code uses the custom license in LICENSE;
+bundled libraries keep their upstream licenses.
 
 ## libs/LibStub/LibStub.lua
 
