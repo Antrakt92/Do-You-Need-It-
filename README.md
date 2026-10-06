@@ -81,12 +81,10 @@ See [CONTRIBUTING.md](https://github.com/Antrakt92/Do-You-Need-It-/blob/main/CON
 
 ## License
 
-Do You Need It? is free to use. The project's original code uses the [Antrakt Attribution and CurseForge Rewards License 1.0](https://github.com/Antrakt92/Do-You-Need-It-/blob/main/LICENSE), a custom license based on MIT.
+Do You Need It? is free to use. Future copies distributed under the [Antrakt Attribution and CurseForge Rewards License 1.1](https://github.com/Antrakt92/Do-You-Need-It-/blob/main/LICENSE), a custom license based on MIT, allow modification and sharing without asking.
 
-Public forks, ports and projects reusing an original implementation of a significant user-facing feature must credit Antrakt92, name [Do You Need It?](https://www.curseforge.com/wow/addons/do-you-need-it) and link to the original.
+For public forks, ports or substantial feature reuse, keep the license, credit antrakt92 and link to [Do You Need It?](https://www.curseforge.com/wow/addons/do-you-need-it). If your derivative earns CurseForge Reward Points, allocate at least **10% of its points** to `antrakt92` through Members, separately for each original project substantially reused.
 
-If such a project earns CurseForge Reward Points, allocate at least 10% of that project's points in total to the CurseForge account `antrakt92` through Members.
+Small snippets, standard constructs/API calls, independently written code, translations, compatibility patches, dependencies and collection links require no share by themselves. Source credit is appreciated.
 
-Reusing several Antrakt92 projects does not add percentages. Isolated lines, small helper snippets, standard API calls, independently implemented ideas and compatibility or dependency-only use are exempt from reward sharing and additional public attribution. No separate permission request is needed; CurseForge requires the author to accept the member invitation.
-
-Previously granted MIT permissions remain valid. Third-party code keeps its original license. See [third-party notices](https://github.com/Antrakt92/Do-You-Need-It-/blob/main/THIRD-PARTY-NOTICES.md).
+Earlier copies keep their MIT or 1.0 terms. [Third-party material](https://github.com/Antrakt92/Do-You-Need-It-/blob/main/THIRD-PARTY-NOTICES.md) retains its own licenses.

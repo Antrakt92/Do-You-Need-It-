@@ -208,7 +208,7 @@ try {
             throw "Third-party notice hash does not match the normalized library hash: $noticePath"
         }
     }
-    $expectedTopLicenseHash = 'D805FA6D8184A12DE502651E05CB04F05A2EDBEB5B1CCB47C56EBE84782FFE78'
+    $expectedTopLicenseHash = 'D48DF90DF00CC1C51F7B7538FF5158F89C48F73CBCC2D6333F158585B8EC6314'
     if ((Get-NormalizedTextFileSha256 -Path 'LICENSE') -cne $expectedTopLicenseHash) {
         throw "Top-level addon license text changed: LICENSE"
     }
