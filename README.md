@@ -81,10 +81,8 @@ See [CONTRIBUTING.md](https://github.com/Antrakt92/Do-You-Need-It-/blob/main/CON
 
 ## License
 
-Do You Need It? is free to use. Future copies distributed under the [Antrakt Attribution and CurseForge Rewards License 1.1](https://github.com/Antrakt92/Do-You-Need-It-/blob/main/LICENSE), a custom license based on MIT, allow modification and sharing without asking.
+Do You Need It? is free to use. Future copies carrying the [Antrakt Attribution and CurseForge Rewards License 1.2](https://github.com/Antrakt92/Do-You-Need-It-/blob/main/LICENSE) may be modified and shared without asking first.
 
-For public forks, ports or substantial feature reuse, keep the license, credit antrakt92 and link to [Do You Need It?](https://www.curseforge.com/wow/addons/do-you-need-it). If your derivative earns CurseForge Reward Points, allocate at least **10% of its points** to `antrakt92` through Members, separately for each original project substantially reused.
+For a public fork, port or substantial reuse of my original feature code, keep the license, credit **antrakt92**, and name and link to [Do You Need It?](https://www.curseforge.com/wow/addons/do-you-need-it). If that derivative earns CurseForge Reward Points, share at least **10% of that project's points** with `antrakt92` through Members. One share covers all my projects reused in it; each separate derivative has its own 10% requirement.
 
-Small snippets, standard constructs/API calls, independently written code, translations, compatibility patches, dependencies and collection links require no share by themselves. Source credit is appreciated.
-
-Earlier copies keep their MIT or 1.0 terms. [Third-party material](https://github.com/Antrakt92/Do-You-Need-It-/blob/main/THIRD-PARTY-NOTICES.md) retains its own licenses.
+Small snippets, independent code and translations, compatibility patches, dependencies and collection links require no share by themselves. Earlier MIT and 1.0/1.1 grants remain; the single-share permission also applies to earlier custom versions. [Third-party material](https://github.com/Antrakt92/Do-You-Need-It-/blob/main/THIRD-PARTY-NOTICES.md) keeps its own terms.
