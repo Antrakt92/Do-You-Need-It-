@@ -1,4 +1,4 @@
-## Interface: 120100, 120105
+## Interface: 120105
 ## Title: Do You Need It?
 ## Notes: Shows likely-tradeable gear drops and helps ask group members if they need them.
 ## Category: Loot
@@ -13,7 +13,7 @@
 ## Category-zhCN: 战利品
 ## Category-zhTW: 戰利品
 ## Author: Antrakt92
-## Version: 0.6.3
+## Version: 0.6.4
 ## IconTexture: Interface\AddOns\DoYouNeedIt\media\icon.png
 ## SavedVariables: DoYouNeedItDB DoYouNeedItSelfTest
 ## X-Curse-Project-ID: 1595368

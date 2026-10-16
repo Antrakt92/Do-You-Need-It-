@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.4 - 16-Oct-2026 — Retail 12.1.5
+
+- Target the live Midnight 12.1.5 client and remove 12.1.0 from current package compatibility.
+
 ## 0.6.3 - 04-Oct-2026 — AddOn list category and complete release history
 
 - Find Do You Need It? under Loot in the AddOn list in every supported client language.

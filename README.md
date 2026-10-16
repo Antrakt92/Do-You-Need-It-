@@ -4,13 +4,13 @@ Compare dungeon and raid gear drops with the looter's equipped items, review rec
 
 [Install on CurseForge](https://www.curseforge.com/wow/addons/do-you-need-it) · [Download the latest ZIP](https://github.com/Antrakt92/Do-You-Need-It-/releases/latest) · [Report a problem](https://github.com/Antrakt92/Do-You-Need-It-/issues)
 
-For World of Warcraft Retail / Midnight 12.x. The current package supports 12.1.0 and the 12.1.5 PTR.
+For World of Warcraft Retail / Midnight 12.1.5.
 
 ## Install
 
 Install through CurseForge, or extract the `DoYouNeedIt-<version>.zip` release asset into `World of Warcraft/_retail_/Interface/AddOns/`. The resulting folder must be named `DoYouNeedIt` and contain `DoYouNeedIt.toc` directly inside it.
 
-Run `/reload`, then `/dyni` to open the window. `/dyni status` should report `build=0.6.3`. Use `/dyni test` to preview sample rows; these cannot send whispers and are not saved to your history.
+Run `/reload`, then `/dyni` to open the window. `/dyni status` should report `build=0.6.4`. Use `/dyni test` to preview sample rows; these cannot send whispers and are not saved to your history.
 
 ## Loot and comparison
 
