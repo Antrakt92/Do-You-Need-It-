@@ -7,8 +7,8 @@ Compare dungeon and raid gear drops with the looter's equipped items, review rec
 **1.0 is the first stable release.** Existing settings and loot history carry forward. For World of Warcraft Retail / Midnight 12.1.5.
 
 **WoW Forever beta has a separate build.** Use the
-[`forever-v1.0.1` beta release](https://github.com/Antrakt92/Do-You-Need-It-/releases/tag/forever-v1.0.1)
-and its `DoYouNeedIt-1.0.1-Forever-beta.zip` archive for Forever 1.60.1
+[`forever-v1.1.0` beta release](https://github.com/Antrakt92/Do-You-Need-It-/releases/tag/forever-v1.1.0)
+and its `DoYouNeedIt-1.1.0-Forever-beta.zip` archive for Forever 1.60.1
 (Interface 16001). Retail and Forever update independently; the latest stable
 Retail release does not select the Forever file. The screenshots below show Retail.
 
@@ -46,7 +46,7 @@ reloads. Switching between Settings and loot keeps the same dimensions.
 
 Install through CurseForge, or extract the `DoYouNeedIt-<version>.zip` release asset into `World of Warcraft/_retail_/Interface/AddOns/`. The resulting folder must be named `DoYouNeedIt` and contain `DoYouNeedIt.toc` directly inside it.
 
-Run `/reload`, then `/dyni` to open the window. `/dyni status` should report `build=1.0.0`. Click **Demo** to preview 12 Midnight raid and dungeon items, then **Exit demo** to return to your loot. Examples cannot send whispers and are not saved to your history.
+Run `/reload`, then `/dyni` to open the window. `/dyni status` should report `build=1.1.0`. Click **Demo** to preview 12 Midnight raid and dungeon items, then **Exit demo** to return to your loot. Examples cannot send whispers and are not saved to your history.
 
 ### Forever beta installation
 

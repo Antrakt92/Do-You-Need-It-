@@ -1,6 +1,6 @@
 # Do You Need It? — Forever Beta
 
-## Unreleased
+## 1.1.0 - 18-Oct-2026 — Settings layout refinement
 
 - Refines compact Settings: Auto whisper and Delay sit side by side, Appearance fields clear the heading, and the quality column moves right without increasing window height.
 

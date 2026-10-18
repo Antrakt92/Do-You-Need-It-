@@ -1,7 +1,7 @@
 -- Loaded only by the Forever package, after the shared core.
 local Core = _G.DoYouNeedItCore
 Core.flavor = "forever"
-Core.VERSION = "1.0.1"
+Core.VERSION = "1.1.0"
 Core.equipLocOverrides = {
     INVTYPE_RANGED = { "RangedSlot" },
     INVTYPE_RANGEDRIGHT = { "RangedSlot" },

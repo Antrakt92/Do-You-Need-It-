@@ -1,13 +1,15 @@
 # Changelog
 
-## Unreleased
+## 1.1.0 - 18-Oct-2026 — Compact Settings and quality filters
 
 - Aligns Auto whisper and Delay side by side, adds clear spacing below section headings and above the bottom border, and gives Settings fields more width without enlarging the window.
-
 - Adds independent gear-quality checkboxes on the right of Settings.
 - Applies the saved filter to live loot, session/history and Demo. Hidden records are retained, and disabled qualities do not open the window or send automatic whispers.
 - Fits Settings into the same compact window as loot, with whisper and appearance controls on the left and quality choices on the right.
 - Resizes the window from its lower-right corner, adapting comparison widths and visible rows. Size is saved across reloads and retained when switching to Settings.
+- Starts at the compact minimum size on first use and restores the user's chosen size after reloads and mode changes.
+- Keeps compatible font choices available when the client applies a font without returning a success value, and loads cold bundled faces without manually warming them.
+- Adds `/dyni fontdiag` for a small font-loading troubleshooting report.
 
 ## 1.0.0 - 18-Oct-2026 — First stable release
 
