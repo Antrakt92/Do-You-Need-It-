@@ -210,6 +210,87 @@ function tests.selftestDemoPhaseLeavesLiveStateUntouched()
     equal(#h:visibleRows(), 0, "no demo row survives cleanup")
 end
 
+function tests.selftestExplainsSkippedDemoAndPreservesSettingsDraft()
+    local h = fresh()
+    withPopup(h)
+    h:slash("auto off")
+    h:slash("settings")
+    local settings = h.env.DoYouNeedItSettingsFrame
+    local savedTemplate = h.env.DoYouNeedItDB.settings.whisperTemplate
+    settings.whisperEditBox:FireScript("OnEditFocusGained")
+    settings.whisperEditBox:SetText("Uncommitted {item} draft")
+    h:slash("selftest")
+    local demo = h.env.DoYouNeedItSelfTest.report.demo
+    equal(demo.rows, 0, "open settings skips the detached demo")
+    equal(demo.status, "skipped", "a skipped demo cannot be mistaken for a successful render")
+    equal(demo.reason, "settings-open", "report identifies the precise skip condition")
+    truthy(hasMessage(h, "close Settings"), "chat explains how to exercise the skipped demo")
+    local text = dialogText(h)
+    truthy(text:find("status=skipped", 1, true), "copy report retains skipped verdict")
+    truthy(text:find("reason=settings-open", 1, true), "copy report retains skip reason")
+    equal(settings:IsShown(), true, "selftest leaves settings open")
+    equal(settings.whisperEditBox:GetText(), "Uncommitted {item} draft", "selftest preserves the draft")
+    equal(h.env.DoYouNeedItDB.settings.whisperTemplate, savedTemplate, "selftest never commits the draft")
+    equal(dbHasTestRows(h), false, "skipped demo never touches stored history")
+    equal(#h.sentMessages, 0, "skipped demo sends no whispers")
+    h:slash("")
+    h:slash("selftest")
+    local retried = h.env.DoYouNeedItSelfTest.report.demo
+    equal(retried.status, "ok", "closing settings allows a real retry")
+    equal(retried.reason, nil, "a successful retry must not carry a failure reason")
+    equal(retried.rows, 4, "retry builds every demo row")
+    equal(retried.rendered, 4, "retry renders every demo row")
+end
+
+function tests.selftestReportsRenderFailureAndRestoresWindow()
+    local h = fresh()
+    withPopup(h)
+    local frame = h.env.DoYouNeedItFrame
+    local originalShow = frame.Show
+    frame.Show = function() error("injected demo show failure") end
+    h:slash("selftest")
+    frame.Show = originalShow
+    local demo = h.env.DoYouNeedItSelfTest.report.demo
+    equal(demo.status, "failed", "caught render error remains an explicit failed verdict")
+    truthy(type(demo.reason) == "string" and demo.reason ~= "", "failed demo records a bounded reason")
+    equal(demo.cleaned, false, "failed render cannot report successful demo completion")
+    equal(demo.untouched, true, "failed render preserves real state")
+    equal(frame:IsShown(), false, "failed demo restores the initially hidden window")
+    equal(#h:visibleRows(), 0, "failed demo leaves no rendered demo rows")
+    equal(dbHasTestRows(h), false, "failed demo stores no test loot")
+    equal(#h.sentMessages, 0, "failed demo sends no whispers")
+    local text = dialogText(h)
+    truthy(text:find("status=failed", 1, true), "copy report preserves failed verdict")
+end
+
+function tests.selftestWithFullSessionPreservesRealLoot()
+    local h = fresh()
+    withPopup(h)
+    for index = 1, 55 do
+        local link = h:addItem(52000 + index, { name = "Retained Sword " .. index })
+        h:fireLoot("Otherplayer", link)
+    end
+    h:runTimers(10, 200)
+    local db = h.env.DoYouNeedItDB
+    equal(#db.sessionAllRows, 50, "fixture fills the real session cap")
+    local before = {}
+    for index, row in ipairs(db.sessionAllRows) do
+        before[index] = row.itemLink
+    end
+    h:resetSideEffects()
+    h:slash("selftest")
+    local demo = h.env.DoYouNeedItSelfTest.report.demo
+    equal(demo.rows, 4, "full session does not suppress detached demo rows")
+    equal(demo.rendered, 4, "full session still exercises real rendering")
+    equal(demo.untouched, true, "full session is retained")
+    equal(#db.sessionAllRows, 50, "demo never evicts live session rows")
+    for index, link in ipairs(before) do
+        equal(db.sessionAllRows[index].itemLink, link, "demo preserves each real row and order")
+    end
+    equal(dbHasTestRows(h), false, "full session persists no demo loot")
+    equal(#h.sentMessages, 0, "full-session selftest sends no whispers")
+end
+
 function tests.selftestShowDefersCopyWindowUntilCombatEnds()
     local h = fresh()
     withPopup(h)

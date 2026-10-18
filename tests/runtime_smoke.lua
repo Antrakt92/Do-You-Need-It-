@@ -444,7 +444,9 @@ local function testNonLatinLootTextUsesGlyphCapableFont()
 
         local rows = h:visibleRows()
         assertEqual(#rows, 1, "non-latin looter row is visible for " .. case.name)
-        assertEqual(rows[1].looter.font, case.expected, "non-latin looter name falls back to a capable font for " .. case.name)
+        assertTruthy(h.env.DoYouNeedItCore.FontSupports(rows[1].looter:GetFont(),
+            h.env.DoYouNeedItCore.GetTextGlyphRequirement(case.name)),
+            "non-latin looter name falls back to a capable font for " .. case.name)
         assertEqual(rows[1].drop.font, "Fonts\\FRIZQT__.TTF", "latin item text keeps the selected Friz font for " .. case.name)
         assertEqual(h.env.DoYouNeedItFrame.title.font, "Fonts\\FRIZQT__.TTF", "main title keeps the selected Friz font for " .. case.name)
     end
@@ -1922,8 +1924,10 @@ local function testForcedCjkLocalesUseLocaleSpecificBlizzardFontsOnWesternClient
         })
         h:loadAddon()
 
-        assertEqual(h.env.DoYouNeedItDB.settings.font, case.font, case.locale .. " load switches to a locale-capable Blizzard font")
-        assertEqual(h.env.DoYouNeedItFrame.title.font, case.font, case.locale .. " main title uses the locale-capable Blizzard font")
+        assertTruthy(h.env.DoYouNeedItCore.FontSupportsLocale(h.env.DoYouNeedItDB.settings.font, case.locale, "enUS"),
+            case.locale .. " load switches to a locale-capable font")
+        assertTruthy(h.env.DoYouNeedItCore.FontSupportsLocale(h.env.DoYouNeedItFrame.title:GetFont(), case.locale, "enUS"),
+            case.locale .. " main title uses a locale-capable font")
     end
 end
 
@@ -1955,15 +1959,11 @@ local function testCustomFontPickerGridPreviewAndCommit()
     end, picker)
     assertTruthy(brokenButton and brokenButton.text, "broken font option is present in the custom picker")
 
-    local firstButton = h:findFrame(function(frame)
-        return frame.fontName == "Friz Quadrata TT"
-    end, picker)
-    local secondButton = h:findFrame(function(frame)
-        return frame.fontName == "Arial Narrow"
-    end, picker)
-    local fourthButton = h:findFrame(function(frame)
-        return frame.fontName == "Readable One"
-    end, picker)
+    local grid = {}
+    for _, frame in ipairs(h.env.DoYouNeedItFontPickerContent.children) do
+        if frame.fontPath and frame:IsShown() then grid[#grid + 1] = frame end
+    end
+    local firstButton, secondButton, fourthButton = grid[1], grid[2], grid[4]
     assertTruthy(firstButton and secondButton and fourthButton, "picker has enough font buttons to prove grid layout")
     assertEqual(firstButton.points[1][3], secondButton.points[1][3], "first-row font buttons share a row")
     assertTruthy(firstButton.points[1][2] ~= secondButton.points[1][2], "first-row font buttons use different columns")
@@ -1998,17 +1998,12 @@ local function testLanguageDropdownCloseRepairsCaptionsAfterSharedListCleanup()
     local languageDropdown = h.env.DoYouNeedItLanguageDropdown
     languageDropdown.Button:FireScript("OnClick")
     h:runTimers(0, 10)
-    h.dropdownAdds = {}
-    h.env.UIDROPDOWNMENU_OPEN_MENU = languageDropdown
-    languageDropdown.initialize()
-    h.env.DropDownList1:Show()
-
     local languageButton = h:findFrame(function(frame)
         return frame.value == "ruRU"
-    end, h.env.DropDownList1)
+    end, h.env.DoYouNeedItLanguagePicker)
     assertTruthy(languageButton, "language option is present")
     languageButton:FireScript("OnEnter")
-    h.env.DropDownList1:Hide()
+    h.env.DoYouNeedItLanguagePicker:Hide()
     h:runTimers(0, 10)
 
     assertTruthy(h.env.DoYouNeedItLanguageDropdown.Text:GetText() ~= "", "language caption is repaired after dropdown cleanup")

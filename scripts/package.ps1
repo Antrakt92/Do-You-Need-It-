@@ -122,6 +122,21 @@ try {
     Copy-PackageFile "THIRD-PARTY-NOTICES.md"
     Copy-PackageFile "LICENSES/CallbackHandler-1.0-BSD-2-Clause.txt"
     Copy-PackageFile "LICENSES/LibSharedMedia-3.0-LGPL-2.1.txt"
+    Copy-PackageFile "media/font-star-outline.tga"
+    Copy-PackageFile "media/font-star-filled.tga"
+    Copy-PackageFile "fonts/manifest.json"
+    Copy-PackageFile "fonts/NOTICE.md"
+    $fontManifest = Get-Content -LiteralPath (Join-Path $repoRoot 'fonts/manifest.json') -Raw | ConvertFrom-Json
+    if ($fontManifest.schemaVersion -ne 1 -or @($fontManifest.fonts).Count -ne 46) {
+        throw 'Invalid bundled font manifest'
+    }
+    foreach ($fontEntry in $fontManifest.fonts) {
+        Copy-PackageFile $fontEntry.path
+        if ((Get-FileHash -LiteralPath (Join-Path $repoRoot $fontEntry.path) -Algorithm SHA256).Hash -cne $fontEntry.sha256) {
+            throw "Bundled font hash mismatch: $($fontEntry.path)"
+        }
+        Copy-PackageFile $fontEntry.licenseFile
+    }
 
     if (Test-Path -LiteralPath $zipPath) {
         Remove-Item -LiteralPath $zipPath -Force

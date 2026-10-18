@@ -10,7 +10,7 @@ For World of Warcraft Retail / Midnight 12.1.5.
 
 Install through CurseForge, or extract the `DoYouNeedIt-<version>.zip` release asset into `World of Warcraft/_retail_/Interface/AddOns/`. The resulting folder must be named `DoYouNeedIt` and contain `DoYouNeedIt.toc` directly inside it.
 
-Run `/reload`, then `/dyni` to open the window. `/dyni status` should report `build=0.6.4`. Use `/dyni test` to preview sample rows; these cannot send whispers and are not saved to your history.
+Run `/reload`, then `/dyni` to open the window. `/dyni status` should report `build=0.7.0`. Use `/dyni test` to preview sample rows; these cannot send whispers and are not saved to your history.
 
 ## Loot and comparison
 
@@ -39,7 +39,11 @@ Auto-whisper is **off by default**. If enabled, it waits 10 seconds by default; 
 
 Use `{item}` in a custom message, for example: `Hey, do you need {item}?` If the completed message is too long or contains invalid characters, the row explains the problem. Edit the message and use Ask again.
 
-Language defaults to **Auto**, following your client locale. English and Russian have the most complete text. German, Spanish (Spain/Mexico), French, Italian, Brazilian Portuguese, Korean, and Simplified/Traditional Chinese are selectable, with English fallback for untranslated labels. Font and language pickers preview on hover and restore the saved choice if closed without a selection. Bundled LibSharedMedia and Blizzard fonts provide font choices and Cyrillic fallback.
+Language defaults to **Auto**, following your client locale. Settings and loot-status labels are translated into English, Russian, German, Spanish (Spain/Latin America), French, Italian, Brazilian Portuguese, Korean, and Simplified/Traditional Chinese. Language names use their native spelling.
+
+The addon includes 46 fonts alongside available LibSharedMedia and Blizzard fonts. The picker shows available faces compatible with your selected language; star your favorites to keep them first. Font and language hover previews restore the saved choice when dismissed. Menus open beside their fields and stay above the window.
+
+The heart and feedback buttons beside Settings open copyable links to support the addon or report a problem on GitHub.
 
 ## Commands
 
@@ -52,7 +56,8 @@ Language defaults to **Auto**, following your client locale. English and Russian
 | `/dyni resetpos` | Center the window without resetting settings or history. |
 | `/dyni history` | Cycle history views. |
 | `/dyni scan` | Queue a group equipment scan. |
-| `/dyni selftest` | Run a self-check and print a chat summary. |
+| `/dyni selftest` | Run a self-check and open a copyable report. Close Settings first to include the demo-row check. |
+| `/dyni selftest show` | Reopen the last saved self-check report. |
 
 <details>
 <summary>Diagnostics and advanced commands</summary>

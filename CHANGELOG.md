@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0 - 18-Oct-2026 — Fonts, languages and Settings
+
+- Give language and font menus a compact design that stays above Settings.
+- Align Settings controls, group the Auto whisper checkbox with its label, and refresh the buttons and sliders.
+- Restore readable language previews and use native language names.
+- Complete translations for Settings and loot-status labels.
+- Include 46 fonts, show compatible available choices, and save font favorites.
+- Add support and GitHub feedback links beside Settings.
+- Explain skipped or failed demo checks in the self-test report while preserving Settings drafts.
+
 ## 0.6.4 - 16-Oct-2026 — Retail 12.1.5
 
 - Target the live Midnight 12.1.5 client and remove 12.1.0 from current package compatibility.

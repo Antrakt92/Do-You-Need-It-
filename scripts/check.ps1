@@ -12,6 +12,10 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "lua5.1 tests\run.lua failed with exit code $LASTEXITCODE"
     }
+    & lua5.1 tests\font_catalog.lua
+    if ($LASTEXITCODE -ne 0) { throw 'Font catalog regressions failed' }
+    & python tests\font_assets.py
+    if ($LASTEXITCODE -ne 0) { throw 'Bundled font provenance/glyph checks failed' }
     & lua5.1 tests\runtime_smoke.lua
     if ($LASTEXITCODE -ne 0) {
         throw "lua5.1 tests\runtime_smoke.lua failed with exit code $LASTEXITCODE"
@@ -23,7 +27,7 @@ try {
     foreach ($regression in @(
         'runtime_item_regressions.lua', 'runtime_loot_regressions.lua', 'runtime_ui_regressions.lua',
         'runtime_navigation.lua', 'runtime_policy_regressions.lua', 'runtime_filters.lua',
-        'runtime_selftest.lua'
+        'runtime_selftest.lua', 'runtime_settings_menus.lua'
     )) {
         & lua5.1 (Join-Path tests $regression)
         if ($LASTEXITCODE -ne 0) {
@@ -35,6 +39,7 @@ try {
         libs\CallbackHandler-1.0\CallbackHandler-1.0.lua `
         libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua `
         DoYouNeedIt_Core.lua `
+        DoYouNeedIt_Fonts.lua `
         DoYouNeedIt.lua
     if ($LASTEXITCODE -ne 0) {
         throw "luac5.1 syntax check failed with exit code $LASTEXITCODE"
@@ -261,6 +266,9 @@ try {
             $required = @(
                 "DoYouNeedIt/DoYouNeedIt.toc",
                 "DoYouNeedIt/DoYouNeedIt_Core.lua",
+                "DoYouNeedIt/DoYouNeedIt_Fonts.lua",
+                "DoYouNeedIt/fonts/manifest.json",
+                "DoYouNeedIt/fonts/NOTICE.md",
                 "DoYouNeedIt/DoYouNeedIt.lua",
                 "DoYouNeedIt/libs/LibStub/LibStub.lua",
                 "DoYouNeedIt/libs/CallbackHandler-1.0/CallbackHandler-1.0.lua",

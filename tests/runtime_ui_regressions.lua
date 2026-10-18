@@ -409,8 +409,8 @@ local function testRussianClientSettingsUseGlyphCapableFont()
     h:loadAddon()
     h:slash("settings")
     local settings = h.env.DoYouNeedItSettingsFrame
-    local expectedFont = "Fonts\\ARIALN.TTF"
-    assertEqual(h.env.DoYouNeedItDB.settings.font, expectedFont, "Russian client repairs a Latin-only saved font")
+    assertTruthy(h.env.DoYouNeedItCore.FontSupportsLocale(h.env.DoYouNeedItDB.settings.font, "ruRU", "ruRU"),
+        "Russian client repairs a Latin-only saved font")
     assertEqual(settings.title:GetText(), "Настройки", "Russian client localizes the settings title")
     for _, control in ipairs({
         settings.title, settings.back:GetFontString(), settings.resetPosition:GetFontString(),
@@ -421,7 +421,8 @@ local function testRussianClientSettingsUseGlyphCapableFont()
         settings.languageDropdown.Text, settings.whispersHeading, settings.appearanceHeading,
         settings.whisperHelp,
     }) do
-        assertEqual(control.font, expectedFont, "localized settings text uses a Cyrillic-capable font: " .. control:GetText())
+        assertTruthy(h.env.DoYouNeedItCore.FontSupportsLocale(control:GetFont(), "ruRU", "ruRU"),
+            "localized settings text uses a Cyrillic-capable font: " .. control:GetText())
     end
 end
 
@@ -492,14 +493,13 @@ local function testNewLootShortcutFollowsLanguageChanges()
     assertEqual(h.env.DoYouNeedItFrame.newLootButton:IsShown(), true, "historical reader has a new loot shortcut")
     for _, option in ipairs({ { "ruRU", "Новый лут" }, { "enUS", "New loot" } }) do
         h:slash("settings")
-        h.dropdownAdds = {}
-        h.env.DoYouNeedItLanguageDropdown.initialize()
+        h.env.DoYouNeedItLanguageDropdown:FireScript("OnClick")
         local selected
-        for _, entry in ipairs(h.dropdownAdds) do
+        for _, entry in ipairs(h.env.DoYouNeedItLanguagePicker.buttons) do
             if entry.value == option[1] then selected = entry; break end
         end
         assertTruthy(selected, "requested language appears in the settings picker")
-        selected.func()
+        selected:FireScript("OnClick")
         h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
         assertEqual(h.env.DoYouNeedItFrame.newLootButton:IsShown(), true, "language change keeps incoming loot available")
         assertEqual(h.env.DoYouNeedItFrame.newLootButton:GetText(), option[2], "new loot shortcut follows the selected language")
@@ -510,7 +510,7 @@ local function testMainWindowToplevelAndGeometry()
     local h = Harness.new()
     h:loadAddon()
     local main = h.env.DoYouNeedItFrame
-    assertEqual(main:IsToplevel(), true, "main window stays above foreign UI")
+    assertEqual(main:IsToplevel(), false, "window does not raise above its own popups")
     assertEqual(main.strata, "DIALOG", "main window keeps dialog strata")
     assertEqual(main:GetWidth(), 540, "main window keeps compact width")
     assertEqual(main:GetHeight(), 300, "main window keeps compact height")

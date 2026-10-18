@@ -1,5 +1,11 @@
 # Third-Party Notices
 
+## Bundled fonts
+
+The 46 unchanged font files in `fonts/` retain their upstream licenses.
+See [font sources and licenses](fonts/NOTICE.md) and `fonts/manifest.json`
+for pinned provenance, file hashes, and the included license texts.
+
 Do You Need It? bundles these runtime libraries so release packages use the same reviewed
 source present in the source tree. The bundled Lua files retain their existing
 whitespace; their content hashes below describe the shipped files. Source revisions, source archives, and

@@ -7,6 +7,7 @@ Keep pull requests focused on one change. Explain its effect on players and how 
 ## Source layout
 
 - `DoYouNeedIt_Core.lua`: loot rules, settings, history, and data normalization.
+- `DoYouNeedIt_Fonts.lua` and `fonts/`: bundled font catalog, original assets, provenance and licenses.
 - `DoYouNeedIt.lua`: game events, inspection, whispers, and the loot/settings windows.
 - `DoYouNeedIt.toc`: client compatibility, version, and file loading order.
 - `libs/`, `LICENSES/`, and `THIRD-PARTY-NOTICES.md`: bundled libraries and their terms.
@@ -21,7 +22,7 @@ The runtime targets Lua 5.1. From the repository root, run:
 .\scripts\check.ps1
 ```
 
-This runs Lua regressions and syntax checks, release-reference tests, library/license integrity checks, deterministic package validation, upload metadata dry-runs, and public-source checks. It does not upload anything.
+This runs Lua regressions and syntax checks, font character-map and integrity checks using Python's standard library, release-reference tests, library/license integrity checks, deterministic package validation, upload metadata dry-runs, and public-source checks. It does not upload anything.
 
 If `lua5.1` or `luac5.1` is missing on Windows, install the pinned check tools with:
 

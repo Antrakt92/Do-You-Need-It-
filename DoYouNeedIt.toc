@@ -13,7 +13,7 @@
 ## Category-zhCN: 战利品
 ## Category-zhTW: 戰利品
 ## Author: Antrakt92
-## Version: 0.6.4
+## Version: 0.7.0
 ## IconTexture: Interface\AddOns\DoYouNeedIt\media\icon.png
 ## SavedVariables: DoYouNeedItDB DoYouNeedItSelfTest
 ## X-Curse-Project-ID: 1595368
@@ -22,4 +22,5 @@ libs\LibStub\LibStub.lua
 libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
 libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
 DoYouNeedIt_Core.lua
+DoYouNeedIt_Fonts.lua
 DoYouNeedIt.lua

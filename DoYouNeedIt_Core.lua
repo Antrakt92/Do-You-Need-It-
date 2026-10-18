@@ -1,6 +1,6 @@
 local Core = {}
 
-Core.VERSION = "0.6.4"
+Core.VERSION = "0.7.0"
 
 local GLYPH_LATIN = "LATIN"
 local GLYPH_CYR = "CYR"
@@ -49,14 +49,14 @@ local LANGUAGE_OPTIONS = {
     { value = "enUS", label = "English" },
     { value = "deDE", label = "Deutsch" },
     { value = "esES", label = "Español (España)", compactLabel = "Español ES" },
-    { value = "esMX", label = "Español (México)", compactLabel = "Español MX" },
+    { value = "esMX", label = "Español (Latinoamérica)", compactLabel = "Español LA" },
     { value = "frFR", label = "Français" },
     { value = "itIT", label = "Italiano" },
     { value = "ptBR", label = "Português (Brasil)" },
-    { value = "koKR", label = "한국어 (Korean)", compactLabel = "한국어 / Korean" },
-    { value = "ruRU", label = "Русский (Russian)" },
-    { value = "zhCN", label = "中文 简体 (Simplified)", compactLabel = "中文 / Simpl." },
-    { value = "zhTW", label = "中文 繁體 (Traditional)", compactLabel = "中文 / Trad." },
+    { value = "koKR", label = "한국어", compactLabel = "한국어" },
+    { value = "ruRU", label = "Русский" },
+    { value = "zhCN", label = "简体中文", compactLabel = "简体中文" },
+    { value = "zhTW", label = "繁體中文", compactLabel = "繁體中文" },
 }
 
 local LOCALE_GLYPH_REQ = {
@@ -66,6 +66,9 @@ local LOCALE_GLYPH_REQ = {
 }
 
 local FONT_GLYPH_SUPPORT = {}
+local bundledFonts = {}
+local bundledByPath = {}
+local bundledByFile = {}
 local function addFontGlyphSupport(path, glyphs)
     FONT_GLYPH_SUPPORT[(path:gsub("/", "\\"):lower())] = glyphs
 end
@@ -92,6 +95,10 @@ addFontGlyphSupport("Fonts\\SKURRI_CYR.TTF", { GLYPH_LATIN, GLYPH_CYR })
 
 local FONT_GLYPH_PATTERNS = {
     { pattern = "noto.*cjk", glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT, GLYPH_HANGUL } },
+    { pattern = "^sourcehan.-cn[%-.]", glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS } },
+    { pattern = "^sourcehan.-tw[%-.]", glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANT } },
+    { pattern = "^sourcehan.-jp[%-.]", glyphs = { GLYPH_LATIN, GLYPH_CYR } },
+    { pattern = "^sourcehan.-kr[%-.]", glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANGUL } },
     { pattern = "sourcehan", glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT, GLYPH_HANGUL } },
     { pattern = "wenquanyi", glyphs = { GLYPH_LATIN, GLYPH_HANS, GLYPH_HANT } },
     { pattern = "wqy", glyphs = { GLYPH_LATIN, GLYPH_HANS, GLYPH_HANT } },
@@ -110,8 +117,8 @@ local FONT_GLYPH_PATTERNS = {
 local CYRILLIC_UTF8_LEAD_PATTERN = "[\208\209]"
 -- Hiragana/katakana share lead E3 with CJK Extension A; Unified Ideographs
 -- span leads E4-E9. Lead bytes cannot tell Simplified from Traditional apart,
--- so both probe as HANS: every bundled/pattern font that covers HANS also
--- covers HANT, and any CJK-capable fallback beats a Latin-only font.
+-- so foreign loot text uses HANS as a best-effort CJK hint. The language picker
+-- and localized Settings use explicit script and regional coverage instead.
 local CJK_UTF8_LEAD_PATTERN = "[\227-\233]"
 -- Hangul syllables U+AC00-U+D7A3 encode with leads EA-ED.
 local HANGUL_UTF8_LEAD_PATTERN = "[\234-\237]"
@@ -318,11 +325,105 @@ local simpleLocaleLabels = {
     zhTW = { ["Settings"] = "設定", ["Language:"] = "語言:", ["Font:"] = "字型:", ["Font Size:"] = "字型大小:", ["Delay"] = "延遲", ["Low"] = "低", ["High"] = "高", ["Auto whisper"] = "自動密語" },
 }
 
+
+-- Main-window and Settings labels share one vocabulary across locales.
+local visibleLocaleKeys = { "Back", "Askable", "All Gear", "Current", "This Session", "History", "Run", "Loot", "You", "Whisper text:", "Whispers", "Appearance", "Use {item} for the dropped item.", "Only eligible new drops. Off by default.", "Waiting for group loot", "Gear from your dungeon or raid will appear here.", "Scroll to review older drops", "Reset Position", "New loot", "Reset", "Auto (current: %s)", "No askable gear drops in this view.", "No gear drops in this view.", "Player", "Dropped", "Equipped now", "Trade", "Ask", "Sent", "Sending", "Auto: off", "Auto: %ds", "Equipped: ", "Cached: ", "Equipped: unknown", "Equipped: checking...", "Equipped: unavailable", "trade_confirmed", "trade_likely", "trade_no", "trade_unknown", "drop_one", "drop_few", "drop_many" }
+local visibleLocaleLabels = {
+    deDE = { "Zurück", "Anfragbar", "Alle Ausrüstung", "Aktuell", "Diese Sitzung", "Verlauf", "Durchlauf", "Beute", "Du", "Flüstertext:", "Flüstern", "Darstellung", "Verwende {item} für den erhaltenen Gegenstand.", "Nur geeignete neue Beute. Standardmäßig aus.", "Warte auf Gruppenbeute", "Ausrüstung aus Dungeons oder Schlachtzügen erscheint hier.", "Scrollen, um ältere Beute anzusehen", "Position zurücksetzen", "Neue Beute", "Zurücksetzen", "Automatisch (aktuell: %s)", "Keine anfragbare Ausrüstung in dieser Ansicht.", "Keine Ausrüstung in dieser Ansicht.", "Spieler", "Erhalten", "Aktuell angelegt", "Handel", "Fragen", "Gesendet", "Wird gesendet", "Auto: aus", "Auto: %ds", "Angelegt: ", "Gespeichert: ", "Angelegt: unbekannt", "Angelegt: wird geprüft...", "Angelegt: nicht verfügbar", "Handel: ja", "Handel: wahrscheinlich", "Handel: nein", "Handel: unbekannt", "Gegenstand", "Gegenstände", "Gegenstände" },
+    esES = { "Atrás", "Solicitables", "Todo el equipo", "Actual", "Esta sesión", "Historial", "Recorrido", "Botín", "Tú", "Texto del susurro:", "Susurros", "Apariencia", "Usa {item} para el objeto obtenido.", "Solo objetos nuevos aptos. Desactivado por defecto.", "Esperando botín del grupo", "Aquí aparecerá el equipo de tu mazmorra o banda.", "Desplázate para ver el botín anterior", "Restablecer posición", "Nuevo botín", "Restablecer", "Automático (actual: %s)", "No hay equipo que puedas solicitar en esta vista.", "No hay equipo en esta vista.", "Jugador", "Obtenido", "Equipo actual", "Intercambio", "Preguntar", "Enviado", "Enviando", "Auto: no", "Auto: %ds", "Equipado: ", "Guardado: ", "Equipado: desconocido", "Equipado: comprobando...", "Equipado: no disponible", "Intercambio: sí", "Intercambio: probable", "Intercambio: no", "Intercambio: desconocido", "objeto", "objetos", "objetos" },
+    frFR = { "Retour", "Demandables", "Tout le butin", "Actuel", "Cette session", "Historique", "Sortie", "Butin", "Vous", "Texte du message :", "Messages privés", "Apparence", "Utilisez {item} pour l’objet obtenu.", "Nouveaux objets admissibles uniquement. Désactivé par défaut.", "En attente du butin du groupe", "L’équipement de votre donjon ou raid apparaîtra ici.", "Faites défiler pour voir les objets précédents", "Réinitialiser la position", "Nouveau butin", "Réinitialiser", "Auto (actuel : %s)", "Aucun équipement à demander dans cette vue.", "Aucun équipement dans cette vue.", "Joueur", "Obtenu", "Équipement actuel", "Échange", "Demander", "Envoyé", "Envoi en cours", "Auto : non", "Auto : %ds", "Équipé : ", "En cache : ", "Équipé : inconnu", "Équipé : vérification...", "Équipé : indisponible", "Échange : oui", "Échange : probable", "Échange : non", "Échange : inconnu", "objet", "objets", "objets" },
+    itIT = { "Indietro", "Richiedibili", "Tutto l’equipaggiamento", "Attuale", "Questa sessione", "Cronologia", "Spedizione", "Bottino", "Tu", "Testo del sussurro:", "Sussurri", "Aspetto", "Usa {item} per l’oggetto ottenuto.", "Solo nuovi oggetti idonei. Disattivato per impostazione predefinita.", "In attesa del bottino del gruppo", "Qui apparirà l’equipaggiamento della spedizione o incursione.", "Scorri per vedere il bottino precedente", "Reimposta posizione", "Nuovo bottino", "Reimposta", "Auto (attuale: %s)", "Nessun equipaggiamento richiedibile in questa vista.", "Nessun equipaggiamento in questa vista.", "Giocatore", "Ottenuto", "Equipaggiato ora", "Scambio", "Chiedi", "Inviato", "Invio in corso", "Auto: no", "Auto: %ds", "Equipaggiato: ", "In memoria: ", "Equipaggiato: sconosciuto", "Equipaggiato: verifica...", "Equipaggiato: non disponibile", "Scambio: sì", "Scambio: probabile", "Scambio: no", "Scambio: sconosciuto", "oggetto", "oggetti", "oggetti" },
+    ptBR = { "Voltar", "Pode pedir", "Todo equipamento", "Atual", "Esta sessão", "Histórico", "Percurso", "Saque", "Você", "Texto do sussurro:", "Sussurros", "Aparência", "Use {item} para o item recebido.", "Apenas novos itens elegíveis. Desativado por padrão.", "Aguardando saque do grupo", "Equipamentos da sua masmorra ou raide aparecerão aqui.", "Role para ver saques anteriores", "Redefinir posição", "Novo saque", "Redefinir", "Automático (atual: %s)", "Nenhum equipamento que possa ser pedido nesta visualização.", "Nenhum equipamento nesta visualização.", "Jogador", "Recebido", "Equipado agora", "Troca", "Perguntar", "Enviado", "Enviando", "Auto: não", "Auto: %ds", "Equipado: ", "Em cache: ", "Equipado: desconhecido", "Equipado: verificando...", "Equipado: indisponível", "Troca: sim", "Troca: provável", "Troca: não", "Troca: desconhecida", "item", "itens", "itens" },
+    koKR = { "뒤로", "요청 가능", "모든 장비", "현재", "이번 세션", "기록", "진행", "전리품", "나", "귓속말 내용:", "귓속말", "외형", "획득한 아이템은 {item}으로 표시합니다.", "요청 가능한 새 전리품만 해당합니다. 기본값은 꺼짐입니다.", "파티 전리품 대기 중", "던전이나 공격대에서 획득한 장비가 여기에 표시됩니다.", "이전 전리품을 보려면 스크롤하세요", "위치 초기화", "새 전리품", "초기화", "자동 (현재: %s)", "이 보기에는 요청 가능한 장비가 없습니다.", "이 보기에는 장비가 없습니다.", "플레이어", "획득한 아이템", "현재 착용", "거래", "요청", "전송됨", "전송 중", "자동: 꺼짐", "자동: %ds", "착용: ", "캐시: ", "착용: 알 수 없음", "착용: 확인 중...", "착용: 확인 불가", "거래: 가능", "거래: 가능성 있음", "거래: 불가", "거래: 알 수 없음", "아이템", "아이템", "아이템" },
+    zhCN = { "返回", "可询问", "所有装备", "当前", "本次会话", "历史", "行程", "战利品", "你", "密语内容：", "密语", "外观", "使用 {item} 表示掉落物品。", "仅限符合条件的新掉落。默认关闭。", "等待队伍战利品", "地下城或团队副本的装备将显示在此处。", "滚动查看较早的掉落", "重置位置", "新战利品", "重置", "自动（当前：%s）", "当前视图没有可询问的装备。", "当前视图没有装备。", "玩家", "掉落物品", "当前装备", "交易", "询问", "已发送", "发送中", "自动：关闭", "自动：%ds", "已装备：", "缓存：", "装备：未知", "装备：检查中...", "装备：不可用", "交易：可以", "交易：可能", "交易：不可以", "交易：未知", "件物品", "件物品", "件物品" },
+    zhTW = { "返回", "可詢問", "所有裝備", "目前", "本次遊戲", "歷史", "行程", "戰利品", "你", "密語內容：", "密語", "外觀", "使用 {item} 表示掉落物品。", "僅限符合條件的新掉落。預設關閉。", "等待隊伍戰利品", "地城或團隊副本的裝備將顯示在此處。", "捲動查看較早的掉落", "重設位置", "新戰利品", "重設", "自動（目前：%s）", "目前檢視沒有可詢問的裝備。", "目前檢視沒有裝備。", "玩家", "掉落物品", "目前裝備", "交易", "詢問", "已傳送", "傳送中", "自動：關閉", "自動：%ds", "已裝備：", "快取：", "裝備：未知", "裝備：檢查中...", "裝備：無法取得", "交易：可以", "交易：可能", "交易：不可以", "交易：未知", "件物品", "件物品", "件物品" },
+    esMX = { "Atrás", "Solicitables", "Todo el equipo", "Actual", "Esta sesión", "Historial", "Recorrido", "Botín", "Tú", "Texto del susurro:", "Susurros", "Apariencia", "Usa {item} para el objeto obtenido.", "Solo objetos nuevos aptos. Desactivado por defecto.", "Esperando botín del grupo", "Aquí aparecerá el equipo de tu mazmorra o banda.", "Desplázate para ver el botín anterior", "Restablecer posición", "Nuevo botín", "Restablecer", "Automático (actual: %s)", "No hay equipo que puedas solicitar en esta vista.", "No hay equipo en esta vista.", "Jugador", "Obtenido", "Equipo actual", "Intercambio", "Preguntar", "Enviado", "Enviando", "Auto: no", "Auto: %ds", "Equipado: ", "Guardado: ", "Equipado: desconocido", "Equipado: comprobando...", "Equipado: no disponible", "Intercambio: sí", "Intercambio: probable", "Intercambio: no", "Intercambio: desconocido", "objeto", "objetos", "objetos" },
+}
+for locale, values in pairs(visibleLocaleLabels) do
+    for index, key in ipairs(visibleLocaleKeys) do
+        simpleLocaleLabels[locale][key] = values[index]
+    end
+end
+
+local statusLocaleKeys = { "candidate", "sent", "auto sent", "sending", "auto sending", "auto_pending", "whisper failed", "whisper_too_long", "whisper_invalid", "test row", "bind_on_pickup", "warband_bound", "bind_unknown", "not_askable", "quest_bound", "player_cannot_equip", "player_equip_unknown", "self_loot", "bonus_roll", "not_tradeable", "looter_unresolved", "Font may not render %s glyphs." }
+local statusLocaleLabels = {
+    deDE = { "Kandidat", "gesendet", "automatisch gesendet", "wird gesendet", "wird automatisch gesendet", "automatisch in %ds", "Flüstern fehlgeschlagen", "Flüstertext kürzen", "Flüstertext prüfen", "Testzeile", "beim Aufheben gebunden", "kriegsmeutengebunden", "Handelsstatus unbekannt", "nicht anfragbar", "questgebunden", "nicht anlegbar", "Anlegbarkeit unbekannt", "eigene Beute", "Bonusbeute", "nicht handelbar", "Spieler unbekannt", "Die Schrift unterstützt möglicherweise keine %s-Zeichen." },
+    esES = { "candidato", "enviado", "enviado automáticamente", "enviando", "enviando automáticamente", "automático en %ds", "falló el susurro", "acorta el susurro", "revisa el susurro", "fila de prueba", "se liga al recogerlo", "ligado a la banda guerrera", "intercambio desconocido", "no se puede solicitar", "ligado a misión", "no puedes equiparlo", "uso desconocido", "botín propio", "botín extra", "no intercambiable", "jugador sin resolver", "La fuente podría no mostrar los caracteres %s." },
+    frFR = { "candidat", "envoyé", "envoyé automatiquement", "envoi en cours", "envoi automatique en cours", "auto dans %ds", "échec du message", "raccourcissez le message", "vérifiez le message", "ligne de test", "lié quand ramassé", "lié au bataillon", "échange inconnu", "demande impossible", "lié à une quête", "impossible à équiper", "utilisation inconnue", "votre butin", "butin bonus", "non échangeable", "joueur non identifié", "La police risque de ne pas afficher les caractères %s." },
+    itIT = { "candidato", "inviato", "inviato automaticamente", "invio in corso", "invio automatico in corso", "auto tra %ds", "sussurro non riuscito", "accorcia il sussurro", "controlla il sussurro", "riga di prova", "vincolato alla raccolta", "vincolato alla brigata", "scambio sconosciuto", "non richiedibile", "vincolato a una missione", "non equipaggiabile", "utilizzo sconosciuto", "bottino proprio", "bottino bonus", "non scambiabile", "giocatore non identificato", "Il font potrebbe non visualizzare i caratteri %s." },
+    ptBR = { "candidato", "enviado", "enviado automaticamente", "enviando", "enviando automaticamente", "auto em %ds", "falha no sussurro", "encurte o sussurro", "verifique o sussurro", "linha de teste", "vincula ao pegar", "vinculado ao bando de guerra", "troca desconhecida", "não pode pedir", "vinculado a missão", "não pode equipar", "uso desconhecido", "saque próprio", "saque bônus", "não negociável", "jogador não identificado", "A fonte pode não exibir os caracteres %s." },
+    koKR = { "후보", "전송됨", "자동 전송됨", "전송 중", "자동 전송 중", "%ds 후 자동 전송", "귓속말 실패", "귓속말을 줄이세요", "귓속말을 확인하세요", "테스트 행", "획득 시 귀속", "전투부대 귀속", "거래 상태 알 수 없음", "요청 불가", "퀘스트 귀속", "착용 불가", "착용 가능 여부 알 수 없음", "내 전리품", "추가 전리품", "거래 불가", "플레이어 확인 불가", "이 글꼴은 %s 문자를 표시하지 못할 수 있습니다." },
+    zhCN = { "候选", "已发送", "已自动发送", "发送中", "自动发送中", "%ds 后自动发送", "密语失败", "请缩短密语", "请检查密语", "测试行", "拾取后绑定", "战团绑定", "交易状态未知", "不可询问", "任务绑定", "无法装备", "装备资格未知", "自己的战利品", "额外战利品", "无法交易", "玩家未确认", "此字体可能无法显示 %s 字符。" },
+    zhTW = { "候選", "已傳送", "已自動傳送", "傳送中", "自動傳送中", "%ds 後自動傳送", "密語失敗", "請縮短密語", "請檢查密語", "測試列", "拾取後綁定", "戰隊綁定", "交易狀態未知", "不可詢問", "任務綁定", "無法裝備", "裝備資格未知", "自己的戰利品", "額外戰利品", "無法交易", "玩家未確認", "此字型可能無法顯示 %s 字元。" },
+    esMX = { "candidato", "enviado", "enviado automáticamente", "enviando", "enviando automáticamente", "automático en %ds", "falló el susurro", "acorta el susurro", "revisa el susurro", "fila de prueba", "se liga al recogerlo", "ligado a la banda guerrera", "intercambio desconocido", "no se puede solicitar", "ligado a misión", "no puedes equiparlo", "uso desconocido", "botín propio", "botín extra", "no intercambiable", "jugador sin resolver", "La fuente podría no mostrar los caracteres %s." },
+}
+for locale, values in pairs(statusLocaleLabels) do
+    local labels = simpleLocaleLabels[locale]
+    for index, key in ipairs(statusLocaleKeys) do labels[key] = values[index] end
+    labels.auto_sent = labels["auto sent"]
+    labels.auto_sending = labels["auto sending"]
+    labels.whisper_failed = labels["whisper failed"]
+    labels.test_row = labels["test row"]
+end
+
+local helpLocaleKeys = { "trade_confirmed_help", "trade_likely_help", "trade_no_help", "trade_unknown_help", "whisper_invalid_help", "whisper_too_long_help" }
+local helpLocaleLabels = {
+    deDE = { "Beim Verarbeiten dieser Beute wurde ein Handelstimer erkannt. Er kann noch ablaufen.", "Bindungsart oder inspizierte Gegenstandsstufe des Platzes deuten darauf hin, dass dieser Gegenstand wahrscheinlich handelbar ist. Der Timer kann ablaufen; Anlegen oder Benutzen kann ihn binden.", "Laut verfügbaren Gegenstandsdaten kann diese Beute nicht übertragen werden.", "WoW zeigt die endgültige Handelsberechtigung für persönliche Beute anderer Spieler nicht an. Frage den Beuteempfänger.", "Entferne Zeilenumbrüche oder Steuerzeichen aus dem Flüstertext in den Einstellungen.", "Nach Einfügen des Gegenstandslinks ist der Flüstertext zu lang. Kürze ihn in den Einstellungen oder verwende weniger {item}-Platzhalter." },
+    esES = { "Se detectó un temporizador de intercambio al procesar este objeto. Todavía puede caducar.", "El tipo de vínculo o el nivel del objeto equipado inspeccionado indican que este objeto probablemente se puede intercambiar. El temporizador puede caducar, y equiparlo o usarlo puede ligarlo.", "Los datos disponibles indican que este objeto no se puede transferir.", "WoW no muestra si otro jugador puede intercambiar su botín personal. Pide confirmación a quien lo recibió.", "Elimina los saltos de línea o caracteres de control del susurro en las opciones.", "El susurro es demasiado largo tras añadir el enlace del objeto. Acorta el texto en las opciones o usa menos marcadores {item}." },
+    frFR = { "Un délai d’échange a été détecté lors du traitement de cet objet. Il peut encore expirer.", "Le type de liaison ou le niveau de l’objet inspecté à cet emplacement indique que cet objet est probablement échangeable. Le délai peut expirer, et équiper ou utiliser l’objet peut le lier.", "Les données disponibles indiquent que ce butin ne peut pas être échangé.", "WoW n’indique pas si un autre joueur peut échanger son butin personnel. Demandez confirmation au joueur qui l’a reçu.", "Retirez les sauts de ligne et caractères de contrôle du message dans les options.", "Le message est trop long après l’ajout du lien de l’objet. Raccourcissez-le dans les options ou utilisez moins de marqueurs {item}." },
+    itIT = { "Durante l’elaborazione del bottino è stato rilevato un tempo limite per lo scambio. Può ancora scadere.", "Il tipo di vincolo o il livello dell’oggetto ispezionato nello stesso scomparto indicano che questo oggetto è probabilmente scambiabile. Il tempo limite può scadere e l’equipaggiamento o l’uso possono vincolarlo.", "I dati disponibili indicano che questo bottino non può essere trasferito.", "WoW non indica se un altro giocatore può scambiare il proprio bottino personale. Chiedi conferma a chi lo ha ricevuto.", "Rimuovi le interruzioni di riga o i caratteri di controllo dal sussurro nelle impostazioni.", "Il sussurro è troppo lungo dopo l’aggiunta del collegamento dell’oggetto. Accorcialo nelle impostazioni o usa meno segnaposto {item}." },
+    ptBR = { "Um prazo de troca foi detectado ao processar este saque. Ele ainda pode expirar.", "O tipo de vínculo ou o nível do item inspecionado no mesmo espaço indica que este item provavelmente pode ser trocado. O prazo pode expirar, e equipar ou usar o item pode vinculá-lo.", "Os dados disponíveis indicam que este saque não pode ser transferido.", "O WoW não informa se outro jogador pode trocar seu saque pessoal. Peça a confirmação de quem recebeu o item.", "Remova quebras de linha ou caracteres de controle do sussurro nas configurações.", "O sussurro ficou longo demais após adicionar o link do item. Encurte o texto nas configurações ou use menos marcadores {item}." },
+    koKR = { "전리품을 처리할 때 거래 제한 시간이 확인되었습니다. 이 시간은 만료될 수 있습니다.", "귀속 유형이나 살펴본 같은 부위의 아이템 레벨에 따르면 이 아이템은 거래 가능성이 있습니다. 제한 시간이 만료되거나 착용 또는 사용으로 귀속될 수 있습니다.", "확인 가능한 아이템 정보에 따르면 이 전리품은 거래할 수 없습니다.", "WoW는 다른 플레이어의 개인 전리품 거래 가능 여부를 공개하지 않습니다. 아이템을 획득한 플레이어에게 확인하세요.", "설정에서 귓속말 내용의 줄바꿈이나 제어 문자를 제거하세요.", "아이템 링크를 추가한 귓속말이 너무 깁니다. 설정에서 내용을 줄이거나 {item} 자리 표시자를 적게 사용하세요." },
+    zhCN = { "处理此掉落时检测到了交易时限。该时限仍可能到期。", "绑定类型或通过观察获取的同部位物品等级表明，此物品可能可以交易。交易时限可能到期，装备或使用也可能使其绑定。", "现有物品数据表明此战利品无法转移。", "WoW 不提供其他玩家个人拾取的最终交易资格。请向拾取者确认。", "请在设置中删除密语内容的换行符或控制字符。", "添加物品链接后，密语过长。请在设置中缩短内容，或减少 {item} 占位符。" },
+    zhTW = { "處理此掉落時偵測到了交易時限。該時限仍可能到期。", "綁定類型或透過觀察取得的同部位物品等級顯示，此物品可能可以交易。交易時限可能到期，裝備或使用也可能使其綁定。", "現有物品資料顯示此戰利品無法轉移。", "WoW 不提供其他玩家個人拾取的最終交易資格。請向拾取者確認。", "請在設定中刪除密語內容的換行符號或控制字元。", "加入物品連結後，密語過長。請在設定中縮短內容，或減少 {item} 預留位置。" },
+    esMX = { "Se detectó un temporizador de intercambio al procesar este objeto. Todavía puede caducar.", "El tipo de vínculo o el nivel del objeto equipado inspeccionado indican que este objeto probablemente se puede intercambiar. El temporizador puede caducar, y equiparlo o usarlo puede ligarlo.", "Los datos disponibles indican que este objeto no se puede transferir.", "WoW no muestra si otro jugador puede intercambiar su botín personal. Pide confirmación a quien lo recibió.", "Elimina los saltos de línea o caracteres de control del susurro en las opciones.", "El susurro es demasiado largo tras añadir el enlace del objeto. Acorta el texto en las opciones o usa menos marcadores {item}." },
+}
+for locale, values in pairs(helpLocaleLabels) do
+    for index, key in ipairs(helpLocaleKeys) do simpleLocaleLabels[locale][key] = values[index] end
+end
+
 for locale, labels in pairs(simpleLocaleLabels) do
+    labels["Do You Need It?"] = "Do You Need It?"
     LABELS_BY_LOCALE[locale] = {}
     for key, value in pairs(LABELS_BY_LOCALE.enUS) do
         LABELS_BY_LOCALE[locale][key] = labels[key] or value
     end
+end
+
+local favoriteLocaleLabels = {
+    enUS = { "Add favorite", "Remove favorite" },
+    ruRU = { "Добавить в избранное", "Убрать из избранного" },
+    deDE = { "Favorit hinzufügen", "Favorit entfernen" },
+    esES = { "Añadir a favoritos", "Quitar de favoritos" },
+    esMX = { "Añadir a favoritos", "Quitar de favoritos" },
+    frFR = { "Ajouter aux favoris", "Retirer des favoris" },
+    itIT = { "Aggiungi ai preferiti", "Rimuovi dai preferiti" },
+    ptBR = { "Adicionar aos favoritos", "Remover dos favoritos" },
+    koKR = { "즐겨찾기 추가", "즐겨찾기 제거" },
+    zhCN = { "添加收藏", "取消收藏" },
+    zhTW = { "加入收藏", "取消收藏" },
+}
+for locale, values in pairs(favoriteLocaleLabels) do
+    LABELS_BY_LOCALE[locale]["Add favorite"] = values[1]
+    LABELS_BY_LOCALE[locale]["Remove favorite"] = values[2]
+end
+
+local developerLinkLocaleLabels = {
+    enUS = { "Support development", "Report a bug or suggest a feature" },
+    ruRU = { "Поддержать разработку", "Сообщить об ошибке или предложить функцию" },
+    deDE = { "Entwicklung unterstützen", "Fehler melden oder Funktion vorschlagen" },
+    esES = { "Apoyar el desarrollo", "Informar de un error o sugerir una función" },
+    esMX = { "Apoyar el desarrollo", "Reportar un error o sugerir una función" },
+    frFR = { "Soutenir le développement", "Signaler un bug ou proposer une fonctionnalité" },
+    itIT = { "Sostieni lo sviluppo", "Segnala un errore o suggerisci una funzione" },
+    ptBR = { "Apoiar o desenvolvimento", "Relatar um erro ou sugerir uma função" },
+    koKR = { "개발 후원", "버그 신고 또는 기능 제안" },
+    zhCN = { "支持开发", "报告问题或建议新功能" },
+    zhTW = { "支持開發", "回報問題或建議新功能" },
+}
+for locale, values in pairs(developerLinkLocaleLabels) do
+    LABELS_BY_LOCALE[locale]["Support development"] = values[1]
+    LABELS_BY_LOCALE[locale]["Report a bug or suggest a feature"] = values[2]
 end
 
 local DEFAULTS = {
@@ -1141,6 +1242,26 @@ function Core.GetTextGlyphRequirement(text)
     return nil
 end
 
+function Core.GetTextGlyphRequirements(text, locale)
+    local glyphs = {}
+    if type(text) ~= "string" then return glyphs end
+    if text:find(CYRILLIC_UTF8_LEAD_PATTERN) then glyphs[#glyphs + 1] = GLYPH_CYR end
+    if text:find(HANGUL_UTF8_LEAD_PATTERN) or text:find("\225[\132-\135]") then glyphs[#glyphs + 1] = GLYPH_HANGUL end
+    -- Han codepoints alone do not identify a regional language. Use the active
+    -- locale as context; actual bundled glyph coverage is verified offline.
+    if text:find(CJK_UTF8_LEAD_PATTERN) then
+        glyphs[#glyphs + 1] = locale == "zhTW" and GLYPH_HANT or GLYPH_HANS
+    end
+    return glyphs
+end
+
+function Core.FontSupportsText(path, text, locale)
+    for _, glyph in ipairs(Core.GetTextGlyphRequirements(text, locale)) do
+        if not Core.FontSupports(path, glyph, locale) then return false end
+    end
+    return true
+end
+
 function Core.GetLocaleLabel(key, locale)
     local labels = LABELS_BY_LOCALE[locale] or LABELS_BY_LOCALE.enUS
     return labels[key] or LABELS_BY_LOCALE.enUS[key] or key
@@ -1184,6 +1305,38 @@ function Core.GetBlizzardFonts(clientLocale)
     return fonts
 end
 
+-- Verified character-map coverage is separate from client asset activation.
+function Core.SetBundledFonts(fonts)
+    bundledFonts = type(fonts) == "table" and fonts or {}
+    bundledByPath = {}
+    bundledByFile = {}
+    for _, font in ipairs(bundledFonts) do
+        bundledByPath[Core.FontPathKey(font.path)] = font
+        bundledByFile[font.file:lower()] = font
+    end
+end
+
+function Core.GetBundledFonts()
+    return copyList(bundledFonts)
+end
+
+function Core.FontSupportsLocale(path, locale)
+    local key = Core.FontPathKey(path)
+    if not key then return false end
+    local font = bundledByPath[key] or bundledByFile[(key:match("[^\\]+$") or key)]
+    if font and font.region and (locale == "zhCN" or locale == "zhTW") and font.region ~= locale then
+        return false
+    end
+    local glyph = Core.GetLocaleGlyphRequirement(locale)
+    local supported = Core.FontSupports(path, glyph, locale)
+    -- Unknown media paths only promise basic Latin. Accented translations
+    -- require catalog coverage or a recognized family, not a filename guess.
+    if glyph == GLYPH_LATIN and locale ~= "enUS" and not font and not FONT_GLYPH_SUPPORT[key] then
+        return false
+    end
+    return supported
+end
+
 function Core.FontSupports(fontPath, glyph, clientLocale)
     if fontPath == nil then
         return glyph == GLYPH_LATIN
@@ -1194,6 +1347,19 @@ function Core.FontSupports(fontPath, glyph, clientLocale)
         return glyph == GLYPH_LATIN
     end
 
+    local file = key:match("[^\\]+$") or key
+    local bundled = bundledByPath[key] or bundledByFile[file]
+    if bundled then
+        if glyph == GLYPH_LATIN then
+            if bundled.latinLocales and clientLocale then return bundled.latinLocales[clientLocale] == true end
+            return bundled.latin ~= false
+        end
+        if glyph == GLYPH_CYR then return bundled.cyrillic == true end
+        if glyph == GLYPH_HANS then return bundled.hans == true end
+        if glyph == GLYPH_HANT then return bundled.hant == true end
+        if glyph == GLYPH_HANGUL then return bundled.hangul == true end
+        return false
+    end
     local entry = FONT_GLYPH_SUPPORT[key]
     if not entry then
         local lowerName = (fontPath:match("[^\\/]+$") or fontPath):lower()
@@ -1260,6 +1426,17 @@ function Core.NormalizeSettings(saved)
     settings.minQuality = math.max(0, math.floor(asNumber(saved.minQuality, DEFAULTS.minQuality)))
     settings.forceLocale = Core.NormalizeForceLocale(saved.forceLocale)
     settings.font = type(saved.font) == "string" and saved.font ~= "" and saved.font or DEFAULTS.font
+    settings.fontFavorites = {}
+    if type(saved.fontFavorites) == "table" then
+        local count = 0
+        for path, selected in pairs(saved.fontFavorites) do
+            local key = Core.FontPathKey(path)
+            if selected == true and key and #key > 0 and #key <= 512 and count < 256 then
+                settings.fontFavorites[key] = true
+                count = count + 1
+            end
+        end
+    end
     settings.fontSize = math.floor(clamp(asNumber(saved.fontSize, DEFAULTS.fontSize), DEFAULTS.minFontSize, DEFAULTS.maxFontSize) + 0.5)
     settings.fontBeforeAutoSwitch = type(saved.fontBeforeAutoSwitch) == "string" and saved.fontBeforeAutoSwitch ~= "" and saved.fontBeforeAutoSwitch or nil
     return settings

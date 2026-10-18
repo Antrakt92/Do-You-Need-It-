@@ -36,6 +36,10 @@ function FrameMethods:GetParent()
     return self.parent
 end
 
+function FrameMethods:SetParent(parent)
+    self.parent = parent
+end
+
 function FrameMethods:SetSize(width, height)
     self.width = width
     self.height = height
@@ -183,6 +187,10 @@ function FrameMethods:IsShown()
     return self.shown == true
 end
 
+function FrameMethods:IsVisible()
+    return self:IsShown() and (not self.parent or self.parent:IsVisible())
+end
+
 function FrameMethods:SetShown(shown)
     if shown then
         self:Show()
@@ -193,20 +201,78 @@ end
 
 function FrameMethods:SetText(text)
     self.text = text == nil and "" or tostring(text)
+    if self.fontString then self.fontString:SetText(self.text) end
 end
 
 function FrameMethods:GetText()
     return self.text
 end
 
+function FrameMethods:SetAutoFocus(value)
+    self.autoFocus = value == true
+end
+
+function FrameMethods:SetFontString(region)
+    self.fontString = region
+end
+
+function FrameMethods:SetTextInsets(...)
+    self.textInsets = {...}
+end
+
+function FrameMethods:SetThumbTexture(texture)
+    if type(texture) == "table" then self.thumbTexture = texture
+    else
+        self.thumbTexture = self.harness:newFrame("Texture", nil, self)
+        self.thumbTexture:SetTexture(texture)
+    end
+end
+
+function FrameMethods:GetThumbTexture()
+    return self.thumbTexture
+end
+
+function FrameMethods:SetCheckedTexture(texture)
+    self.checkedTexture = self.harness:newFrame("Texture", nil, self)
+    self.checkedTexture:SetTexture(texture)
+end
+
+function FrameMethods:SetFocus()
+    self.focused = true
+end
+
+function FrameMethods:ClearFocus()
+    self.focused = false
+end
+
+function FrameMethods:HighlightText()
+    self.highlighted = true
+end
+
 function FrameMethods:SetFont(path, size, flags)
+    if (self.frameType == "EditBox" or self.frameType == "Font") and type(flags) ~= "string" then
+        error("SetFont flags must be a string")
+    end
+    if self.harness.options.fontSetResult
+        and self.harness.options.fontSetResult(self, path, size, flags) ~= true then return false end
     self.font = path
     self.fontSize = size
     self.fontFlags = flags
+    return true
 end
 
 function FrameMethods:GetFont()
+    if not self.font and self.fontObject then return self.fontObject:GetFont() end
     return self.font, self.fontSize, self.fontFlags
+end
+
+function FrameMethods:SetFontObject(object)
+    self.fontObject = object
+    self.font, self.fontSize, self.fontFlags = nil, nil, nil
+end
+
+function FrameMethods:GetFontObject()
+    return self.fontObject
 end
 
 function FrameMethods:SetTextColor(...)
@@ -409,9 +475,12 @@ function Harness:newFrame(frameType, name, parent, template)
         frame.Left = self:newFrame("Texture", name .. "Left", frame)
         frame.Middle = self:newFrame("Texture", name .. "Middle", frame)
         frame.Right = self:newFrame("Texture", name .. "Right", frame)
+        frame.Button:SetScript("OnMouseDown", function()
+            self.env.ToggleDropDownMenu(1, nil, frame)
+        end)
     end
 
-    if template == "OptionsSliderTemplate" then
+    if type(template) == "string" and template:find("OptionsSliderTemplate", 1, true) then
         frame.Text = self:newFrame("FontString", name and name .. "Text" or nil, frame)
         frame.Text:SetText("0")
         frame.Low = self:newFrame("FontString", name and name .. "Low" or nil, frame)
@@ -617,6 +686,10 @@ function Harness:loadAddon()
     setfenv(coreChunk, self.env)
     coreChunk()
 
+    local fontsChunk = assert(loadfile("DoYouNeedIt_Fonts.lua"))
+    setfenv(fontsChunk, self.env)
+    fontsChunk()
+
     local runtimeChunk = assert(loadfile("DoYouNeedIt.lua"))
     setfenv(runtimeChunk, self.env)
     runtimeChunk("DoYouNeedIt")
@@ -706,6 +779,10 @@ function Harness.new(options)
     env.Enum = { ItemClass = { Weapon = 2, Armor = 4 } }
 
     env.UIParent = self:newFrame("Frame", "UIParent", nil)
+    env.UIParent:Show()
+    env.CreateFont = function(name)
+        return self:newFrame("Font", name, nil)
+    end
     env.DEFAULT_CHAT_FRAME = self:newFrame("Frame", "DefaultChatFrame", env.UIParent)
     env.GameTooltip = self:newFrame("GameTooltip", "GameTooltip", env.UIParent)
     env.DropDownList1 = self:newFrame("Frame", "DropDownList1", env.UIParent)

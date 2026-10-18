@@ -181,7 +181,8 @@ tests[#tests + 1] = function()
     equal(settings.title:GetText(), "Настройки", "Russian client selects Russian settings")
     for _, control in ipairs({ settings.title, settings.autoCheckLabel, settings.delayLabel, settings.whisperLabel,
         settings.languageLabel, settings.fontLabel, settings.fontSizeLabel, settings.back:GetFontString() }) do
-        equal(control.font, "Fonts\\ARIALN.TTF", "Russian settings use a Cyrillic-capable font")
+        equal(h.env.DoYouNeedItCore.FontSupportsLocale(control:GetFont(), "ruRU", "ruRU"), true,
+            "Russian settings use a Cyrillic-capable font")
     end
 end
 local failed = 0
