@@ -132,4 +132,15 @@ end
 check(pendingLoads == 63 and failedState.pending == 64, "concurrent metadata requests have a strict limit")
 he:runTimers(10, 2000)
 check(failedState.pending == 0, "timeouts release never-completing requests")
+for quality = 0, 7 do
+    local link = "|cff" .. addon.ItemDisplayColors[quality] .. bare .. "|r"
+    check(addon.ItemLinkQuality(link) == quality, "shared parser preserves quality " .. quality)
+    check(addon.ItemLinkQuality(link:gsub("|cff", "|cFF"):gsub("a335ee", "A335EE")) == quality,
+        "shared parser preserves uppercase color syntax " .. quality)
+end
+check(addon.ItemLinkQuality("|cff00ccff" .. bare .. "|r") == 7, "shared heirloom/token color preserves existing rank")
+check(addon.ItemLinkQuality(bare) == nil, "bare link does not invent a quality rank")
+check(addon.ItemLinkQuality("|cff123456" .. bare .. "|r") == nil, "unknown color does not invent a quality rank")
+check(addon.ItemLinkQuality(h:secretValue("quality link")) == nil, "restricted link never enters color parsing")
+
 print("runtime item display: " .. checks .. " checks passed")

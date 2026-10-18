@@ -1292,6 +1292,18 @@ Addon.ItemDisplayColors = {
     [4] = "a335ee", [5] = "ff8000", [6] = "e6cc80", [7] = "00ccff", [8] = "00ccff",
 }
 
+function Addon.ItemLinkQuality(link)
+    link = CleanString(link)
+    local color = link and link:match("|c[fF][fF](%x%x%x%x%x%x)") or nil
+    if not color then return nil end
+    color = color:lower()
+    -- The shared heirloom/token color historically resolves to quality 7.
+    for quality = 0, 7 do
+        if Addon.ItemDisplayColors[quality] == color then return quality end
+    end
+    return nil
+end
+
 function Addon.ItemDisplayLoadComplete(state, entry, timedOut)
     if timedOut then
         if entry.finished then return end
@@ -2863,24 +2875,8 @@ function Addon.UpdateTrackedLootLink(row, itemLink, source)
         local oldID = Core.ExtractItemID(row.itemLink)
         local newID = Core.ExtractItemID(itemLink)
         if not newID or newID ~= oldID or #itemLink <= #row.itemLink then
-            local function linkQuality(link)
-                local color = type(link) == "string" and link:match("|c[fF][fF](%x%x%x%x%x%x)") or nil
-                if not color then
-                    return nil
-                end
-                color = color:lower()
-                if color == "9d9d9d" then return 0
-                elseif color == "ffffff" then return 1
-                elseif color == "1eff00" then return 2
-                elseif color == "0070dd" then return 3
-                elseif color == "a335ee" then return 4
-                elseif color == "ff8000" then return 5
-                elseif color == "e6cc80" then return 6
-                elseif color == "00ccff" then return 7
-                else return nil end
-            end
-            local oldQuality = linkQuality(row.itemLink)
-            local newQuality = linkQuality(itemLink)
+            local oldQuality = Addon.ItemLinkQuality(row.itemLink)
+            local newQuality = Addon.ItemLinkQuality(itemLink)
             if newID and newID == oldID and newQuality and oldQuality and newQuality > oldQuality then
                 -- Quality upgrade wins despite equal/shorter length; fall through.
             else
@@ -4171,24 +4167,8 @@ local function MergeDuplicatePendingLoot(looter, itemLink, context, source)
                 -- Longest-wins for all sources: keep the detailed variant unless
                 -- the incoming quality color proves an upgrade (rare encounter
                 -- vs epic chat for the same drop).
-                local function pendingLinkQuality(link)
-                    local color = type(link) == "string" and link:match("|c[fF][fF](%x%x%x%x%x%x)") or nil
-                    if not color then
-                        return nil
-                    end
-                    color = color:lower()
-                    if color == "9d9d9d" then return 0
-                    elseif color == "ffffff" then return 1
-                    elseif color == "1eff00" then return 2
-                    elseif color == "0070dd" then return 3
-                    elseif color == "a335ee" then return 4
-                    elseif color == "ff8000" then return 5
-                    elseif color == "e6cc80" then return 6
-                    elseif color == "00ccff" then return 7
-                    else return nil end
-                end
-                local existingQuality = pendingLinkQuality(bucket.itemLink or pendingLink)
-                local incomingQuality = pendingLinkQuality(itemLink)
+                local existingQuality = Addon.ItemLinkQuality(bucket.itemLink or pendingLink)
+                local incomingQuality = Addon.ItemLinkQuality(itemLink)
                 if incomingQuality and existingQuality and incomingQuality > existingQuality then
                     -- Quality upgrade wins; fall through to the split path below.
                 else
