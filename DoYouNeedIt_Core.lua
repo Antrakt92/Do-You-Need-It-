@@ -408,6 +408,18 @@ for locale, values in pairs(favoriteLocaleLabels) do
     LABELS_BY_LOCALE[locale]["Remove favorite"] = values[2]
 end
 
+-- Unknown transfer eligibility needs confirmation from the player who looted it.
+local tradeConfirmationLabels = {
+    enUS = "Check with looter", ruRU = "Уточнить у владельца",
+    deDE = "Besitzer fragen", frFR = "Demander au joueur",
+    esES = "Pregunta al dueño", esMX = "Pregunta al dueño",
+    itIT = "Chiedi al giocatore", ptBR = "Confirme com o dono",
+    koKR = "획득자에게 확인", zhCN = "向拾取者确认", zhTW = "向拾取者確認",
+}
+for locale, label in pairs(tradeConfirmationLabels) do
+    LABELS_BY_LOCALE[locale].trade_unknown = label
+end
+
 local developerLinkLocaleLabels = {
     enUS = { "Support development", "Report a bug or suggest a feature" },
     ruRU = { "Поддержать разработку", "Сообщить об ошибке или предложить функцию" },

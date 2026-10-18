@@ -930,7 +930,38 @@ local function testBrokenFontFallsBackToCompatible()
     assertEqual(rows[1].drop.font, "Fonts\\FRIZQT__.TTF", "unregistered font falls back instead of painting blind")
 end
 
+local function testBareItemLinksRecoverQualityWithoutChangingPayload()
+    local h = Harness.new()
+    h:loadAddon()
+    local bare = "|Hitem:268243::::::::80:62::5:2:123:456:1:28:999|h[Grasps of the Eternal Shadow]|h"
+    h:addItem(268243, {link = bare, quality = 4, bindType = 2, equippable = true, usable = true})
+    h:fireLoot("Otherplayer", bare)
+    local row = h:visibleRows()[1]
+    assertTruthy(row, "uncolored real loot is visible")
+    assertEqual(row.drop:GetText(), "|cffa335ee" .. bare .. "|r", "epic metadata restores missing display color")
+    assertEqual(row.dropLink.itemLink, bare, "hover retains exact item variant")
+    assertEqual(row.row.itemLink, bare, "display repair does not rewrite tracked loot")
+    local green = "|Hitem:268244:::::::::::::|h[Other Gloves]|h"
+    h:addItem(268244, {link = green, quality = 2})
+    row.row.equippedText = "Equipped: " .. bare .. " / " .. green
+    h:slash("delay 11")
+    assertEqual(row.equipped:GetText(), "|cffa335ee" .. bare .. "|r", "first equipped item gets its own quality")
+    assertEqual(row.equipped2:GetText(), "|cff1eff00" .. green .. "|r", "second equipped item gets its own quality")
+    assertEqual(row.equippedLink2.itemLink, green, "second hover retains its exact payload")
+    h.items[268243].cacheLoaded = false
+    h:slash("delay 12")
+    assertEqual(row.drop:GetText(), bare, "unavailable quality is not invented")
+    h.items[268243].cacheLoaded = true
+    h:slash("delay 13")
+    assertEqual(row.drop:GetText(), "|cffa335ee" .. bare .. "|r", "later cache availability restores quality")
+    h.items[268243].secretValues = true
+    h:slash("delay 14")
+    assertEqual(row.drop:GetText(), bare, "restricted quality cannot drive color selection")
+    assertEqual(#h.sentMessages, 0, "display and transfer copy never send a whisper")
+end
+
 local tests = {
+    { "bare item quality and variant preservation", testBareItemLinksRecoverQualityWithoutChangingPayload },
     { "main window toplevel and geometry", testMainWindowToplevelAndGeometry },
     { "guarded text tooltips", testTextTooltipsUseGuardedHelper },
     { "whisper reset confirmation", testWhisperResetNeedsConfirmation },

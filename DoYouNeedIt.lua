@@ -1266,6 +1266,25 @@ local function GetItemInfoCompat(itemLink)
     return SafeCall(GetItemInfo, itemLink)
 end
 
+function Addon.ItemDisplayText(text)
+    if type(text) ~= "string" then return "" end
+    local colors = {
+        [0] = "9d9d9d", [1] = "ffffff", [2] = "1eff00", [3] = "0070dd",
+        [4] = "a335ee", [5] = "ff8000", [6] = "e6cc80", [7] = "00ccff", [8] = "00ccff",
+    }
+    -- Encounter/history links may omit their color. Repair display only: the
+    -- original payload remains authoritative for tooltips, whispers and variants.
+    local display = text:gsub("()(|Hitem:[^|]+|h%[.-%]|h)", function(start, link)
+        if text:sub(math.max(1, start - 10), start - 1):match("^|c%x%x%x%x%x%x%x%x$") then
+            return link
+        end
+        local _, _, quality = GetItemInfoCompat(link)
+        local color = colors[CleanNumber(quality)]
+        return color and ("|cff" .. color .. link .. "|r") or link
+    end)
+    return display
+end
+
 local function GetItemInfoInstantCompat(itemLink)
     if C_Item and type(C_Item.GetItemInfoInstant) == "function" then
         return SafeCall(C_Item.GetItemInfoInstant, itemLink)
@@ -2068,7 +2087,7 @@ local function RefreshRows()
                 rowFrame.drop:SetPoint("LEFT", rowFrame.looter, "RIGHT", 8, 0)
                 rowFrame.drop:SetWidth(columnWidths.drop)
             end
-            rowFrame.drop:SetText(row.itemLink or "")
+            rowFrame.drop:SetText(Addon.ItemDisplayText(row.itemLink))
             -- Hover targets track the scaled columns (defaults reproduce the
             -- creation-time 104/294 anchors exactly at font size 12).
             rowFrame.dropLink:ClearAllPoints()
@@ -2080,18 +2099,18 @@ local function RefreshRows()
             rowFrame.equippedLink:SetWidth(columnWidths.equipped + 8)
             if secondEquipped then
                 local prefix = IsCachedEquippedText(row.equippedText) and DisplayEquippedText("Cached: ") or ""
-                rowFrame.equipped:SetText(prefix .. firstEquipped)
+                rowFrame.equipped:SetText(prefix .. Addon.ItemDisplayText(firstEquipped))
                 rowFrame.equipped:SetWidth((columnWidths.equipped - 8) / 2)
                 rowFrame.equippedLink:SetWidth((columnWidths.equipped - 8) / 2 + 2)
                 rowFrame.equipped2:SetWidth((columnWidths.equipped - 8) / 2)
                 rowFrame.equippedLink2:ClearAllPoints()
                 rowFrame.equippedLink2:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", equippedLinkX + (columnWidths.equipped - 8) / 2 + 8, -1)
                 rowFrame.equippedLink2:SetWidth((columnWidths.equipped - 8) / 2 + 2)
-                rowFrame.equipped2:SetText(secondEquipped)
+                rowFrame.equipped2:SetText(Addon.ItemDisplayText(secondEquipped))
                 rowFrame.equipped2:Show()
                 rowFrame.equippedDivider:Show()
             else
-                rowFrame.equipped:SetText(DisplayEquippedText(row.equippedText))
+                rowFrame.equipped:SetText(Addon.ItemDisplayText(DisplayEquippedText(row.equippedText)))
                 rowFrame.equipped:SetWidth(columnWidths.equipped)
                 rowFrame.equippedLink:SetWidth(columnWidths.equipped + 8)
                 rowFrame.equipped2:Hide()

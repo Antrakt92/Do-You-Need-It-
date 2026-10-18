@@ -318,8 +318,8 @@ assertEqual(Core.IsLikelyTradeableFromItemLevels(311, { 311, 310 }, 2), false, "
 assertEqual(Core.IsLikelyTradeableFromItemLevels(311, { 312, 311 }, 2), true, "two equal-or-higher slots make a personal drop likely tradeable")
 assertEqual(Core.GetTradeStatusText({ tradeStatusKey = "trade_confirmed" }, "enUS"), "Trade: yes", "confirmed trade status renders in English")
 assertEqual(Core.GetTradeStatusText({ tradeStatusKey = "trade_likely" }, "ruRU"), "Передача: вероятно", "likely trade status renders in Russian")
-assertEqual(Core.GetTradeStatusText({ reason = "bind_on_pickup", askable = false }, "enUS"), "Trade: unknown", "legacy bind-on-pickup rows stay honest")
-assertEqual(Core.GetTradeStatusText({ askable = true }, "enUS"), "Trade: unknown", "legacy askable rows do not invent stale transfer evidence")
+assertEqual(Core.GetTradeStatusText({ reason = "bind_on_pickup", askable = false }, "enUS"), "Check with looter", "legacy bind-on-pickup rows stay honest")
+assertEqual(Core.GetTradeStatusText({ askable = true }, "enUS"), "Check with looter", "legacy askable rows do not invent stale transfer evidence")
 
 local unknownEquipGear = {
     link = "|cffa335ee|Hitem:19024:::::::::::::|h[Unknown Equip Chest]|h|r",

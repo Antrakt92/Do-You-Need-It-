@@ -26,7 +26,7 @@ Run `/reload`, then `/dyni` to open the window. `/dyni status` should report `bu
 |---|---|
 | **Yes** | A trade timer was detected. |
 | **Likely** | Bind-on-equip/use gear, or personal loot whose item level is no higher than the looter's inspected gear in the same slot. |
-| **Unknown** | The addon cannot determine whether the item can be traded. |
+| **Check with looter** | Ask the player who received the item whether they can trade it; the addon has no confirmation. |
 | **No** | A transfer restriction was detected. |
 
 WoW does not expose another player's final personal-loot eligibility. **Likely** is an estimate; the looter must confirm. Inspection also depends on range, combat state, throttling, and item data availability. Old saved records are retained even when they are filtered out of the window.
