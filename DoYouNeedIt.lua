@@ -822,10 +822,11 @@ local function BuildRoster()
     for index = 1, 40 do
         addUnit("raid" .. index)
     end
-    local current = {}
+    local current, memberCount = {}, 0
     for _, entry in ipairs(entries) do
-        if type(entry.fullName) == "string" then
+        if type(entry.fullName) == "string" and not current[entry.fullName] then
             current[entry.fullName] = true
+            memberCount = memberCount + 1
         end
     end
     Addon.rosterEntries = entries
@@ -834,9 +835,14 @@ local function BuildRoster()
     for _ in pairs(previous) do previousCount = previousCount + 1 end
     local currentSolo = #entries == 1 and entries[1].unit == "player"
     local stillGrouped = CleanBoolean(SafeCall(IsInGroup)) == true or CleanBoolean(SafeCall(IsInRaid)) == true
-    if previousCount > 1 and currentSolo and stillGrouped then
-        -- Keep the last complete identity set across zoning gaps. The live
-        -- unit index remains empty so a send cannot use stale party tokens.
+    local expectedCount = CleanNumber(SafeCall(GetNumGroupMembers))
+    local incomplete = type(GetNumGroupMembers) == "function"
+        and (not expectedCount or expectedCount < 1 or expectedCount > 40
+            or expectedCount ~= math.floor(expectedCount) or memberCount ~= expectedCount)
+    if stillGrouped and (incomplete or (previousCount > 1 and currentSolo)) then
+        -- Names can disappear individually while membership remains unchanged.
+        -- Publish departures only from a complete, readable member snapshot;
+        -- the freshly rebuilt unit index still prevents stale-token sends.
         return {}, false
     end
     Addon.rosterKnownNames = current
@@ -846,6 +852,14 @@ local function BuildRoster()
     for name in pairs(previous) do
         if not current[name] then
             departed[#departed + 1] = name
+        end
+    end
+    if Addon.autoWhisperRosterParked == true then
+        Addon.autoWhisperRosterParked = false
+        Addon.autoWhisperRosterRetries = nil
+        if #Addon.autoWhisperQueue > 0 and not Addon.autoWhisperPumpScheduled then
+            Addon.autoWhisperPumpScheduled = true
+            C_Timer.After(0, Addon.PumpAutoWhisperQueue)
         end
     end
     return departed, true
@@ -2492,7 +2506,22 @@ local function SendWhisper(row, isAuto)
 
         if isAuto then
             -- Party tokens can be reused before the roster event reaches us.
-            BuildRoster()
+            local _, rosterReady = BuildRoster()
+            if rosterReady == false then
+                row.whisperInFlight = false
+                row.whisperToken = nil
+                row.whisperIsAuto = nil
+                row.pendingAutoWhisper = true
+                row.autoToken = {}
+                row.autoDelayReady = true
+                row.statusKey = "auto_pending"
+                row.statusSeconds = 0
+                Addon.AddRowToListOnce(Addon.autoWhisperQueue, row)
+                SaveDB()
+                RefreshRows()
+                Addon.PumpAutoWhisperQueue()
+                return
+            end
             if not Addon.IsGroupInstanceContext() or not ResolveUnitForName(target) then
                 row.whisperInFlight = false
                 row.whisperToken = nil
@@ -2993,6 +3022,28 @@ function Addon.PumpAutoWhisperQueue()
                 table.insert(Addon.autoWhisperQueue, 1, row)
                 break
             end
+            -- An unresolved name is not evidence of departure. Keep the due
+            -- row queued, then park after bounded retries until a fresh roster
+            -- snapshot becomes complete.
+            if Addon.autoWhisperRosterToken ~= row.autoToken then
+                Addon.autoWhisperRosterToken = row.autoToken
+                Addon.autoWhisperRosterRetries = nil
+            end
+            Addon.autoWhisperRosterParked = false
+            local _, rosterReady = BuildRoster()
+            if rosterReady == false then
+                table.insert(Addon.autoWhisperQueue, 1, row)
+                Addon.autoWhisperRosterParked = true
+                local retries = Addon.autoWhisperRosterRetries or 0
+                if retries < 6 then
+                    Addon.autoWhisperRosterRetries = retries + 1
+                    Addon.autoWhisperPumpScheduled = true
+                    C_Timer.After(Addon.AutoWhisperGap(), Addon.PumpAutoWhisperQueue)
+                end
+                return
+            end
+            Addon.autoWhisperRosterRetries = nil
+            Addon.autoWhisperRosterToken = nil
             local last = Addon.lastDispatchAt
             if type(last) == "number" and now - last < 1.5 then
                 table.insert(Addon.autoWhisperQueue, 1, row)

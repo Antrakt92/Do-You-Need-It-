@@ -922,6 +922,17 @@ function Harness.new(options)
     env.IsInRaid = function()
         return self.inRaid == true
     end
+    env.GetNumGroupMembers = function()
+        if not env.IsInGroup() and not env.IsInRaid() then return 0 end
+        local seen, count = {}, 0
+        for unit, entry in pairs(self.units or {}) do
+            if (unit == "player" or unit:match("^party%d+$") or unit:match("^raid%d+$")) and entry.name then
+                local key = entry.name .. "-" .. (entry.realm or "")
+                if not seen[key] then seen[key] = true; count = count + 1 end
+            end
+        end
+        return count
+    end
     env.InCombatLockdown = function()
         return false
     end
