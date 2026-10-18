@@ -28,7 +28,22 @@ for _, class in ipairs({"WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAM
         class .. " preserves unavailable proficiency")
     check(core.ResolvePlayerCanEquip({ classID = 2, equipLoc = "INVTYPE_WEAPON" }, class, nil) == nil,
         class .. " never guesses a missing usability result")
-    check(h.env.DoYouNeedItFrame.title:GetText():find("Forever Beta", 1, true), "window identifies beta")
+    check(h.env.DoYouNeedItFrame.title:GetText() == "Do You Need It?", "window uses the shared addon title")
+end
+
+do
+    local h = fresh()
+    h:slash("settings")
+    h.env.DoYouNeedItLanguageDropdown:FireScript("OnClick", "LeftButton")
+    local picker = h.env.DoYouNeedItLanguagePicker
+    check(picker:IsVisible(), "language picker opens in Forever")
+    for _, row in ipairs(picker.buttons) do
+        row:FireScript("OnEnter")
+        check(not h.env.DoYouNeedItFrame.title:GetText():find("Forever Beta", 1, true),
+            "language refresh keeps the shared title")
+        row:FireScript("OnLeave")
+        h:runTimers(0, 30)
+    end
 end
 
 for _, loc in ipairs({"INVTYPE_RANGED", "INVTYPE_RANGEDRIGHT", "INVTYPE_THROWN", "INVTYPE_RELIC"}) do

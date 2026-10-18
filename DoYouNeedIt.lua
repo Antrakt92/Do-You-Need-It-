@@ -5113,7 +5113,7 @@ CreateUI = function()
     frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -10)
     frame.title:SetJustifyH("LEFT")
     KeepOneLine(frame.title)
-    frame.title:SetText(L("Do You Need It?") .. (Core.flavor == "forever" and " — Forever Beta" or ""))
+    frame.title:SetText(L("Do You Need It?"))
     frame.title:SetTextColor(0.86, 0.94, 1, 1)
     RegisterFontString(frame.title, 16)
 
@@ -5541,7 +5541,7 @@ end
 
 RefreshLocalization = function()
     if Addon.frame and Addon.frame.title then
-        Addon.frame.title:SetText(L("Do You Need It?") .. (Core.flavor == "forever" and " — Forever Beta" or ""))
+        Addon.frame.title:SetText(L("Do You Need It?"))
         Addon.frame.columnPlayer:SetText(L("Player"))
         Addon.frame.columnDrop:SetText(L("Dropped"))
         Addon.frame.columnEquipped:SetText(L("Equipped now"))
