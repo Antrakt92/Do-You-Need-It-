@@ -1200,7 +1200,6 @@ assertTruthy(runtime:find("GetHistoryGroupTitle", 1, true), "runtime renders his
 assertTruthy(runtime:find("local WINDOW_WIDTH = 540", 1, true), "runtime uses compact non-overlapping window width")
 assertTruthy(runtime:find("local WINDOW_HEIGHT = 300", 1, true), "runtime uses compact settings-enabled window height")
 assertTruthy(runtime:find("local ROW_START_Y = -82", 1, true), "runtime leaves a compact header area above rows")
-assertTruthy(runtime:find("local HEADER_HISTORY_WIDTH = 456", 1, true), "runtime uses freed tab space for the history selector")
 assertTruthy(runtime:find("frame.historyButton:SetSize(HEADER_HISTORY_WIDTH, 22)", 1, true), "runtime uses the bounded history selector width")
 assertTruthy(runtime:find("KeepOneLine", 1, true), "runtime caps long labels and loot rows to one line")
 assertEqual(runtime:find("frame.tabAskable", 1, true), nil, "runtime no longer creates an askable tab")

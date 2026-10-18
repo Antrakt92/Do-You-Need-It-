@@ -426,6 +426,25 @@ for locale, values in pairs(developerLinkLocaleLabels) do
     LABELS_BY_LOCALE[locale]["Report a bug or suggest a feature"] = values[2]
 end
 
+local demoLocaleLabels = {
+    enUS = { "Demo", "Exit demo", "Preview sample loot. No whispers are sent." },
+    ruRU = { "Демо", "Выйти из демо", "Пример добычи. Сообщения не отправляются." },
+    deDE = { "Demo", "Demo beenden", "Beispielbeute ansehen. Es werden keine Flüsternachrichten gesendet." },
+    esES = { "Demo", "Salir de demo", "Vista previa de botín. No se envían susurros." },
+    esMX = { "Demo", "Salir de demo", "Vista previa de botín. No se envían susurros." },
+    frFR = { "Démo", "Quitter la démo", "Aperçu du butin. Aucun chuchotement n'est envoyé." },
+    itIT = { "Demo", "Esci dalla demo", "Anteprima del bottino. Nessun sussurro viene inviato." },
+    ptBR = { "Demo", "Sair da demo", "Prévia de saque. Nenhum sussurro é enviado." },
+    koKR = { "미리보기", "미리보기 종료", "예시 전리품을 표시합니다. 귓속말은 전송하지 않습니다." },
+    zhCN = { "演示", "退出演示", "预览示例战利品。不会发送密语。" },
+    zhTW = { "示範", "結束示範", "預覽範例戰利品。不會傳送密語。" },
+}
+for locale, values in pairs(demoLocaleLabels) do
+    LABELS_BY_LOCALE[locale]["Demo"] = values[1]
+    LABELS_BY_LOCALE[locale]["Exit demo"] = values[2]
+    LABELS_BY_LOCALE[locale]["Preview sample loot. No whispers are sent."] = values[3]
+end
+
 local DEFAULTS = {
     autoWhisper = false,
     debug = false,
@@ -2456,6 +2475,51 @@ function Core.ShouldAutoShowWindow(row, context)
         return true
     end
     return type(context) == "table" and context.isGroupInstance == true
+end
+
+-- Real item IDs; trade and equipment states below are illustrative, not loot predictions.
+function Core.BuildDemoRows(settings, timestamp)
+    local items = {
+        {281239, "Corroded Hulk's Skullcap", "INVTYPE_HEAD", "raid"},
+        {281238, "Aberrant Commander's Gauntlets", "INVTYPE_HAND", "raid"},
+        {281236, "Chestwrap of Palpable Terror", "INVTYPE_CHEST", "raid"},
+        {280617, "Lightbearer's Shield Fragment", "INVTYPE_TRINKET", "raid"},
+        {280835, "Sigil of the Impending Eclipse", "INVTYPE_TRINKET", "raid"},
+        {281056, "Sanctified Knight's Phoenixblade", "INVTYPE_WEAPON", "raid"},
+        {250215, "Freightrunner's Flask", "INVTYPE_TRINKET", "dungeon"},
+        {250243, "Manaheart's Binding Flame", "INVTYPE_TRINKET", "dungeon"},
+        {281029, "Band of the Swarmcaller", "INVTYPE_FINGER", "raid"},
+        {281215, "Twisted Horror's Tendril", "INVTYPE_TRINKET", "raid"},
+        {281235, "Voidweaver's Leggings", "INVTYPE_LEGS", "raid"},
+        {280799, "Lu'selama, Light's Justice", "INVTYPE_2HWEAPON", "raid"},
+    }
+    local function link(item)
+        return "|cffa335ee|Hitem:" .. item[1] .. ":::::::::::::|h[" .. item[2] .. "]|h|r"
+    end
+    local demo = Core.CreateState(settings)
+    local names = {"Aeloria", "Бранн", "Selene", "Torvald", "Mira", "Kaelin"}
+    local classes = {"MAGE", "WARRIOR", "DRUID", "PALADIN", "PRIEST", "HUNTER"}
+    for index, item in ipairs(items) do
+        local askable = index % 3 ~= 2 and index ~= 4
+        local equipped
+        if item[3] == "INVTYPE_FINGER" then
+            equipped = "Equipped: " .. link(item) .. " / " .. link({251136, "Signet of Snarling Servitude"})
+        elseif item[3] == "INVTYPE_TRINKET" then equipped = "Cached: " .. link(items[7]) .. " / " .. link(items[8])
+        elseif index == 11 then equipped = "Equipped: unknown"
+        else equipped = "Equipped: " .. link(item) end
+        Core.AddVisibleRow(demo, {
+            isTest = true, looter = names[(index - 1) % #names + 1],
+            classToken = classes[(index - 1) % #classes + 1],
+            itemID = item[1], itemLink = link(item), equipLoc = item[3],
+            instanceName = item[4] == "raid" and "The Unbinding of Kith'ix" or "Murder Row",
+            encounterName = item[4] == "raid" and "Kith'ix" or (index == 7 and "Zaen Bladesorrow" or "Kystia Manaheart"),
+            timestamp = timestamp, reason = index == 4 and "not_tradeable" or (askable and "test row" or "bind_on_pickup"),
+            statusKey = index == 4 and "not_tradeable" or (askable and "test_row" or "bind_on_pickup"), equippedText = equipped,
+            tradeStatusKey = index == 4 and "trade_no" or (index == 7 and "trade_confirmed" or (not askable and "trade_unknown" or "trade_likely")),
+            unsafe = false,
+        }, askable)
+    end
+    return demo.allRows
 end
 
 _G.DoYouNeedItCore = Core

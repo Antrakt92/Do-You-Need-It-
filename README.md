@@ -10,7 +10,7 @@ For World of Warcraft Retail / Midnight 12.1.5.
 
 Install through CurseForge, or extract the `DoYouNeedIt-<version>.zip` release asset into `World of Warcraft/_retail_/Interface/AddOns/`. The resulting folder must be named `DoYouNeedIt` and contain `DoYouNeedIt.toc` directly inside it.
 
-Run `/reload`, then `/dyni` to open the window. `/dyni status` should report `build=0.7.0`. Use `/dyni test` to preview sample rows; these cannot send whispers and are not saved to your history.
+Run `/reload`, then `/dyni` to open the window. `/dyni status` should report `build=0.7.0`. Click **Demo** to preview 12 Midnight raid and dungeon items, then **Exit demo** to return to your loot. Examples cannot send whispers and are not saved to your history.
 
 ## Loot and comparison
 
@@ -65,7 +65,7 @@ The heart and feedback buttons beside Settings open copyable links to support th
 
 | Command | Action |
 |---|---|
-| `/dyni test` | Preview sample rows without whispers or saved demo loot. |
+| `/dyni test` | Toggle the same 12-item preview as the Demo button. Trade and equipment states are illustrative. |
 | `/dyni debug on` | Save the last 20 loot-processing diagnostic entries. |
 | `/dyni debug off` | Stop saving diagnostic entries and clear saved diagnostics. |
 | `/dyni diag` | Print the newest diagnostic entries. |

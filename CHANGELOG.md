@@ -2,6 +2,7 @@
 
 ## 0.7.0 - 18-Oct-2026 — Fonts, languages and Settings
 
+- Add a Demo button with 12 Midnight raid and dungeon items, paired-slot comparisons, and one-click return to real loot.
 - Give language and font menus a compact design that stays above Settings.
 - Align Settings controls, group the Auto whisper checkbox with its label, and refresh the buttons and sliders.
 - Restore readable language previews and use native language names.

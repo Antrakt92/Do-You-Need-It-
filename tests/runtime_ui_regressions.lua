@@ -81,7 +81,7 @@ local function testDemoNeverSendsRealWhispers()
     h:slash("auto on")
     h:slash("test")
     local rows = h:visibleRows()
-    assertEqual(#rows, 2, "demo retains both comparison examples")
+    assertEqual(#rows, 6, "demo fills the visible comparison page")
     for _, frame in ipairs(rows) do
         if frame.whisper:IsShown() then
             frame.whisper:FireScript("OnClick")

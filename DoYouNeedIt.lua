@@ -62,7 +62,7 @@ local ROW_WIDTH = 510
 local ROW_HEIGHT = 30
 local ROW_START_Y = -82
 local ROW_STRIDE = 34
-local HEADER_HISTORY_WIDTH = 456
+local HEADER_HISTORY_WIDTH = 392
 local ROW_LOOTER_WIDTH = 90
 local ROW_DROP_WIDTH = 180
 local ROW_DROP_HOVER_WIDTH = 188
@@ -1863,8 +1863,9 @@ local function NewestRowsWindow(rows)
 end
 
 function Addon.HideSettingsTooltip()
-    if GameTooltip and Addon.settingsButton
-        and CleanBoolean(SafeCall(GameTooltip.IsOwned, GameTooltip, Addon.settingsButton)) == true then
+    if GameTooltip and ((Addon.settingsButton
+        and CleanBoolean(SafeCall(GameTooltip.IsOwned, GameTooltip, Addon.settingsButton)) == true)
+        or (Addon.demoButton and CleanBoolean(SafeCall(GameTooltip.IsOwned, GameTooltip, Addon.demoButton)) == true)) then
         HideItemTooltip()
     end
 end
@@ -1882,6 +1883,7 @@ function Addon.SetLootChromeShown(shown)
     end
 
     setShown(Addon.historyButton)
+    setShown(Addon.demoButton)
     setShown(Addon.settingsButton)
     if Addon.newLootButton then
         if shown and Addon.newLootPending then Addon.newLootButton:Show()
@@ -2004,13 +2006,17 @@ local function RefreshRows()
     end
 
     local title = L("Current")
-    if Addon.selectedView == "session" then
+    if Addon.demoRows then
+        title = L("Demo")
+    elseif Addon.selectedView == "session" then
         title = L("This Session")
     elseif Addon.selectedView == "history" and Addon.selectedHistoryIndex then
         local group = Addon.state.history[Addon.selectedHistoryIndex]
         title = Core.GetHistoryGroupTitle(group, ActiveLocale()) or L("History")
     end
     Addon.historyButton:SetText(title)
+    Addon.demoButton:SetText(L(Addon.demoRows and "Exit demo" or "Demo"))
+    Addon.demoButton:SetHeight(math.max(22, bodyHeight + 6))
     if Addon.scrollText then
         if rowCount > visibleCount then
             local newestPosition = rowCount - offset
@@ -3842,47 +3848,35 @@ end
 
 local function AddTestRow()
     -- Keep examples outside live state so they never enter history or chat.
-    local demoState = Core.CreateState(Addon.state.settings)
-    local row = Core.AddVisibleRow(demoState, {
-        isTest = true,
-        looter = "Example",
-        itemLink = "|cff0070dd|Hitem:19019:::::::::::::|h[Test Sword]|h|r",
-        equipLoc = "INVTYPE_WEAPON",
-        itemID = 19019,
-        instanceName = Addon.currentInstanceName or SafeInstanceName(),
-        encounterName = Addon.currentEncounterName,
-        timestamp = Now(),
-        reason = "test row",
-        statusKey = "test_row",
-        equippedText = "Equipped: |cff1eff00|Hitem:25:::::::::::::|h[Worn Shortsword]|h|r",
-        tradeStatusKey = "trade_likely",
-        unsafe = false,
-    }, true)
-    Core.AddVisibleRow(demoState, {
-        isTest = true,
-        looter = "Example",
-        itemLink = "|cffa335ee|Hitem:19020:::::::::::::|h[Bound Test Chest]|h|r",
-        equipLoc = "INVTYPE_CHEST",
-        itemID = 19020,
-        instanceName = Addon.currentInstanceName or SafeInstanceName(),
-        encounterName = Addon.currentEncounterName,
-        timestamp = Now(),
-        reason = "bind_on_pickup",
-        statusKey = "bind_on_pickup",
-        equippedText = UNKNOWN_EQUIPPED,
-        tradeStatusKey = "trade_unknown",
-        unsafe = false,
-    }, false)
-    Addon.demoRows = demoState.allRows
+    if Addon.demoRows then
+        Addon.demoRows = nil
+        local previous = Addon.demoPreviousView or {}
+        Addon.selectedView = previous.view or "current"
+        Addon.selectedHistoryIndex = nil
+        if Addon.selectedView == "history" then
+            for index, group in ipairs(Addon.state.history or {}) do
+                if group == previous.historyGroup then Addon.selectedHistoryIndex = index; break end
+            end
+            if not Addon.selectedHistoryIndex then Addon.selectedView = "current" end
+        end
+        Addon.rowScrollOffset = previous.scrollOffset or 0
+        Addon.demoPreviousView = nil
+        Addon.EnterLootMode()
+        RefreshRows()
+        return
+    end
+    Addon.demoPreviousView = {
+        view = Addon.selectedView, scrollOffset = Addon.rowScrollOffset,
+        historyGroup = Addon.selectedView == "history" and Addon.state.history[Addon.selectedHistoryIndex] or nil,
+    }
+    Addon.demoRows = Core.BuildDemoRows(Addon.state.settings, Now())
     Addon.selectedView = "current"
     Addon.selectedHistoryIndex = nil
     Addon.rowScrollOffset = 0
     Addon.EnterLootMode()
     RefreshRows()
-    if DoYouNeedItCore.ShouldAutoShowWindow(row, { forceAutoShow = true }) then
-        CreateUI()
-        Addon.frame:Show()
-    end
+    CreateUI()
+    Addon.frame:Show()
 end
 
 local RetryPendingItem
@@ -4771,6 +4765,19 @@ CreateUI = function()
     end)
     RegisterButtonFont(frame.historyButton, 11)
     Addon.historyButton = frame.historyButton
+
+    frame.demoButton = Addon.CreateFlatSettingsButton(frame, 110)
+    frame.demoButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -42)
+    frame.demoButton:SetHeight(22)
+    frame.demoButton:SetText(L("Demo"))
+    frame.demoButton:SetScript("OnClick", function() AddTestRow() end)
+    frame.demoButton:SetScript("OnEnter", function(button)
+        Addon.ShowTextTooltip(button, L("Preview sample loot. No whispers are sent."))
+    end)
+    frame.demoButton:SetScript("OnLeave", HideItemTooltip)
+    frame.demoButton:SetScript("OnHide", Addon.HideSettingsTooltip)
+    RegisterButtonFont(frame.demoButton, 11, nil, true, 12)
+    Addon.demoButton = frame.demoButton
 
     frame.newLootButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate,BackdropTemplate")
     frame.newLootButton:SetSize(100, 22)

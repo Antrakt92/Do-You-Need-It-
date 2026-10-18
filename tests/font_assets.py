@@ -82,8 +82,12 @@ def main():
         match = re.search(r"^    " + locale + r" = \{ (.*?) \},$", developer_links, re.M)
         samples[script] += "".join(json.loads("[" + match.group(1) + "]"))
     accents = {"enUS": "", "deDE": "äöüß", "esES": "áéíóúüñ", "esMX": "áéíóúüñ", "frFR": "àâçéèêëîïôùûüÿœæ", "itIT": "àèéìòù", "ptBR": "áàâãçéêíóôõú"}
+    demos = core.split("local demoLocaleLabels = {", 1)[1].split("\n}", 1)[0]
+    for locale, script in [("zhCN", "hans"), ("zhTW", "hant"), ("koKR", "hangul")]:
+        match = re.search(r"^    " + locale + r" = \{ (.*?) \},$", demos, re.M)
+        samples[script] += "".join(json.loads("[" + match.group(1) + "]"))
     western_labels = {locale: "" for locale in accents}
-    for table_name in ("visibleLocaleLabels", "statusLocaleLabels", "helpLocaleLabels", "favoriteLocaleLabels", "developerLinkLocaleLabels"):
+    for table_name in ("visibleLocaleLabels", "statusLocaleLabels", "helpLocaleLabels", "favoriteLocaleLabels", "developerLinkLocaleLabels", "demoLocaleLabels"):
         table = core.split("local " + table_name + " = {", 1)[1].split("\n}", 1)[0]
         for locale in western_labels:
             match = re.search(r"^    " + locale + r" = \{ (.*?) \},$", table, re.M)
