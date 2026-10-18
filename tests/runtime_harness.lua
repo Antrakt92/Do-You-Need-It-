@@ -36,6 +36,14 @@ function FrameMethods:GetParent()
     return self.parent
 end
 
+function FrameMethods:GetChildren()
+    local result = {}
+    for _, child in ipairs(self.children or {}) do
+        if child.frameType ~= "FontString" and child.frameType ~= "Texture" then result[#result + 1] = child end
+    end
+    return unpack(result)
+end
+
 function FrameMethods:SetParent(parent)
     self.parent = parent
 end
@@ -101,7 +109,13 @@ function FrameMethods:IsToplevel()
 end
 
 function FrameMethods:SetFrameLevel(level)
+    local delta = level - self:GetFrameLevel()
     self.frameLevel = level
+    for _, child in ipairs(self.children or {}) do
+        if child.frameType ~= "FontString" and child.frameType ~= "Texture" then
+            child:SetFrameLevel(child:GetFrameLevel() + delta)
+        end
+    end
 end
 
 function FrameMethods:GetFrameLevel()
@@ -452,6 +466,7 @@ function Harness:newFrame(frameType, name, parent, template)
         frameType = frameType,
         name = name,
         parent = parent,
+        frameLevel = parent and parent:GetFrameLevel() + 1 or 0,
         template = template,
         children = {},
         scripts = {},
@@ -682,6 +697,9 @@ function Harness:registered(event)
 end
 
 function Harness:loadAddon()
+    local layersChunk = assert(loadfile("AntraktWindowLayers.lua"))
+    setfenv(layersChunk, self.env)
+    layersChunk()
     local coreChunk = assert(loadfile("DoYouNeedIt_Core.lua"))
     setfenv(coreChunk, self.env)
     coreChunk()

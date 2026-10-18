@@ -6,7 +6,7 @@ $caseCount = 0
 try {
     New-Item -ItemType Directory -Path (Join-Path $fixture 'scripts') -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $repoRoot 'scripts/package.ps1') -Destination (Join-Path $fixture 'scripts/package.ps1')
-    $files = @('DoYouNeedIt.toc', 'DoYouNeedIt.lua', 'DoYouNeedIt_Core.lua', 'DoYouNeedIt_Fonts.lua', 'README.md', 'CHANGELOG.md', 'LICENSE',
+    $files = @('DoYouNeedIt.toc', 'DoYouNeedIt.lua', 'AntraktWindowLayers.lua', 'DoYouNeedIt_Core.lua', 'DoYouNeedIt_Fonts.lua', 'README.md', 'CHANGELOG.md', 'LICENSE',
         'THIRD-PARTY-NOTICES.md', 'LICENSES/CallbackHandler-1.0-BSD-2-Clause.txt', 'LICENSES/LibSharedMedia-3.0-LGPL-2.1.txt',
         'libs/LibStub/LibStub.lua', 'libs/CallbackHandler-1.0/CallbackHandler-1.0.lua', 'libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua',
         'media/icon.png', 'media/font-star-outline.tga', 'media/font-star-filled.tga')

@@ -4611,8 +4611,7 @@ function Addon.ShowDeveloperLink(url)
         local frame = CreateFrame("Frame", "DoYouNeedItDeveloperLink", UIParent, "BackdropTemplate")
         frame:SetSize(440, 104)
         frame:SetPoint("CENTER")
-        frame:SetFrameStrata("FULLSCREEN_DIALOG")
-        frame:SetFrameLevel(200)
+        _G.AntraktWindowLayers.Attach(Addon.frame, frame, 80)
         frame:SetClampedToScreen(true)
         frame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
         frame:SetBackdropColor(0.035, 0.055, 0.07, 1)
@@ -4877,6 +4876,12 @@ CreateUI = function()
     end
 
     Addon.frame = frame
+    _G.AntraktWindowLayers.Register(frame, function()
+        if Addon.fontPickerFrame then Addon.fontPickerFrame:Hide() end
+        Addon.HideLanguagePicker()
+        if Addon.linkFrame then Addon.linkFrame:Hide() end
+        Addon.HideSettingsTooltip()
+    end)
     Addon.RestoreWindowPosition()
     frame:Hide()
     RefreshRows()
@@ -5544,8 +5549,7 @@ function Addon.ShowPopupSafely(popup, catcher)
 end
 
 function Addon.AnchorPopup(popup, trigger, catcher)
-    popup:SetFrameStrata("FULLSCREEN_DIALOG")
-    popup:SetFrameLevel((Addon.frame and Addon.frame:GetFrameLevel() or 100) + 80)
+    _G.AntraktWindowLayers.Attach(Addon.frame, popup, 80)
     popup:SetClampedToScreen(true)
     popup:ClearAllPoints()
     local bottom = CleanNumber(SafeCall(trigger.GetBottom, trigger))
@@ -5557,9 +5561,9 @@ function Addon.AnchorPopup(popup, trigger, catcher)
         popup:SetPoint("TOPLEFT", trigger, "BOTTOMLEFT", 0, -4)
     end
     if catcher then
-        catcher:SetFrameStrata("FULLSCREEN_DIALOG")
-        catcher:SetFrameLevel(popup:GetFrameLevel() - 1)
+        _G.AntraktWindowLayers.Attach(Addon.frame, catcher, 79)
     end
+    _G.AntraktWindowLayers.Focus(Addon.frame)
 end
 
 function Addon.HideLanguagePicker()
@@ -6103,6 +6107,7 @@ OpenSettings = function()
     Addon.settingsFrame:Show()
     RefreshRows()
     RefreshSettingsControls()
+    _G.AntraktWindowLayers.Focus(Addon.frame)
 end
 
 local function CancelAllPendingAuto(cancelManual)

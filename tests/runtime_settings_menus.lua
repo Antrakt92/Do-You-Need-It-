@@ -13,7 +13,7 @@ local function catchers(h)
     local result = {}
     for _, frame in ipairs(h.frames) do
         if frame.mouseEnabled and frame.allPoints == h.env.UIParent
-            and frame.strata == "FULLSCREEN_DIALOG" then result[#result + 1] = frame end
+            and frame.strata == "DIALOG" then result[#result + 1] = frame end
     end
     return result
 end
@@ -33,7 +33,7 @@ for _, locale in ipairs({"enUS", "ruRU", "deDE", "esES", "esMX", "frFR", "itIT",
     check(menu:IsVisible(), locale .. " language menu actually visible")
     check(not h.env.DropDownList1:IsShown(), "native menu never opens during press")
     check(menu:GetParent() == h.env.UIParent, "menu independent of window ancestry")
-    check(menu.strata == "FULLSCREEN_DIALOG" and menu:GetFrameLevel() > h.env.DoYouNeedItFrame:GetFrameLevel(), "menu above owner")
+    check(menu.strata == "DIALOG" and menu:GetFrameLevel() > h.env.DoYouNeedItFrame:GetFrameLevel(), "menu above owner in its window family")
     check(menu.points[1][1] == "BOTTOMLEFT" and menu.points[1][2] == trigger, "menu flips above a low trigger")
     check(menu.clampedToScreen, "language menu clamped")
     for _, row in ipairs(menu.buttons) do
@@ -51,7 +51,7 @@ for _, locale in ipairs({"enUS", "ruRU", "deDE", "esES", "esMX", "frFR", "itIT",
     released(h)
     click(h.env.DoYouNeedItFontDropdown)
     local picker = h.env.DoYouNeedItFontPicker
-    check(picker:IsVisible() and picker.strata == "FULLSCREEN_DIALOG", "font picker above settings")
+    check(picker:IsVisible() and picker.strata == "DIALOG", "font picker above settings")
     check(picker.points[1][2] == h.env.DoYouNeedItFontDropdown, "font picker anchored to field")
     local first
     for _, row in ipairs(h.env.DoYouNeedItFontPickerContent.children) do
