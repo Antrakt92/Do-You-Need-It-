@@ -366,7 +366,11 @@ local function testMainWindowLayoutBoundsLongText()
 
     local frame = h.env.DoYouNeedItFrame
     assertTruthy(frame and frame.historyButton, "main window history button exists")
-    assertTruthy(frame.historyButton:GetWidth() >= 390, "unified history selector uses the freed tab space")
+    assertTruthy(frame.historyButton:GetWidth() >= 360, "history caption retains a useful width")
+    assertTruthy(frame.qualityButton and frame.historyButton:GetWidth() + frame.qualityButton:GetWidth() + 6 >= 390,
+        "history and quality controls share the freed tab space")
+    assertTruthy(frame.historyButton:GetWidth() + frame.qualityButton:GetWidth() + frame.demoButton:GetWidth() + 12 <= frame:GetWidth() - 32,
+        "history, quality and demo controls fit without enlarging the window")
     assertEqual(frame.tabAskable, nil, "main window does not create an askable tab")
     assertEqual(frame.tabAllGear, nil, "main window does not create an all-gear tab")
 

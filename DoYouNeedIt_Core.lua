@@ -591,6 +591,7 @@ local PERSISTED_ROW_KEYS = {
     equipLoc = "string",
     itemID = "number",
     itemLevel = "number",
+    quality = "number",
     instanceName = "string",
     encounterName = "string",
     timestamp = "number",
@@ -1531,6 +1532,13 @@ function Core.NormalizeSettings(saved)
     settings.maxHistoryGroups = math.max(1, math.floor(asNumber(saved.maxHistoryGroups, DEFAULTS.maxHistoryGroups)))
     settings.maxSessionRows = math.max(1, math.floor(asNumber(saved.maxSessionRows, DEFAULTS.maxSessionRows)))
     settings.minQuality = math.max(0, math.floor(asNumber(saved.minQuality, DEFAULTS.minQuality)))
+    settings.qualityFilters = {}
+    for quality = 0, 6 do
+        local enabled
+        if type(saved.qualityFilters) == "table" then enabled = saved.qualityFilters[quality] end
+        if type(enabled) ~= "boolean" then enabled = quality >= settings.minQuality end
+        settings.qualityFilters[quality] = enabled
+    end
     settings.forceLocale = Core.NormalizeForceLocale(saved.forceLocale)
     settings.font = type(saved.font) == "string" and saved.font ~= "" and saved.font or DEFAULTS.font
     settings.fontFavorites = {}
@@ -1979,6 +1987,63 @@ function Core.IsHiddenLootRow(row)
         row.isAccountBound == true or row.isAccountBoundUntilEquipped == true
         or row.reason == "warband_bound" or row.statusKey == "warband_bound"
     )
+end
+
+Core.QUALITY_COLORS = { [0] = "9d9d9d", "ffffff", "1eff00", "0070dd", "a335ee", "ff8000", "e6cc80", "00ccff", "00ccff" }
+Core.QUALITY_LABELS = {
+    enUS = {"Item quality", "Poor", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Artifact", "Heirloom"},
+    ruRU = {"Качество предметов", "Низкое", "Обычное", "Необычное", "Редкое", "Эпическое", "Легендарное", "Артефакт", "Наследуемое"},
+    deDE = {"Gegenstandsqualität", "Schlecht", "Gewöhnlich", "Ungewöhnlich", "Selten", "Episch", "Legendär", "Artefakt", "Erbstück"},
+    frFR = {"Qualité des objets", "Médiocre", "Commun", "Inhabituel", "Rare", "Épique", "Légendaire", "Artéfact", "Héritage"},
+    esES = {"Calidad de objetos", "Pobre", "Común", "Poco común", "Raro", "Épico", "Legendario", "Artefacto", "Reliquia"},
+    esMX = {"Calidad de objetos", "Pobre", "Común", "Poco común", "Raro", "Épico", "Legendario", "Artefacto", "Reliquia"},
+    itIT = {"Qualità degli oggetti", "Scarso", "Comune", "Non comune", "Raro", "Epico", "Leggendario", "Artefatto", "Cimelio"},
+    ptBR = {"Qualidade dos itens", "Inferior", "Comum", "Incomum", "Raro", "Épico", "Lendário", "Artefato", "Herança"},
+    koKR = {"아이템 등급", "하급", "일반", "고급", "희귀", "영웅", "전설", "유물", "계승품"},
+    zhCN = {"物品品质", "粗糙", "普通", "优秀", "精良", "史诗", "传说", "神器", "传家宝"},
+    zhTW = {"物品品質", "粗糙", "普通", "優良", "精良", "史詩", "傳說", "神兵", "傳家寶"},
+}
+
+function Core.QualityLabel(quality, locale)
+    local labels = Core.QUALITY_LABELS[locale] or Core.QUALITY_LABELS.enUS
+    return labels[quality == nil and 1 or quality + 2]
+end
+
+function Core.RowQuality(row)
+    if type(row) ~= "table" then return nil end
+    local quality = asNumber(row.quality, nil)
+    if quality and quality >= 0 and quality <= 8 and quality == math.floor(quality) then return quality end
+    local color = type(row.itemLink) == "string" and row.itemLink:match("|c[fF][fF](%x%x%x%x%x%x)|Hitem:")
+    if color then
+        for index = 0, 7 do if color:lower() == Core.QUALITY_COLORS[index] then return index end end
+    end
+    return nil
+end
+
+function Core.IsQualityVisible(settings, row)
+    settings = type(settings) == "table" and settings or {}
+    local filters = settings.qualityFilters
+    local quality = Core.RowQuality(row)
+    if quality ~= nil then
+        -- Heirlooms and currency tokens are outside ordinary group-drop quality selection.
+        if quality > 6 then return false end
+        if type(filters) == "table" and type(filters[quality]) == "boolean" then return filters[quality] end
+        return quality >= asNumber(settings.minQuality, DEFAULTS.minQuality)
+    end
+    -- Legacy unknown links stay visible until metadata resolves, unless every
+    -- quality was explicitly disabled. Do not guess their item quality.
+    for index = 0, 6 do
+        local enabled
+        if type(filters) == "table" then enabled = filters[index] end
+        if enabled == true or (type(enabled) ~= "boolean" and index >= asNumber(settings.minQuality, DEFAULTS.minQuality)) then return true end
+    end
+    return false
+end
+
+function Core.TrackingSettings(settings)
+    local tracked = Core.NormalizeSettings(settings)
+    tracked.minQuality = 0
+    return tracked
 end
 
 function Core.ClassifyGearLoot(item, looter, settings)
@@ -2520,6 +2585,9 @@ function Core.GetAutoWhisperDecision(settings, row)
     end
     if type(row) ~= "table" then
         return { shouldSchedule = false, reason = "missing_row" }
+    end
+    if not Core.IsQualityVisible(settings, row) then
+        return { shouldSchedule = false, reason = "quality_filtered" }
     end
     if row.askable == false or Core.IsHiddenLootRow(row) then
         return { shouldSchedule = false, reason = "not_askable" }

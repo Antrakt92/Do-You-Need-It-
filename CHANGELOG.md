@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Adds an independent checkbox filter for each gear quality beside the encounter selector.
+- Applies the saved filter to live loot, session/history and Demo without resizing the window. Hidden records are retained, and disabled qualities do not open the window or send automatic whispers.
+
 ## 1.0.0 - 18-Oct-2026 — First stable release
 
 Do You Need It? leaves beta with a redesigned interface, complete language support, a bundled font collection, a safe loot preview, and more reliable loot history and inspection handling. This release includes every change since 0.6.4; existing settings and saved loot are retained.

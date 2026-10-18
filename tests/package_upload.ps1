@@ -81,7 +81,11 @@ try {
     $reference = [System.IO.Compression.ZipFile]::OpenRead($referenceZip.FullName)
     Assert-PackageCase 'recompressed-valid'
     $customChangelog = Join-Path $caseRoot 'CHANGELOG.md'
-    $futureCopy = $fullChangelog.Replace("# Changelog`n`n", "# Changelog`n`n## Unreleased`n`n- Future work.`n`n")
+    $futureCopy = if ($firstReleaseHeading -eq 1) {
+        $fullChangelog
+    } else {
+        $fullChangelog.Replace("# Changelog`n`n", "# Changelog`n`n## Unreleased`n`n- Future work.`n`n")
+    }
     [System.IO.File]::WriteAllText($customChangelog, $futureCopy, [System.Text.UTF8Encoding]::new($false))
     $customResult = & $upload -ZipPath $referenceZip.FullName -ChangelogPath $customChangelog -DryRun | ConvertFrom-Json
     if ($customResult.Metadata.changelog -cne $expectedChangelog) {

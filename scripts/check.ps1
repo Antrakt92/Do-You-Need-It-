@@ -27,7 +27,7 @@ try {
     }
     foreach ($regression in @(
         'runtime_item_regressions.lua', 'runtime_loot_regressions.lua', 'runtime_ui_regressions.lua',
-        'runtime_navigation.lua', 'runtime_policy_regressions.lua', 'runtime_filters.lua',
+        'runtime_navigation.lua', 'runtime_policy_regressions.lua', 'runtime_filters.lua', 'runtime_quality_filters.lua',
         'runtime_roster_completeness.lua', 'runtime_item_display.lua', 'runtime_font_updates.lua',
         'runtime_late_order.lua', 'runtime_forever.lua', 'runtime_forever_demo.lua',
         'runtime_selftest.lua', 'runtime_settings_menus.lua', 'runtime_demo.lua', 'window_layers.lua'

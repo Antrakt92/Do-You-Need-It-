@@ -27,6 +27,18 @@ Retail release does not select the Forever file. The screenshots below show Reta
 
 </details>
 
+## Quality filter
+
+Click the small filter icon between the encounter selector and Demo to choose
+which item qualities appear. Each checkbox is independent: you can keep green
+and purple gear while hiding blue gear. The same selection applies to current
+loot, session history, saved encounters and Demo, and is saved across reloads.
+Green and higher qualities are shown by default; gray and white can be enabled.
+Hidden gear remains in retained history and reappears when enabled. Hidden
+qualities never open the window or start automatic whispers; showing an old row
+again does not send a delayed whisper. Non-equipment loot remains excluded.
+The filter is shared by Retail and Forever and does not enlarge the window.
+
 ## Install
 
 Install through CurseForge, or extract the `DoYouNeedIt-<version>.zip` release asset into `World of Warcraft/_retail_/Interface/AddOns/`. The resulting folder must be named `DoYouNeedIt` and contain `DoYouNeedIt.toc` directly inside it.
@@ -38,7 +50,7 @@ Run `/reload`, then `/dyni` to open the window. `/dyni status` should report `bu
 Extract the explicitly labelled Forever beta ZIP into the beta client's
 `_classic_beta_/Interface/AddOns/`, with `DoYouNeedIt/DoYouNeedIt.toc` directly
 inside. Use the CurseForge file labelled **Forever Beta**, not its Retail file.
-The addon list, window and `/dyni status` identify the Forever build. It uses
+The addon list and `/dyni status` identify the Forever build. It uses
 the same `/dyni` commands, Settings, fonts, history and opt-in whispers.
 
 Forever comparisons include the separate ranged/relic slot. Player usability

@@ -1,7 +1,11 @@
 # Do You Need It? — Forever Beta
 
-## 1.0.1 - 18-Oct-2026 — Fonts and demo fixes
+## 1.0.1 - 18-Oct-2026 — Quality filters and font fixes
 
+- Adds the same compact quality-filter popup as Retail, with independent checkboxes,
+  saved settings and reversible filtering of current loot, history and Demo.
+- Disabled qualities do not open the window or start automatic whispers; queued
+  sends are cancelled, and showing old rows does not send retroactive requests.
 - Restores the full compatible bundled and SharedMedia font list when the
   client applies a font without returning `true`. Font previews and selection
   verify the applied face, size and style, allowing tiny client size-rounding

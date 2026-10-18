@@ -62,7 +62,7 @@ local ROW_WIDTH = 510
 local ROW_HEIGHT = 30
 local ROW_START_Y = -82
 local ROW_STRIDE = 34
-local HEADER_HISTORY_WIDTH = 392
+local HEADER_HISTORY_WIDTH = 364
 local ROW_LOOTER_WIDTH = 90
 local ROW_DROP_WIDTH = 180
 local ROW_DROP_HOVER_WIDTH = 188
@@ -1885,13 +1885,17 @@ end
 
 local function RowsForSelectedView()
     if Addon.selectedView == "current" and Addon.demoRows then
-        return Addon.demoRows
+        local visible = {}
+        for _, row in ipairs(Addon.demoRows) do
+            if Core.IsQualityVisible(Addon.state.settings, row) then visible[#visible + 1] = row end
+        end
+        return visible
     end
     local function unifiedRows(allRows, askableRows)
         local visible = {}
         local rows = type(allRows) == "table" and #allRows > 0 and allRows or askableRows or {}
         for _, row in ipairs(rows) do
-            if not Core.IsHiddenLootRow(row) then visible[#visible + 1] = row end
+            if not Core.IsHiddenLootRow(row) and Core.IsQualityVisible(Addon.state.settings, row) then visible[#visible + 1] = row end
         end
         return visible
     end
@@ -2043,6 +2047,7 @@ function Addon.SetLootChromeShown(shown)
 
     setShown(Addon.historyButton)
     setShown(Addon.demoButton)
+    setShown(Addon.qualityButton)
     if Addon.settingsButton then
         Addon.settingsButton:Show()
         Addon.settingsButton.returnIcon:SetShown(not shown)
@@ -2130,7 +2135,7 @@ local function RefreshRows()
         end
         local hasVisible = false
         for _, row in ipairs(current) do
-            if not Core.IsHiddenLootRow(row) then hasVisible = true; break end
+            if not Core.IsHiddenLootRow(row) and Core.IsQualityVisible(Addon.state.settings, row) then hasVisible = true; break end
         end
         if not hasVisible or (Addon.selectedView == "current" and offset == 0) then
             Addon.newLootPending = false
@@ -2563,7 +2568,8 @@ local function RefreshCharacterStorageFromPlayerIdentity()
 end
 
 local function SendWhisper(row, isAuto)
-    if not row or row.isTest or not row.looter or not row.itemLink then
+    if not row or row.isTest or not row.looter or not row.itemLink
+        or not Core.IsQualityVisible(Addon.state.settings, row) then
         return
     end
     if row.manualWhispered == true or row.autoWhispered == true or row.whisperInFlight == true then
@@ -3010,7 +3016,7 @@ function Addon.UpgradeTrackedLootToBonus(looter, itemLink, context, source)
     if not Addon.ScheduleChallengeHistoryFinalizeIfRecent(context.source or source or "bonus_loot_upgrade") then
         Addon.ScheduleRecentEncounterHistoryFinalizeIfRecent(context.source or source or "bonus_loot_upgrade")
     end
-    if DoYouNeedItCore.ShouldAutoShowWindow(row, context) then
+    if Core.IsQualityVisible(Addon.state.settings, row) and DoYouNeedItCore.ShouldAutoShowWindow(row, context) then
         CreateUI()
         Addon.frame:Show()
     end
@@ -3133,7 +3139,8 @@ function Addon.PumpAutoWhisperQueue()
         local row = table.remove(Addon.autoWhisperQueue, 1)
         if type(row) == "table" and row.pendingAutoWhisper == true and row.autoToken ~= nil
             and IsRowStillTracked(row) and Addon.state.settings.autoWhisper == true
-            and row.unsafe ~= true and row.askable ~= false and not Core.IsHiddenLootRow(row) then
+            and row.unsafe ~= true and row.askable ~= false and not Core.IsHiddenLootRow(row)
+            and Core.IsQualityVisible(Addon.state.settings, row) then
             if row.autoDelayReady ~= true then
                 table.insert(Addon.autoWhisperQueue, 1, row)
                 break
@@ -3267,10 +3274,11 @@ function Addon.RevalidateTrackedLootMetadata(row)
         end
         row.metadataToken = nil
         metadata.lootSource = row.lootSource
-        local classification = Core.ClassifyTradeCandidate(metadata, row.looter, SafePlayerName(), Addon.state.settings)
+        local classification = Core.ClassifyTradeCandidate(metadata, row.looter, SafePlayerName(), Core.TrackingSettings(Addon.state.settings))
         if row.unsafe or row.isSelfLoot then
             classification = { visible = false, reason = row.isSelfLoot and "self_loot" or "looter_unresolved" }
         end
+        row.quality = metadata.quality
         row.itemLevel = Addon.ReadItemLevel(itemLink)
         row.equipLoc = metadata.equipLoc
         row.playerCanEquip = metadata.playerCanEquip
@@ -3934,7 +3942,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
     context = type(context) == "table" and context or BuildDropContext(false)
     local playerName = SafePlayerName()
     metadata.lootSource = context.lootSource
-    local gearClassification = DoYouNeedItCore.ClassifyGearLoot(metadata, looter, Addon.state.settings)
+    local gearClassification = DoYouNeedItCore.ClassifyGearLoot(metadata, looter, Core.TrackingSettings(Addon.state.settings))
     if not gearClassification.visible then
         RecordDiagnostic("filtered", {
             reason = gearClassification.reason,
@@ -3956,7 +3964,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
     elseif context.isSelfLoot == true then
         classification = { visible = false, reason = "self_loot" }
     else
-        classification = DoYouNeedItCore.ClassifyTradeCandidate(metadata, looter, playerName, Addon.state.settings)
+        classification = DoYouNeedItCore.ClassifyTradeCandidate(metadata, looter, playerName, Core.TrackingSettings(Addon.state.settings))
     end
     local askable = classification.visible == true
     if not askable then
@@ -3982,6 +3990,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
         equipLoc = metadata.equipLoc,
         itemID = metadata.itemID,
         itemLevel = metadata.itemLevel,
+        quality = metadata.quality,
         instanceName = context.instanceName or Addon.currentInstanceName or SafeInstanceName(),
         encounterName = context.encounterName,
         timestamp = context.timestamp or Now(),
@@ -4035,7 +4044,7 @@ local function AddTradeCandidate(looter, itemLink, metadata, context)
     if not Addon.ScheduleChallengeHistoryFinalizeIfRecent(context.source or "post_challenge_loot") then
         Addon.ScheduleRecentEncounterHistoryFinalizeIfRecent(context.source or "post_encounter_loot")
     end
-    if DoYouNeedItCore.ShouldAutoShowWindow(row, context) then
+    if Core.IsQualityVisible(Addon.state.settings, row) and DoYouNeedItCore.ShouldAutoShowWindow(row, context) then
         CreateUI()
         Addon.frame:Show()
     end
@@ -4654,6 +4663,7 @@ function Addon.ScrollHistoryPicker(offset)
 end
 
 local function OpenHistoryMenu(owner)
+    Addon.HideQualityPicker()
     if Addon.historyPicker and Addon.historyPicker:IsShown() then Addon.HideHistoryMenu(); return end
     Addon.HideSettingsTooltip()
     if SafeCall(InCombatLockdown) == true then return end
@@ -5111,6 +5121,7 @@ CreateUI = function()
     end)
     frame:SetScript("OnHide", function()
         Addon.HideHistoryMenu()
+        Addon.HideQualityPicker()
         if Addon.linkFrame then Addon.linkFrame:Hide() end
         if type(Addon.EnterLootMode) == "function" then
             Addon.HideLootRows()
@@ -5170,6 +5181,23 @@ CreateUI = function()
     end)
     frame.historyButton:HookScript("OnLeave", HideItemTooltip)
     Addon.historyButton = frame.historyButton
+
+    frame.qualityButton = Addon.CreateFlatSettingsButton(frame, 22)
+    frame.qualityButton:SetPoint("LEFT", frame.historyButton, "RIGHT", 6, 0)
+    frame.qualityButton:SetSize(22, 22)
+    frame.qualityButton:SetScript("OnClick", Addon.ToggleQualityPicker)
+    frame.qualityButton:SetScript("OnEnter", function(button)
+        Addon.ShowTextTooltip(button, Core.QualityLabel(nil, ActiveLocale()))
+    end)
+    frame.qualityButton:SetScript("OnLeave", HideItemTooltip)
+    frame.qualityButton:SetScript("OnHide", Addon.HideQualityPicker)
+    for index = 1, 3 do
+        local line = frame.qualityButton:CreateTexture(nil, "ARTWORK")
+        line:SetColorTexture(0.55, 0.82, 0.94, 1)
+        line:SetSize(17 - index * 3, 2)
+        line:SetPoint("CENTER", frame.qualityButton, "CENTER", 0, 6 - index * 3)
+    end
+    Addon.qualityButton = frame.qualityButton
 
     frame.demoButton = Addon.CreateFlatSettingsButton(frame, 110)
     frame.demoButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -42)
@@ -5297,6 +5325,7 @@ CreateUI = function()
         if Addon.fontPickerFrame then Addon.fontPickerFrame:Hide() end
         Addon.HideLanguagePicker()
         Addon.HideHistoryMenu()
+        Addon.HideQualityPicker()
         if Addon.linkFrame then Addon.linkFrame:Hide() end
         Addon.HideSettingsTooltip()
     end)
@@ -5949,6 +5978,7 @@ local function ShowFontPicker()
 end
 
 local function ToggleFontPicker()
+    Addon.HideQualityPicker()
     if Addon.fontPickerFrame and Addon.fontPickerFrame:IsShown() then
         HideFontPicker()
         return
@@ -5996,6 +6026,93 @@ function Addon.AnchorPopup(popup, trigger, catcher)
         _G.AntraktWindowLayers.Attach(Addon.frame, catcher, 79)
     end
     _G.AntraktWindowLayers.Focus(Addon.frame)
+end
+
+function Addon.HideQualityPicker()
+    if Addon.qualityPicker then Addon.qualityPicker:Hide() end
+    if Addon.qualityCatcher then Addon.qualityCatcher:Hide() end
+end
+
+function Addon.SetQualityVisible(quality, enabled)
+    Addon.state.settings.qualityFilters[quality] = enabled == true
+    Addon.rowScrollOffset = 0
+    local function cancel(rows)
+        for _, row in ipairs(rows or {}) do
+            if not Core.IsQualityVisible(Addon.state.settings, row) and row.pendingAutoWhisper then
+                row.pendingAutoWhisper, row.autoToken, row.autoDelayReady = false, nil, nil
+                row.statusKey, row.statusSeconds = "candidate", nil
+            end
+        end
+    end
+    cancel(Addon.state.allRows)
+    cancel(Addon.state.currentRows)
+    cancel(Addon.state.sessionAllRows)
+    cancel(Addon.state.sessionRows)
+    SaveDB()
+    RefreshRows()
+end
+
+function Addon.ToggleQualityPicker()
+    if Addon.qualityPicker and Addon.qualityPicker:IsShown() then Addon.HideQualityPicker(); return end
+    if CleanBoolean(SafeCall(InCombatLockdown)) == true then return end
+    HideFontPicker()
+    Addon.HideLanguagePicker()
+    Addon.HideQualityPicker()
+    Addon.HideHistoryMenu()
+    if not Addon.qualityPicker then
+        local catcher = CreateFrame("Button", "DoYouNeedItQualityCatcher", UIParent)
+        catcher:SetAllPoints(UIParent)
+        catcher:EnableMouse(true)
+        catcher:SetScript("OnMouseDown", Addon.HideQualityPicker)
+        catcher:Hide()
+        Addon.qualityCatcher = catcher
+        local picker = CreateFrame("Frame", "DoYouNeedItQualityPicker", UIParent, "BackdropTemplate")
+        picker:SetSize(220, 210)
+        Addon.StylePopup(picker)
+        picker:EnableMouse(true)
+        picker:SetScript("OnHide", function() catcher:Hide() end)
+        picker.heading = picker:CreateFontString(nil, "OVERLAY")
+        picker.heading:SetPoint("TOPLEFT", 12, -10)
+        RegisterFontString(picker.heading, 12, nil, true, nil, 12)
+        picker.buttons = {}
+        for quality = 0, 6 do
+            local value = quality
+            local row = CreateFrame("Button", nil, picker)
+            row:SetSize(200, 24)
+            row:SetPoint("TOPLEFT", 10, -32 - quality * 24)
+            row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+            row.box = CreateFrame("Frame", nil, row, "BackdropTemplate")
+            row.box:SetSize(16, 16)
+            row.box:SetPoint("LEFT", 2, 0)
+            Addon.StylePopup(row.box)
+            row.check = row.box:CreateTexture(nil, "OVERLAY")
+            row.check:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
+            row.check:SetSize(20, 20)
+            row.check:SetPoint("CENTER", row.box, "CENTER", 0, 0)
+            row.text = row:CreateFontString(nil, "OVERLAY")
+            row.text:SetPoint("LEFT", 26, 0)
+            row.text:SetWidth(174)
+            row.text:SetJustifyH("LEFT")
+            RegisterFontString(row.text, 12, nil, true, nil, 12)
+            row:SetScript("OnClick", function()
+                Addon.SetQualityVisible(value, not Addon.state.settings.qualityFilters[value])
+                row.check:SetShown(Addon.state.settings.qualityFilters[value])
+            end)
+            picker.buttons[quality + 1] = row
+        end
+        picker:Hide()
+        Addon.qualityPicker = picker
+        table.insert(UISpecialFrames, "DoYouNeedItQualityPicker")
+    end
+    local picker = Addon.qualityPicker
+    picker.heading:SetText(Core.QualityLabel(nil, ActiveLocale()))
+    for quality = 0, 6 do
+        local row = picker.buttons[quality + 1]
+        row.text:SetText("|cff" .. Core.QUALITY_COLORS[quality] .. Core.QualityLabel(quality, ActiveLocale()) .. "|r")
+        row.check:SetShown(Addon.state.settings.qualityFilters[quality])
+    end
+    Addon.AnchorPopup(picker, Addon.qualityButton, Addon.qualityCatcher)
+    Addon.ShowPopupSafely(picker, Addon.qualityCatcher)
 end
 
 function Addon.HideLanguagePicker()
@@ -6081,6 +6198,7 @@ function Addon.CreateSettingsDropdown(name, parent, onClick)
 end
 
 function Addon.ToggleLanguagePicker()
+    Addon.HideQualityPicker()
     if SafeCall(InCombatLockdown) == true then return end
     if Addon.languagePicker and Addon.languagePicker:IsShown() then Addon.HideLanguagePicker(); return end
     HideFontPicker()
@@ -7446,9 +7564,11 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         BuildRoster()
         QueueEquipmentScan("entering_world", true)
     elseif event == "PLAYER_REGEN_DISABLED" then
+        Addon.HideQualityPicker()
         HideFontPicker()
         Addon.HideLanguagePicker()
         Addon.HideHistoryMenu()
+        Addon.HideQualityPicker()
         if Addon.linkFrame then Addon.linkFrame:Hide() end
     elseif event == "PLAYER_REGEN_ENABLED" then
         Addon.ResumeInspectWorkAfterCombat(3)
