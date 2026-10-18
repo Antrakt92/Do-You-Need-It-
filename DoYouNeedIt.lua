@@ -1322,10 +1322,12 @@ function Addon.ItemDisplayLoadComplete(state, entry, timedOut)
             if state.entries[oldest.id] == oldest then state.entries[oldest.id] = nil end
         end
     end
-    -- A timeout releases capacity, but the actual loader may still finish
-    -- later. Its first callback can repaint without accounting twice.
-    if timedOut then return end
+    -- Free capacity also serves visible links skipped while the loader was
+    -- saturated. Coalesce completions so a burst repaints the current view once.
+    if state.paintScheduled then return end
+    state.paintScheduled = true
     C_Timer.After(0, function()
+        state.paintScheduled = nil
         if Addon.itemDisplayLoads ~= state or state.generation ~= Addon.lootGeneration
             or not Addon.frame or not Addon.frame:IsShown() or Addon.contentMode ~= "loot" then return end
         -- Repaint only existing text. Never retain a row, change views, or
@@ -1334,14 +1336,7 @@ function Addon.ItemDisplayLoadComplete(state, entry, timedOut)
             if rowFrame:IsShown() and rowFrame.row then
                 for _, region in ipairs({rowFrame.drop, rowFrame.equipped, rowFrame.equipped2}) do
                     local text = CleanString(SafeCall(region.GetText, region))
-                    if text then
-                        for link in text:gmatch("|Hitem:[^|]+|h%[.-%]|h") do
-                            if Core.ExtractItemID(link) == entry.id then
-                                region:SetText(Addon.ItemDisplayText(text))
-                                break
-                            end
-                        end
-                    end
+                    if text then region:SetText(Addon.ItemDisplayText(text)) end
                 end
             end
         end

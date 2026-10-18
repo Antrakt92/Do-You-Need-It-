@@ -132,6 +132,39 @@ end
 check(pendingLoads == 63 and failedState.pending == 64, "concurrent metadata requests have a strict limit")
 he:runTimers(10, 2000)
 check(failedState.pending == 0, "timeouts release never-completing requests")
+for _, release in ipairs({"completion", "timeout"}) do
+    local hs, fs, as, bs, cs = fresh()
+    local loads, held = {}, {}
+    hs.env.Item.CreateFromItemID = function(_, id)
+        loads[id] = (loads[id] or 0) + 1
+        return {ContinueOnItemLoad = function(_, callback) held[id] = callback end}
+    end
+    for id = 36000, 36062 do
+        hs:addItem(id, {cacheLoaded = false})
+        as.ItemDisplayText("|Hitem:" .. id .. ":::::::::::::|h[Earlier view]|h")
+    end
+    check(as.itemDisplayLoads.pending == 64, "capacity fixture reaches the bounded pending limit")
+    local blocked = "|Hitem:36063:::::::::::::|h[Current view]|h"
+    hs:addItem(36063, {cacheLoaded = false})
+    fs.row.itemLink, fs.dropLink.itemLink = blocked, blocked
+    fs.drop:SetText(as.ItemDisplayText(blocked))
+    check(loads[36063] == nil, "new visible item does not exceed pending capacity")
+    if release == "completion" then
+        hs.items[33099].cacheLoaded = true
+        cs[1]()
+        hs:runTimers(1, 100)
+    else
+        hs:runTimers(10, 1000)
+    end
+    check(loads[36063] == 1, "visible skipped link is requested after " .. release .. " frees capacity")
+    check(as.itemDisplayLoads.pending <= 64, "refill preserves the pending limit")
+    hs.items[36063].cacheLoaded = true
+    held[36063]()
+    hs:runTimers(1, 100)
+    check(fs.drop:GetText() == "|cffa335ee" .. blocked .. "|r", "refilled request colors the current view")
+    check(#hs.sentMessages == 0, "display refill never sends a whisper")
+end
+
 for quality = 0, 7 do
     local link = "|cff" .. addon.ItemDisplayColors[quality] .. bare .. "|r"
     check(addon.ItemLinkQuality(link) == quality, "shared parser preserves quality " .. quality)
