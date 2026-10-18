@@ -143,6 +143,12 @@ function FrameMethods:SetMovable(movable)
     self.movable = movable
 end
 
+function FrameMethods:SetResizable(value) self.resizable = value end
+function FrameMethods:SetResizeBounds(minW, minH, maxW, maxH)
+    self.resizeBounds = {minW, minH, maxW, maxH}
+end
+function FrameMethods:StartSizing(point) self.sizing = point end
+
 function FrameMethods:RegisterForDrag(...)
     self.dragButtons = { ... }
 end
@@ -485,6 +491,7 @@ end
 
 function FrameMethods:StopMovingOrSizing()
     self.moving = false
+    self.sizing = nil
 end
 
 function Harness:newFrame(frameType, name, parent, template)

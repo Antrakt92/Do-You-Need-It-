@@ -2,8 +2,12 @@
 
 ## 1.0.1 - 18-Oct-2026 — Quality filters and font fixes
 
-- Adds the same compact quality-filter popup as Retail, with independent checkboxes,
-  saved settings and reversible filtering of current loot, history and Demo.
+- Adds the same quality checkboxes on the right of Settings as Retail, with saved
+  settings and reversible filtering of current loot, history and Demo.
+- Fits Settings into the same compact window as loot, with whispers and appearance
+  on the left. Switching views keeps the same dimensions.
+- Adds lower-right corner resizing, adapting comparison widths and visible rows.
+  Window size is saved across reloads.
 - Disabled qualities do not open the window or start automatic whispers; queued
   sends are cancelled, and showing old rows does not send retroactive requests.
 - Restores the full compatible bundled and SharedMedia font list when the

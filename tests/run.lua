@@ -1204,7 +1204,7 @@ assertTruthy(runtime:find("frame.historyButton:SetSize(HEADER_HISTORY_WIDTH, 22)
 assertTruthy(runtime:find("KeepOneLine", 1, true), "runtime caps long labels and loot rows to one line")
 assertEqual(runtime:find("frame.tabAskable", 1, true), nil, "runtime no longer creates an askable tab")
 assertEqual(runtime:find("frame.tabAllGear", 1, true), nil, "runtime no longer creates an all-gear tab")
-assertTruthy(runtime:find("local MAX_VISIBLE_ROWS = 6", 1, true), "runtime uses freed settings space for another visible row")
+-- Default and resized row capacity are exercised in runtime_quality_filters.lua.
 assertTruthy(runtime:find("DoYouNeedItCore.ShouldAutoShowWindow", 1, true), "runtime auto-shows on new loot rows")
 assertEqual(runtime:find("GetAutoShowTabForRow", 1, true), nil, "runtime no longer selects between loot tabs")
 assertEqual(runtime:find("if askable and DoYouNeedItCore.ShouldAutoShowWindow", 1, true), nil, "runtime does not limit auto-show to askable rows")

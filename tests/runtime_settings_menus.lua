@@ -151,7 +151,7 @@ do
     end
     check(settings.delaySlider:GetHeight() >= 24 and settings.fontSizeSlider:GetHeight() >= 24,
         "slim slider tracks retain convenient hit areas")
-    check(settings.whisperEditBox:GetHeight() >= 32, "large input text fits vertically")
+    check(settings.whisperEditBox:GetHeight() >= (settings.whisperEditBox.fontSize or 12) + 8, "large input text fits vertically")
     h.env.DoYouNeedItSupportButton:FireScript("OnEnter")
     local supportTip = h.env.GameTooltip:GetText() or ""
     check(supportTip:find(h.env.DoYouNeedItCore.GetLocaleLabel("Support development", "ruRU"), 1, true)

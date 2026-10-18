@@ -57,12 +57,11 @@ end
 
 local WINDOW_WIDTH = 540
 local WINDOW_HEIGHT = 300
-local SETTINGS_WINDOW_HEIGHT = 420
 local ROW_WIDTH = 510
 local ROW_HEIGHT = 30
 local ROW_START_Y = -82
 local ROW_STRIDE = 34
-local HEADER_HISTORY_WIDTH = 364
+local HEADER_HISTORY_WIDTH = 392
 local ROW_LOOTER_WIDTH = 90
 local ROW_DROP_WIDTH = 180
 local ROW_DROP_HOVER_WIDTH = 188
@@ -74,7 +73,7 @@ local SETTINGS_CONTROL_X = 126
 local SETTINGS_DROPDOWN_WIDTH = 210
 local SETTINGS_EDITBOX_WIDTH = 250
 local SETTINGS_SLIDER_WIDTH = 210
-local MAX_VISIBLE_ROWS = 6
+local MAX_VISIBLE_ROWS = 24
 local MAX_ITEM_RETRIES = 5
 local ITEM_RETRY_DELAY = 0.7
 local MAX_INSPECT_RETRIES = 8
@@ -1936,7 +1935,7 @@ function Addon.LootRowMetrics()
     end
     local stride = height + 4
     local startY = ROW_START_Y - math.max(0, size - 12) * 2
-    local count = math.min(MAX_VISIBLE_ROWS, math.floor((WINDOW_HEIGHT + startY - 8) / stride))
+    local count = math.min(MAX_VISIBLE_ROWS, math.floor(((Addon.frame and Addon.frame:GetHeight() or WINDOW_HEIGHT) + startY - 8) / stride))
     return height, stride, math.max(1, count), body, startY
 end
 
@@ -1945,19 +1944,19 @@ function Addon.GetVisibleRowCount()
     return count
 end
 
--- Column widths grow with the body font (same idea as the history/scroll/new
--- loot chrome scaling below) but stay capped so the fixed 510px row keeps
--- every column on screen; headers and hover targets follow the same widths.
+-- Keep the compact font-aware baseline, then distribute added window width
+-- across all comparison columns. Headers and item hit targets use the same widths.
 function Addon.LootColumnWidths()
     local size = Addon.state and Addon.state.settings.fontSize or 12
     local scale = Core.ResolveFontSize(11, size) / 11
     local function scaled(base, cap)
         return math.min(cap, math.max(base, math.floor(base * scale + 0.5)))
     end
+    local extra = math.max(0, (Addon.frame and Addon.frame:GetWidth() or WINDOW_WIDTH) - WINDOW_WIDTH)
     return {
-        looter = scaled(ROW_LOOTER_WIDTH, 110),
-        drop = scaled(ROW_DROP_WIDTH, 200),
-        equipped = scaled(ROW_EQUIPPED_WIDTH, 160),
+        looter = scaled(ROW_LOOTER_WIDTH, 110) + math.floor(extra * 0.2),
+        drop = scaled(ROW_DROP_WIDTH, 200) + math.floor(extra * 0.4),
+        equipped = scaled(ROW_EQUIPPED_WIDTH, 160) + math.ceil(extra * 0.4),
     }
 end
 
@@ -2047,7 +2046,6 @@ function Addon.SetLootChromeShown(shown)
 
     setShown(Addon.historyButton)
     setShown(Addon.demoButton)
-    setShown(Addon.qualityButton)
     if Addon.settingsButton then
         Addon.settingsButton:Show()
         Addon.settingsButton.returnIcon:SetShown(not shown)
@@ -2083,7 +2081,7 @@ end
 
 function Addon.HideLootRows()
     Addon.HideSettingsTooltip()
-    for index = 1, MAX_VISIBLE_ROWS do
+    for index = 1, #Addon.rowFrames do
         if Addon.rowFrames[index] then
             Addon.HideRowTooltip(Addon.rowFrames[index])
             Addon.rowFrames[index]:Hide()
@@ -2142,12 +2140,14 @@ local function RefreshRows()
             Addon.newLootButton:Hide()
         end
     end
+    Addon.EnsureLootRows()
     local rowHeight, rowStride, visibleCount, bodyHeight, rowStartY = Addon.LootRowMetrics()
     local extraSize = math.max(0, Addon.state.settings.fontSize - 12)
+    Addon.historyButton:SetWidth(HEADER_HISTORY_WIDTH + Addon.frame:GetWidth() - WINDOW_WIDTH)
     Addon.historyButton:SetHeight(math.max(22, bodyHeight + 6))
     local badgeWidth = 76
     Addon.scrollBadge:SetSize(badgeWidth, math.max(16, bodyHeight + 3))
-    Addon.historyButton:GetFontString():SetWidth(HEADER_HISTORY_WIDTH - (rowCount > visibleCount and badgeWidth + 40 or 36))
+    Addon.historyButton:GetFontString():SetWidth(Addon.historyButton:GetWidth() - (rowCount > visibleCount and badgeWidth + 40 or 36))
     Addon.newLootButton:SetHeight(math.max(22, bodyHeight + 3))
     Addon.newLootButton:SetWidth(math.max(100, bodyHeight * 6))
     local columnWidths = Addon.LootColumnWidths()
@@ -2204,7 +2204,7 @@ local function RefreshRows()
             Addon.scrollText:Hide()
         end
     end
-    for index = 1, MAX_VISIBLE_ROWS do
+    for index = 1, #Addon.rowFrames do
         local rowFrame = Addon.rowFrames[index]
         local row = displayRows[index]
         local firstEquipped, secondEquipped = Addon.EquippedItemLinks(row and row.equippedText)
@@ -2220,6 +2220,7 @@ local function RefreshRows()
             rowFrame.row = row
             rowFrame:ClearAllPoints()
             rowFrame:SetPoint("TOPLEFT", Addon.frame, "TOPLEFT", 10, rowStartY - ((index - 1) * rowStride))
+            rowFrame:SetWidth(ROW_WIDTH + Addon.frame:GetWidth() - WINDOW_WIDTH)
             rowFrame:SetHeight(rowHeight)
             rowFrame.looter:SetHeight(bodyHeight)
             rowFrame.looter:SetWidth(columnWidths.looter)
@@ -2280,7 +2281,7 @@ local function RefreshRows()
             rowFrame.trade:ClearAllPoints()
             rowFrame.trade:SetPoint("BOTTOMRIGHT", rowFrame, "BOTTOMRIGHT", -6, 2)
             rowFrame.trade:SetWidth(tradeWidth)
-            rowFrame.status:SetWidth((ROW_WIDTH - 6 - tradeWidth) - 8 - 6)
+            rowFrame.status:SetWidth((rowFrame:GetWidth() - 6 - tradeWidth) - 8 - 6)
             rowFrame.status:ClearAllPoints()
             rowFrame.status:SetPoint("BOTTOMLEFT", rowFrame, "BOTTOMLEFT", 8, 2)
             rowFrame.tradeInfo:ClearAllPoints()
@@ -4663,7 +4664,6 @@ function Addon.ScrollHistoryPicker(offset)
 end
 
 local function OpenHistoryMenu(owner)
-    Addon.HideQualityPicker()
     if Addon.historyPicker and Addon.historyPicker:IsShown() then Addon.HideHistoryMenu(); return end
     Addon.HideSettingsTooltip()
     if SafeCall(InCombatLockdown) == true then return end
@@ -4939,6 +4939,41 @@ local function CreateRow(parent, index)
     return row
 end
 
+function Addon.EnsureLootRows()
+    -- Reuse rows after shrinking; allocate extra frames only when first needed.
+    for index = #Addon.rowFrames + 1, Addon.GetVisibleRowCount() do
+        Addon.rowFrames[index] = CreateRow(Addon.frame, index)
+    end
+end
+
+function Addon.NormalizeWindowSize(value)
+    if type(value) ~= "table" then return nil end
+    local width, height = CleanNumber(value.width), CleanNumber(value.height)
+    if not width or not height or width ~= width or height ~= height
+        or width == math.huge or height == math.huge or width == -math.huge or height == -math.huge then return nil end
+    return { width = math.max(WINDOW_WIDTH, math.min(1000, width)),
+        height = math.max(WINDOW_HEIGHT, math.min(900, height)) }
+end
+
+function Addon.SaveWindowSize()
+    if not Addon.frame or type(DoYouNeedItDB) ~= "table" then return end
+    DoYouNeedItDB.windowSize = Addon.NormalizeWindowSize({width = Addon.frame:GetWidth(), height = Addon.frame:GetHeight()})
+end
+
+function Addon.StopWindowResize()
+    if not Addon.resizing then return end
+    Addon.resizing = nil
+    Addon.frame:StopMovingOrSizing()
+    Addon.SaveWindowSize()
+    Addon.SaveWindowPosition()
+end
+
+function Addon.ReflowWindow()
+    if not Addon.frame then return end
+    RefreshRows()
+    Addon.LayoutSettings()
+end
+
 function Addon.NormalizeWindowPosition(value)
     if type(value) ~= "table" then return nil end
     local anchors = { CENTER = true, TOP = true, BOTTOM = true, LEFT = true, RIGHT = true,
@@ -5091,6 +5126,17 @@ CreateUI = function()
     table.insert(UISpecialFrames, "DoYouNeedItFrame")
     frame:EnableMouse(true)
     frame:SetMovable(true)
+    frame:SetResizable(true)
+    if frame.SetResizeBounds then frame:SetResizeBounds(WINDOW_WIDTH, WINDOW_HEIGHT, 1000, 900)
+    else frame:SetMinResize(WINDOW_WIDTH, WINDOW_HEIGHT); frame:SetMaxResize(1000, 900) end
+    frame:SetScript("OnSizeChanged", function()
+        if not Addon.frame or Addon.resizeRefreshPending then return end
+        Addon.resizeRefreshPending = true
+        C_Timer.After(0, function()
+            Addon.resizeRefreshPending = nil
+            Addon.ReflowWindow()
+        end)
+    end)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", function(self)
@@ -5120,8 +5166,8 @@ CreateUI = function()
         RefreshRows()
     end)
     frame:SetScript("OnHide", function()
+        Addon.StopWindowResize()
         Addon.HideHistoryMenu()
-        Addon.HideQualityPicker()
         if Addon.linkFrame then Addon.linkFrame:Hide() end
         if type(Addon.EnterLootMode) == "function" then
             Addon.HideLootRows()
@@ -5181,23 +5227,6 @@ CreateUI = function()
     end)
     frame.historyButton:HookScript("OnLeave", HideItemTooltip)
     Addon.historyButton = frame.historyButton
-
-    frame.qualityButton = Addon.CreateFlatSettingsButton(frame, 22)
-    frame.qualityButton:SetPoint("LEFT", frame.historyButton, "RIGHT", 6, 0)
-    frame.qualityButton:SetSize(22, 22)
-    frame.qualityButton:SetScript("OnClick", Addon.ToggleQualityPicker)
-    frame.qualityButton:SetScript("OnEnter", function(button)
-        Addon.ShowTextTooltip(button, Core.QualityLabel(nil, ActiveLocale()))
-    end)
-    frame.qualityButton:SetScript("OnLeave", HideItemTooltip)
-    frame.qualityButton:SetScript("OnHide", Addon.HideQualityPicker)
-    for index = 1, 3 do
-        local line = frame.qualityButton:CreateTexture(nil, "ARTWORK")
-        line:SetColorTexture(0.55, 0.82, 0.94, 1)
-        line:SetSize(17 - index * 3, 2)
-        line:SetPoint("CENTER", frame.qualityButton, "CENTER", 0, 6 - index * 3)
-    end
-    Addon.qualityButton = frame.qualityButton
 
     frame.demoButton = Addon.CreateFlatSettingsButton(frame, 110)
     frame.demoButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -42)
@@ -5316,16 +5345,29 @@ CreateUI = function()
     RegisterFontString(frame.scrollText, 10, nil, true, nil, 11)
     Addon.scrollText = frame.scrollText
 
-    for index = 1, MAX_VISIBLE_ROWS do
+    for index = 1, 6 do
         Addon.rowFrames[index] = CreateRow(frame, index)
     end
 
     Addon.frame = frame
+    frame.resizeGrip = CreateFrame("Button", nil, frame)
+    frame.resizeGrip:SetSize(18, 18)
+    frame.resizeGrip:SetFrameLevel(frame:GetFrameLevel() + 20)
+    frame.resizeGrip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
+    frame.resizeGrip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    frame.resizeGrip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    frame.resizeGrip:SetScript("OnMouseDown", function(_, button)
+        if button ~= "LeftButton" or CleanBoolean(SafeCall(InCombatLockdown)) == true then return end
+        Addon.resizing = true
+        frame:StartSizing("BOTTOMRIGHT")
+    end)
+    frame.resizeGrip:SetScript("OnMouseUp", Addon.StopWindowResize)
+    local size = Addon.NormalizeWindowSize(DoYouNeedItDB and DoYouNeedItDB.windowSize)
+    if size then frame:SetSize(size.width, size.height) end
     _G.AntraktWindowLayers.Register(frame, function()
         if Addon.fontPickerFrame then Addon.fontPickerFrame:Hide() end
         Addon.HideLanguagePicker()
         Addon.HideHistoryMenu()
-        Addon.HideQualityPicker()
         if Addon.linkFrame then Addon.linkFrame:Hide() end
         Addon.HideSettingsTooltip()
     end)
@@ -5423,19 +5465,20 @@ local function ConfigureSliderTemplateLabels(slider, lowText, highText)
         Addon.ApplyRegionFont(valueText, font, size, "")
         SafeCall(valueText.Hide, valueText)
     end
+    -- The adjacent numeric value makes endpoint captions redundant in compact Settings.
     local low = GetDropdownChild(slider, "Low")
     if low then
         SafeCall(low.SetText, low, lowText or "")
         Addon.ApplyRegionFont(low, font, math.min(size, 10), "")
         SafeCall(low.SetTextColor, low, 0.51, 0.61, 0.70, 1)
-        SafeCall(low.Show, low)
+        SafeCall(low.Hide, low)
     end
     local high = GetDropdownChild(slider, "High")
     if high then
         SafeCall(high.SetText, high, highText or "")
         Addon.ApplyRegionFont(high, font, math.min(size, 10), "")
         SafeCall(high.SetTextColor, high, 0.51, 0.61, 0.70, 1)
-        SafeCall(high.Show, high)
+        SafeCall(high.Hide, high)
     end
 end
 
@@ -5455,61 +5498,59 @@ end
 
 function Addon.LayoutSettings()
     local frame = Addon.settingsFrame
-    if not frame then
-        return
-    end
-    local layoutPreview = Addon.sliderPreview and Addon.sliderPreview.fontSize
-    local size = tonumber(layoutPreview) or Addon.state.settings.fontSize
-    local extra = math.max(0, size - 12)
-    local height = SETTINGS_WINDOW_HEIGHT + 20 + extra * 13
-    frame:SetHeight(height - 66)
-    if Addon.contentMode == "settings" then
-        Addon.frame:SetHeight(height)
-    end
+    if not frame then return end
+    frame:SetSize(Addon.frame:GetWidth() - 32, Addon.frame:GetHeight() - 56)
+    local left = frame:GetWidth() - 172
+    local controlX = 126
     local function place(control, x, y)
         control:ClearAllPoints()
         control:SetPoint("TOPLEFT", frame, "TOPLEFT", x, -y)
     end
-    local function actionWidth(key, minimum, maximum)
-        local _, count = L(key):gsub("[^\128-\191]", "")
-        return math.min(maximum, math.max(minimum, math.ceil(count * 6.5) + 20))
-    end
+    frame.title:Hide()
+    frame.headerRule:Hide()
+    place(frame.whispersHeading, 12, 4)
+    place(frame.autoCheck, controlX, 24)
+    place(frame.delayLabel, 12, 52)
+    place(frame.delaySlider, controlX, 46)
+    place(frame.whisperLabel, 12, 76)
+    place(frame.whisperEditBox, 12, 88)
+    place(frame.whisperHelp, 12, 114)
+    place(frame.appearanceHeading, 12, 140)
+    place(frame.fontLabel, 12, 160)
+    place(frame.fontDropdown, controlX, 154)
+    place(frame.fontSizeLabel, 12, 190)
+    place(frame.fontSizeSlider, controlX, 184)
+    place(frame.languageLabel, 12, 220)
+    place(frame.languageDropdown, controlX, 214)
+    place(frame.whispersRule, 12, 20)
+    place(frame.appearanceRule, 12, 152)
     for _, label in ipairs({frame.delayLabel, frame.whisperLabel, frame.languageLabel, frame.fontLabel, frame.fontSizeLabel}) do
-        label:SetWidth(SETTINGS_CONTROL_X - 12 - 8)
+        label:SetWidth(controlX - 20)
     end
-    place(frame.title, 10, 2)
-    place(frame.whispersHeading, 12, 43)
-    place(frame.autoCheck, SETTINGS_CONTROL_X, 68 + extra)
-    place(frame.delayLabel, 12, 102 + extra * 2)
-    place(frame.delaySlider, SETTINGS_CONTROL_X, 96 + extra * 2.5)
-    place(frame.whisperLabel, 12, 139 + extra * 4)
-    place(frame.whisperEditBox, SETTINGS_CONTROL_X, 136 + extra * 4)
-    place(frame.whisperHelp, SETTINGS_CONTROL_X, 168 + extra * 5)
-    place(frame.appearanceHeading, 12, 207 + extra * 6)
-    place(frame.whispersRule, 12, 62)
-    place(frame.appearanceRule, 12, 226 + extra * 6)
-    place(frame.fontLabel, 12, 238 + extra * 7)
-    place(frame.fontDropdown, SETTINGS_CONTROL_X, 234 + extra * 7)
-    place(frame.fontSizeLabel, 12, 278 + extra * 9)
-    place(frame.fontSizeSlider, SETTINGS_CONTROL_X, 272 + extra * 9)
-    place(frame.languageLabel, 12, 316 + extra * 11)
-    place(frame.languageDropdown, SETTINGS_CONTROL_X, 312 + extra * 11)
-    place(frame.fontWarning, 12, 348 + extra * 12)
+    for _, heading in ipairs({frame.whispersHeading, frame.appearanceHeading}) do heading:SetWidth(left - 24) end
+    for _, rule in ipairs({frame.whispersRule, frame.appearanceRule}) do rule:SetWidth(left - 24) end
     frame.autoCheck:SetSize(20, 20)
-    frame.whisperEditBox:SetHeight(math.max(26, size + 8))
-    frame.languageDropdown:SetHeight(math.max(26, size + 8))
-    frame.fontDropdown:SetHeight(math.max(26, size + 8))
-    frame.whisperResetButton:SetSize(actionWidth("Reset", 60, 112), 24)
-    frame.autoCheckLabelButton:SetHeight(math.max(24, size + 8))
-    frame.whisperEditBox:SetWidth(SETTINGS_EDITBOX_WIDTH + 100 - extra * 2
-        - frame.whisperResetButton:GetWidth())
+    frame.autoCheckLabel:SetWidth(left - controlX - 28)
+    frame.autoCheckLabelButton:SetSize(left - controlX - 24, 24)
+    local _, resetCharacters = L("Reset"):gsub("[^\128-\191]", "")
+    frame.whisperResetButton:SetSize(math.min(100, math.max(60, resetCharacters * 6.5 + 20)), 24)
+    frame.whisperEditBox:SetSize(left - 32 - frame.whisperResetButton:GetWidth(), 24)
+    frame.whisperHelp:SetWidth(left - 24)
+    frame.fontDropdown:SetSize(left - controlX - 12, 24)
+    frame.languageDropdown:SetSize(left - controlX - 12, 24)
+    frame.delaySlider:SetWidth(left - controlX - 58)
+    frame.fontSizeSlider:SetWidth(left - controlX - 58)
     frame.whispersSurface:ClearAllPoints()
-    frame.whispersSurface:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -34)
-    frame.whispersSurface:SetPoint("BOTTOMRIGHT", frame, "TOPRIGHT", -4, -(188 + extra * 6))
+    frame.whispersSurface:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+    frame.whispersSurface:SetPoint("BOTTOMRIGHT", frame, "TOPLEFT", left, -128)
     frame.appearanceSurface:ClearAllPoints()
-    frame.appearanceSurface:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -(198 + extra * 6))
-    frame.appearanceSurface:SetPoint("BOTTOMRIGHT", frame, "TOPRIGHT", -4, -(374 + extra * 12))
-
+    frame.appearanceSurface:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -136)
+    frame.appearanceSurface:SetPoint("BOTTOMRIGHT", frame, "TOPLEFT", left, -244)
+    place(frame.qualityHeading, left + 22, 4)
+    frame.qualityHeading:SetWidth(138)
+    for quality = 0, 6 do place(frame.qualityButtons[quality + 1], left + 20, 26 + quality * 25) end
+    place(frame.fontWarning, left + 22, 218)
+    frame.fontWarning:SetWidth(138)
 end
 
 RefreshSettingsControls = function()
@@ -5518,6 +5559,12 @@ RefreshSettingsControls = function()
     end
     local settings = Addon.state.settings
     Addon.LayoutSettings()
+    Addon.settingsFrame.qualityHeading:SetText(Core.QualityLabel(nil, ActiveLocale()))
+    for quality = 0, 6 do
+        local row = Addon.settingsFrame.qualityButtons[quality + 1]
+        row.text:SetText("|cff" .. Core.QUALITY_COLORS[quality] .. Core.QualityLabel(quality, ActiveLocale()) .. "|r")
+        row.check:SetShown(settings.qualityFilters[quality])
+    end
     Addon.settingsFrame.whispersHeading:SetText(L("Whispers"))
     Addon.settingsFrame.appearanceHeading:SetText(L("Appearance"))
     Addon.settingsFrame.whisperHelp:SetText(L("Use {item} for the dropped item."))
@@ -5978,7 +6025,6 @@ local function ShowFontPicker()
 end
 
 local function ToggleFontPicker()
-    Addon.HideQualityPicker()
     if Addon.fontPickerFrame and Addon.fontPickerFrame:IsShown() then
         HideFontPicker()
         return
@@ -6028,11 +6074,6 @@ function Addon.AnchorPopup(popup, trigger, catcher)
     _G.AntraktWindowLayers.Focus(Addon.frame)
 end
 
-function Addon.HideQualityPicker()
-    if Addon.qualityPicker then Addon.qualityPicker:Hide() end
-    if Addon.qualityCatcher then Addon.qualityCatcher:Hide() end
-end
-
 function Addon.SetQualityVisible(quality, enabled)
     Addon.state.settings.qualityFilters[quality] = enabled == true
     Addon.rowScrollOffset = 0
@@ -6050,69 +6091,7 @@ function Addon.SetQualityVisible(quality, enabled)
     cancel(Addon.state.sessionRows)
     SaveDB()
     RefreshRows()
-end
-
-function Addon.ToggleQualityPicker()
-    if Addon.qualityPicker and Addon.qualityPicker:IsShown() then Addon.HideQualityPicker(); return end
-    if CleanBoolean(SafeCall(InCombatLockdown)) == true then return end
-    HideFontPicker()
-    Addon.HideLanguagePicker()
-    Addon.HideQualityPicker()
-    Addon.HideHistoryMenu()
-    if not Addon.qualityPicker then
-        local catcher = CreateFrame("Button", "DoYouNeedItQualityCatcher", UIParent)
-        catcher:SetAllPoints(UIParent)
-        catcher:EnableMouse(true)
-        catcher:SetScript("OnMouseDown", Addon.HideQualityPicker)
-        catcher:Hide()
-        Addon.qualityCatcher = catcher
-        local picker = CreateFrame("Frame", "DoYouNeedItQualityPicker", UIParent, "BackdropTemplate")
-        picker:SetSize(220, 210)
-        Addon.StylePopup(picker)
-        picker:EnableMouse(true)
-        picker:SetScript("OnHide", function() catcher:Hide() end)
-        picker.heading = picker:CreateFontString(nil, "OVERLAY")
-        picker.heading:SetPoint("TOPLEFT", 12, -10)
-        RegisterFontString(picker.heading, 12, nil, true, nil, 12)
-        picker.buttons = {}
-        for quality = 0, 6 do
-            local value = quality
-            local row = CreateFrame("Button", nil, picker)
-            row:SetSize(200, 24)
-            row:SetPoint("TOPLEFT", 10, -32 - quality * 24)
-            row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
-            row.box = CreateFrame("Frame", nil, row, "BackdropTemplate")
-            row.box:SetSize(16, 16)
-            row.box:SetPoint("LEFT", 2, 0)
-            Addon.StylePopup(row.box)
-            row.check = row.box:CreateTexture(nil, "OVERLAY")
-            row.check:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
-            row.check:SetSize(20, 20)
-            row.check:SetPoint("CENTER", row.box, "CENTER", 0, 0)
-            row.text = row:CreateFontString(nil, "OVERLAY")
-            row.text:SetPoint("LEFT", 26, 0)
-            row.text:SetWidth(174)
-            row.text:SetJustifyH("LEFT")
-            RegisterFontString(row.text, 12, nil, true, nil, 12)
-            row:SetScript("OnClick", function()
-                Addon.SetQualityVisible(value, not Addon.state.settings.qualityFilters[value])
-                row.check:SetShown(Addon.state.settings.qualityFilters[value])
-            end)
-            picker.buttons[quality + 1] = row
-        end
-        picker:Hide()
-        Addon.qualityPicker = picker
-        table.insert(UISpecialFrames, "DoYouNeedItQualityPicker")
-    end
-    local picker = Addon.qualityPicker
-    picker.heading:SetText(Core.QualityLabel(nil, ActiveLocale()))
-    for quality = 0, 6 do
-        local row = picker.buttons[quality + 1]
-        row.text:SetText("|cff" .. Core.QUALITY_COLORS[quality] .. Core.QualityLabel(quality, ActiveLocale()) .. "|r")
-        row.check:SetShown(Addon.state.settings.qualityFilters[quality])
-    end
-    Addon.AnchorPopup(picker, Addon.qualityButton, Addon.qualityCatcher)
-    Addon.ShowPopupSafely(picker, Addon.qualityCatcher)
+    RefreshSettingsControls()
 end
 
 function Addon.HideLanguagePicker()
@@ -6198,7 +6177,6 @@ function Addon.CreateSettingsDropdown(name, parent, onClick)
 end
 
 function Addon.ToggleLanguagePicker()
-    Addon.HideQualityPicker()
     if SafeCall(InCombatLockdown) == true then return end
     if Addon.languagePicker and Addon.languagePicker:IsShown() then Addon.HideLanguagePicker(); return end
     HideFontPicker()
@@ -6301,9 +6279,6 @@ function Addon.EnterLootMode()
         CancelSettingsPreview()
     end
     Addon.contentMode = "loot"
-    if Addon.frame then
-        Addon.frame:SetHeight(WINDOW_HEIGHT)
-    end
     if Addon.settingsFrame and Addon.settingsFrame:IsShown() then
         Addon.settingsFrame:Hide()
     end
@@ -6324,8 +6299,8 @@ CreateSettingsUI = function()
     end
 
     local frame = CreateFrame("Frame", "DoYouNeedItSettingsFrame", Addon.frame)
-    frame:SetSize(508, SETTINGS_WINDOW_HEIGHT - 66)
-    frame:SetPoint("TOPLEFT", Addon.frame, "TOPLEFT", 16, -50)
+    frame:SetSize(Addon.frame:GetWidth() - 32, Addon.frame:GetHeight() - 56)
+    frame:SetPoint("TOPLEFT", Addon.frame, "TOPLEFT", 16, -44)
     frame:SetFrameLevel((Addon.frame and Addon.frame:GetFrameLevel() or 0) + 5)
     frame:EnableMouse(true)
     frame:SetScript("OnHide", function()
@@ -6358,11 +6333,11 @@ CreateSettingsUI = function()
         local band = frame:CreateTexture(nil, "BORDER")
         band:SetPoint("TOPLEFT", surface, "TOPLEFT", 0, 0)
         band:SetPoint("TOPRIGHT", surface, "TOPRIGHT", 0, 0)
-        band:SetHeight(29)
+        band:SetHeight(20)
         band:SetColorTexture(0.075, 0.105, 0.14, 0.95)
         local accent = frame:CreateTexture(nil, "ARTWORK")
         accent:SetPoint("TOPLEFT", band, "TOPLEFT", 0, 0)
-        accent:SetSize(2, 29)
+        accent:SetSize(2, 20)
         accent:SetColorTexture(0.22, 0.62, 0.82, 0.9)
     end
 
@@ -6638,6 +6613,38 @@ CreateSettingsUI = function()
     RegisterFontString(frame.fontWarning, 11, nil, true)
     Addon.fontWarning = frame.fontWarning
 
+    frame.qualityHeading = sectionLabel("Item quality")
+    frame.qualityButtons = {}
+    for quality = 0, 6 do
+        local value = quality
+        local row = CreateFrame("Button", nil, frame)
+        row:SetSize(144, 24)
+        row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+        row.box = CreateFrame("Frame", nil, row, "BackdropTemplate")
+        row.box:SetSize(16, 16)
+        row.box:SetPoint("LEFT", 2, 0)
+        Addon.StylePopup(row.box)
+        row.check = row.box:CreateTexture(nil, "OVERLAY")
+        row.check:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
+        row.check:SetSize(20, 20)
+        row.check:SetPoint("CENTER", row.box, "CENTER", 0, 0)
+        row.text = row:CreateFontString(nil, "OVERLAY")
+        row.text:SetPoint("LEFT", 26, 0)
+        row.text:SetWidth(118)
+        row.text:SetJustifyH("LEFT")
+        RegisterFontString(row.text, 12, nil, true, nil, 12)
+        row:SetScript("OnClick", function()
+            Addon.SetQualityVisible(value, not Addon.state.settings.qualityFilters[value])
+            row.check:SetShown(Addon.state.settings.qualityFilters[value])
+        end)
+        frame.qualityButtons[quality + 1] = row
+    end
+    -- Settings stays readable and compact independently of the loot text size.
+    for _, entry in ipairs(Addon.fontStrings) do
+        local parent = entry.fontString
+        while parent and parent ~= frame do parent = SafeCall(parent.GetParent, parent) end
+        if parent == frame then entry.maxSize = math.min(entry.maxSize or 12, 12) end
+    end
     Addon.settingsFrame = frame
     frame:Hide()
     RefreshSettingsControls()
@@ -6648,7 +6655,6 @@ OpenSettings = function()
     CreateUI()
     CreateSettingsUI()
     Addon.contentMode = "settings"
-    Addon.frame:SetHeight(SETTINGS_WINDOW_HEIGHT)
     Addon.frame:Show()
     Addon.settingsFrame:Show()
     RefreshRows()
@@ -6953,7 +6959,7 @@ function Addon.RunSelfTest(mode)
             Addon.frame:Show()
             demoRendered = 0
             local firstLink, firstOwner = nil, nil
-            for index = 1, MAX_VISIBLE_ROWS do
+            for index = 1, #Addon.rowFrames do
                 local rowFrame = Addon.rowFrames[index]
                 if rowFrame and CleanBoolean(SafeCall(rowFrame.IsShown, rowFrame)) == true and rowFrame.row then
                     demoRendered = demoRendered + 1
@@ -7534,6 +7540,8 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "PLAYER_LOGOUT" then
         Addon.CommitFocusedWhisperTemplate()
         Addon.CommitSliderChanges()
+        Addon.StopWindowResize()
+        Addon.SaveWindowSize()
         Addon.SaveWindowPosition()
         if Addon.state and (#Addon.state.currentRows > 0 or #(Addon.state.allRows or {}) > 0) then
             Addon.CompleteCurrentGroup(Addon.currentEncounterName)
@@ -7564,11 +7572,10 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         BuildRoster()
         QueueEquipmentScan("entering_world", true)
     elseif event == "PLAYER_REGEN_DISABLED" then
-        Addon.HideQualityPicker()
+        Addon.StopWindowResize()
         HideFontPicker()
         Addon.HideLanguagePicker()
         Addon.HideHistoryMenu()
-        Addon.HideQualityPicker()
         if Addon.linkFrame then Addon.linkFrame:Hide() end
     elseif event == "PLAYER_REGEN_ENABLED" then
         Addon.ResumeInspectWorkAfterCombat(3)

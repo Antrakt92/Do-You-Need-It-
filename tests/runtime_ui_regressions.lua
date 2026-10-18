@@ -27,7 +27,7 @@ local function testSettingsControlsStayInsideWindow()
     local panelTop = topOffset(settings)
 
     assertEqual(main:GetWidth(), 540, "settings retain compact window width")
-    assertTruthy(main:GetHeight() > 300, "settings expand vertically to fit their controls")
+    assertTruthy(main:GetHeight() == 300, "settings fit the same dimensions as loot")
     assertTruthy(panelTop + settings:GetHeight() <= main:GetHeight() - 8, "settings panel fits above the window bottom border")
     for _, control in ipairs({
         settings.autoCheck,
@@ -52,7 +52,7 @@ local function testLeavingSettingsRestoresLootHeight()
     local main = h.env.DoYouNeedItFrame
     assertEqual(main:GetHeight(), 300, "loot starts at compact height")
     h:slash("settings")
-    assertTruthy(main:GetHeight() > 300, "settings use expanded height")
+    assertTruthy(main:GetHeight() == 300, "settings share compact loot dimensions")
     h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
     assertEqual(main:GetHeight(), 300, "Back restores loot height")
     h:slash("settings")
@@ -131,7 +131,7 @@ local function testHistoryFinalizationKeepsSettings()
     h:runTimers(11)
     assertEqual(#h.env.DoYouNeedItDB.history, 1, "loot still finalizes into history")
     assertEqual(settings:IsShown(), true, "background history finalization does not close settings")
-    assertTruthy(h.env.DoYouNeedItFrame:GetHeight() > 300, "background finalization retains settings height")
+    assertTruthy(h.env.DoYouNeedItFrame:GetHeight() == 300, "background finalization retains compact settings height")
 end
 
 local function addRealGear(h, itemID)
@@ -1013,9 +1013,9 @@ local function testSettingsSectionsAndCompactActions()
                 "language follows the font size on a separate row")
             assertTruthy(topOffset(frame.fontDropdown) + frame.fontDropdown:GetHeight() + 6 <= topOffset(frame.fontSizeSlider),
                 "font choice cannot overlap the size slider")
-            assertTruthy(frame.languageDropdown:GetHeight() >= size + 8 and frame.fontDropdown:GetHeight() >= size + 8,
+            assertTruthy(frame.languageDropdown:GetHeight() >= frame.languageDropdown.Text.fontSize + 8 and frame.fontDropdown:GetHeight() >= frame.fontDropdown.Text.fontSize + 8,
                 "large dropdown captions have vertical padding")
-            assertTruthy(126 + frame.whisperEditBox:GetWidth() + 8 + frame.whisperResetButton:GetWidth() <= frame:GetWidth() - 4,
+            assertTruthy(12 + frame.whisperEditBox:GetWidth() + 8 + frame.whisperResetButton:GetWidth() <= frame:GetWidth() - 4,
                 "message and Reset fit in one aligned row")
         end
     end

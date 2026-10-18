@@ -29,15 +29,18 @@ Retail release does not select the Forever file. The screenshots below show Reta
 
 ## Quality filter
 
-Click the small filter icon between the encounter selector and Demo to choose
-which item qualities appear. Each checkbox is independent: you can keep green
+Open Settings to choose which item qualities appear using the checkboxes on
+the right. Each checkbox is independent: you can keep green
 and purple gear while hiding blue gear. The same selection applies to current
 loot, session history, saved encounters and Demo, and is saved across reloads.
 Green and higher qualities are shown by default; gray and white can be enabled.
 Hidden gear remains in retained history and reappears when enabled. Hidden
 qualities never open the window or start automatic whispers; showing an old row
 again does not send a delayed whisper. Non-equipment loot remains excluded.
-The filter is shared by Retail and Forever and does not enlarge the window.
+The filter is shared by Retail and Forever. Settings uses the same compact
+window size as the loot view. Drag the lower-right corner to resize the window;
+columns and the number of visible loot rows adapt, and your size is saved across
+reloads. Switching between Settings and loot keeps the same dimensions.
 
 ## Install
 
