@@ -248,4 +248,98 @@ do
     check(settings:IsShown() and button.returnIcon:IsShown(), "header navigation remains repeatable")
 end
 
+for _, locale in ipairs({"enUS", "ruRU", "deDE", "esES", "esMX", "frFR", "itIT", "ptBR", "koKR", "zhCN", "zhTW"}) do
+    for _, size in ipairs({8, 24}) do
+        local history = {}
+        for index = 1, 10 do
+            history[index] = {instanceName = "The Venomous Abyss", encounterName = "Boss " .. index,
+                endedAt = 1700000000 - index * 60, rows = {}, dropCount = index}
+        end
+        local h = Harness.new({db = {settings = {forceLocale = locale, fontSize = size},
+            characters = {["Player-Ravencrest"] = {history = history}}}})
+        h:loadAddon(); h:slash("")
+        local main = h.env.DoYouNeedItFrame
+        check(main.historyButton.template == "BackdropTemplate", "history selector has no native red button skin")
+        check(main.historyButton.arrow:GetText() == "v", "selector exposes its menu affordance")
+        click(main.historyButton)
+        local picker = h.env.DoYouNeedItHistoryPicker
+        check(picker and picker:IsVisible(), "custom history picker opens")
+        check(picker:GetParent() == h.env.UIParent and picker.strata == "DIALOG"
+            and picker:GetFrameLevel() > main:GetFrameLevel(), "history popup stays above the owner")
+        check(picker.clampedToScreen and picker:GetHeight() <= 364, "long history stays bounded")
+        check(picker.backdropColor[4] >= 0.99, "opaque surface separates history from loot behind it")
+        check(#picker.buttons == 12, "current, session and ten saved groups remain available")
+        check(picker.buttons[1].selected and picker.buttons[1].accent:IsShown(), "current view has a selected marker")
+        local saved = picker.buttons[3]
+        check(saved.primary:GetText() == "Boss 1", "boss has a separate primary line")
+        check(saved.secondary:GetText():find("The Venomous Abyss", 1, true), "instance appears in secondary metadata")
+        check(saved.primary.fontSize <= 12 and saved.secondary.fontSize <= 10, "history type stays compact at all HUD sizes")
+        check(picker.maxScroll > 0 and picker.thumb:IsShown(), "long history offers a scroll indicator")
+        picker:FireScript("OnMouseWheel", -100)
+        check(picker.scroll:GetVerticalScroll() == picker.maxScroll, "history scroll clamps to its last entry")
+        picker:FireScript("OnMouseWheel", 100)
+        check(picker.scroll:GetVerticalScroll() == 0, "history scroll clamps at the top")
+        saved:FireScript("OnEnter")
+        check(h.env.GameTooltip:GetText() == saved.text, "full date and name remain available on hover")
+        click(saved)
+        check(not picker:IsShown() and not h.env.GameTooltip:IsShown(), "selection dismisses popup and owned tooltip")
+        check(main.historyButton:GetText():find("Boss 1", 1, true), "selection opens the chosen saved encounter")
+        released(h)
+        click(main.historyButton)
+        check(picker.buttons[3].selected, "reopened menu marks the selected history group")
+        click(main.historyButton)
+        check(not picker:IsShown(), "second trigger click closes the popup")
+        released(h)
+        click(main.historyButton)
+        h:slash("settings")
+        check(not picker:IsShown(), "Settings dismisses history")
+        released(h)
+        click(main.settingsButton)
+        click(main.historyButton)
+        h:fire("PLAYER_REGEN_DISABLED")
+        check(not picker:IsShown(), "combat dismisses history")
+        released(h)
+        h:fire("PLAYER_REGEN_ENABLED")
+        click(main.historyButton)
+        main:Hide()
+        check(not picker:IsShown(), "owner hide dismisses history")
+        released(h)
+    end
+end
+
+do
+    local h = Harness.new()
+    h:loadAddon(); h:slash("")
+    h.env.UIParent.GetWidth = function() return 280 end
+    h.env.UIParent.GetHeight = function() return 180 end
+    local trigger = h.env.DoYouNeedItFrame.historyButton
+    trigger.GetBottom = function() return 5 end
+    click(trigger)
+    local picker = h.env.DoYouNeedItHistoryPicker
+    check(picker:GetWidth() <= 256 and picker:GetHeight() <= 156, "history fits a narrow viewport")
+    check(picker.points[1][1] == "BOTTOMLEFT", "history flips above a low trigger")
+    local external = h:newFrame("Button", nil, h.env.UIParent)
+    h.env.GameTooltip:SetOwner(external, "ANCHOR_RIGHT")
+    h.env.GameTooltip:SetText("Unrelated help")
+    h.env.GameTooltip:Show()
+    picker:Hide()
+    check(h.env.GameTooltip:IsShown(), "history dismissal preserves unrelated tooltips")
+    released(h)
+    click(trigger)
+    for _, catcher in ipairs(catchers(h)) do
+        if catcher:IsShown() then catcher:FireScript("OnMouseDown") end
+    end
+    check(not picker:IsShown(), "outside click dismisses history")
+    released(h)
+    local escapeRegistered = false
+    for _, name in ipairs(h.env.UISpecialFrames) do
+        if name == "DoYouNeedItHistoryPicker" then escapeRegistered = true end
+    end
+    check(escapeRegistered, "history participates in Escape dismissal")
+    picker.Show = function() error("synthetic history popup failure") end
+    click(trigger)
+    check(not picker:IsShown(), "failed history popup stays closed")
+    released(h)
+end
+
 print("Settings popup regressions: PASS (" .. count .. " assertions)")

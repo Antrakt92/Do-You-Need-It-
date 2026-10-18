@@ -18,6 +18,7 @@ Run `/reload`, then `/dyni` to open the window. `/dyni status` should report `bu
 - **Dropped**, **Equipped now**, and **Trade** columns show the item, the looter's equipment, and its estimated transfer status. Hover item links for tooltips; paired rings, trinkets, and weapons each have their own target.
 - **Ask** appears only on eligible drops your character can use. It does not mean the item is an upgrade for you.
 - Equipment comparisons use live inspection when available, with items labelled **Cached:** when using an earlier scan. `/dyni scan` queues a group equipment scan before a dungeon or raid.
+- The history selector lists encounters with their instance, date, and drop count. Scroll the menu to browse older runs; hover an entry for its full name.
 - History is saved per character: up to 50 session drops and 10 completed boss/run groups. New drops preserve your reading position; **New loot** returns to incoming drops.
 
 ### What Trade means

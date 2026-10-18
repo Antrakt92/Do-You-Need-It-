@@ -1985,6 +1985,7 @@ end
 function Addon.HideSettingsTooltip()
     if GameTooltip and ((Addon.settingsButton
         and CleanBoolean(SafeCall(GameTooltip.IsOwned, GameTooltip, Addon.settingsButton)) == true)
+        or (Addon.historyButton and CleanBoolean(SafeCall(GameTooltip.IsOwned, GameTooltip, Addon.historyButton)) == true)
         or (Addon.demoButton and CleanBoolean(SafeCall(GameTooltip.IsOwned, GameTooltip, Addon.demoButton)) == true)) then
         HideItemTooltip()
     end
@@ -2060,6 +2061,7 @@ function Addon.HideLootRows()
 end
 
 local function RefreshRows()
+    Addon.HideHistoryMenu()
     if not Addon.frame then
         return
     end
@@ -2100,9 +2102,9 @@ local function RefreshRows()
     local rowHeight, rowStride, visibleCount, bodyHeight, rowStartY = Addon.LootRowMetrics()
     local extraSize = math.max(0, Addon.state.settings.fontSize - 12)
     Addon.historyButton:SetHeight(math.max(22, bodyHeight + 6))
-    local badgeWidth = math.max(76, bodyHeight * 7)
+    local badgeWidth = 76
     Addon.scrollBadge:SetSize(badgeWidth, math.max(16, bodyHeight + 3))
-    Addon.historyButton:GetFontString():SetWidth(HEADER_HISTORY_WIDTH - badgeWidth - 24)
+    Addon.historyButton:GetFontString():SetWidth(HEADER_HISTORY_WIDTH - (rowCount > visibleCount and badgeWidth + 40 or 36))
     Addon.newLootButton:SetHeight(math.max(22, bodyHeight + 3))
     Addon.newLootButton:SetWidth(math.max(100, bodyHeight * 6))
     local columnWidths = Addon.LootColumnWidths()
@@ -4519,25 +4521,156 @@ function Addon.HistoryGroupMenuTitle(group, index)
     return title
 end
 
+function Addon.HideHistoryMenu()
+    if Addon.historyPicker and Addon.historyPicker:IsShown() then Addon.historyPicker:Hide() end
+    if Addon.historyCatcher then Addon.historyCatcher:Hide() end
+end
+
+function Addon.CreateHistoryPicker()
+    local picker = CreateFrame("Frame", "DoYouNeedItHistoryPicker", UIParent, "BackdropTemplate")
+    Addon.StylePopup(picker)
+    picker:SetClampedToScreen(true)
+    picker:EnableMouse(true)
+    picker.buttons = {}
+    local catcher = CreateFrame("Frame", nil, UIParent)
+    catcher:SetAllPoints(UIParent)
+    catcher:EnableMouse(true)
+    catcher:SetScript("OnMouseDown", Addon.HideHistoryMenu)
+    catcher:Hide()
+    local scroll = CreateFrame("ScrollFrame", nil, picker)
+    scroll:SetPoint("TOPLEFT", 6, -6)
+    scroll:SetPoint("BOTTOMRIGHT", -10, 6)
+    local content = CreateFrame("Frame", nil, scroll)
+    scroll:SetScrollChild(content)
+    picker.scroll, picker.content = scroll, content
+    picker.track = picker:CreateTexture(nil, "ARTWORK")
+    picker.track:SetPoint("TOPRIGHT", -4, -6)
+    picker.track:SetWidth(2)
+    picker.track:SetColorTexture(0.16, 0.25, 0.30, 1)
+    picker.thumb = picker:CreateTexture(nil, "OVERLAY")
+    picker.thumb:SetWidth(2)
+    picker.thumb:SetColorTexture(0.38, 0.64, 0.76, 1)
+    picker:EnableMouseWheel(true)
+    picker:SetScript("OnMouseWheel", function(_, delta)
+        local offset = CleanNumber(SafeCall(scroll.GetVerticalScroll, scroll)) or 0
+        Addon.ScrollHistoryPicker(offset - (CleanNumber(delta) or 0) * 44)
+    end)
+    picker:SetScript("OnHide", function()
+        catcher:Hide()
+        for _, button in ipairs(picker.buttons) do
+            if GameTooltip and CleanBoolean(SafeCall(GameTooltip.IsOwned, GameTooltip, button)) == true then HideItemTooltip(); break end
+        end
+    end)
+    picker:Hide()
+    Addon.historyPicker, Addon.historyCatcher = picker, catcher
+    if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "DoYouNeedItHistoryPicker") end
+end
+
+function Addon.ScrollHistoryPicker(offset)
+    local picker = Addon.historyPicker
+    offset = math.max(0, math.min(picker.maxScroll or 0, offset))
+    picker.scroll:SetVerticalScroll(offset)
+    picker.thumb:ClearAllPoints()
+    local travel = picker.viewportHeight - picker.thumb:GetHeight()
+    local y = picker.maxScroll > 0 and offset / picker.maxScroll * travel or 0
+    picker.thumb:SetPoint("TOPRIGHT", picker, "TOPRIGHT", -4, -6 - y)
+end
+
 local function OpenHistoryMenu(owner)
-    if MenuUtil and type(MenuUtil.CreateContextMenu) == "function" then
-        MenuUtil.CreateContextMenu(owner, function(_, rootDescription)
-            rootDescription:CreateButton(L("Current"), function()
-                SelectView("current")
-            end)
-            rootDescription:CreateButton(L("This Session"), function()
-                SelectView("session")
-            end)
-            for index = 1, #Addon.state.history do
-                local group = Addon.state.history[index]
-                rootDescription:CreateButton(Addon.HistoryGroupMenuTitle(group, index), function()
-                    SelectView("history", index)
-                end)
-            end
-        end)
-    else
-        CycleHistoryView()
+    if Addon.historyPicker and Addon.historyPicker:IsShown() then Addon.HideHistoryMenu(); return end
+    Addon.HideSettingsTooltip()
+    if SafeCall(InCombatLockdown) == true then return end
+    if not Addon.historyPicker then Addon.CreateHistoryPicker() end
+    local picker = Addon.historyPicker
+    local entries = {
+        {text = L("Current"), primary = L("Current"), view = "current"},
+        {text = L("This Session"), primary = L("This Session"), view = "session"},
+    }
+    for index, group in ipairs(Addon.state.history) do
+        local full = Addon.HistoryGroupMenuTitle(group, index)
+        local primary = CleanString(group.encounterName) or CleanString(group.instanceName) or CleanString(group.title)
+        if not primary or primary == "" then primary = Core.GetHistoryGroupTitle(group, ActiveLocale()) or (L("History") .. " " .. index) end
+        local detail = {}
+        local timestamp = Addon.FormatHistoryTimestamp(group.endedAt or group.startedAt)
+        if timestamp then detail[#detail + 1] = timestamp end
+        if group.instanceName and group.instanceName ~= primary then detail[#detail + 1] = group.instanceName end
+        local count = (Core.GetHistoryGroupTitle(group, ActiveLocale()) or ""):match("(%([^()]*%))$")
+        if count then detail[#detail + 1] = count end
+        entries[#entries + 1] = {text = full, primary = primary, secondary = table.concat(detail, " · "), view = "history", group = group}
     end
+    local screenWidth = CleanNumber(SafeCall(UIParent.GetWidth, UIParent)) or 1920
+    local screenHeight = CleanNumber(SafeCall(UIParent.GetHeight, UIParent)) or 1080
+    local width = math.min(440, math.max(160, screenWidth - 24))
+    local height = math.min(#entries * 44 + 12, math.max(56, math.min(364, screenHeight - 24)))
+    picker:SetSize(width, height)
+    picker.viewportHeight = height - 12
+    picker.content:SetSize(width - 16, #entries * 44)
+    picker.maxScroll = math.max(0, #entries * 44 - picker.viewportHeight)
+    picker.track:SetHeight(picker.viewportHeight)
+    picker.thumb:SetHeight(math.max(16, picker.viewportHeight * picker.viewportHeight / (#entries * 44)))
+    picker.track:SetShown(picker.maxScroll > 0)
+    picker.thumb:SetShown(picker.maxScroll > 0)
+    local selectedIndex = 1
+    for index, entry in ipairs(entries) do
+        local button = picker.buttons[index]
+        if not button then
+            button = CreateFrame("Button", nil, picker.content)
+            button.bg = button:CreateTexture(nil, "BACKGROUND")
+            button.bg:SetAllPoints()
+            button.accent = button:CreateTexture(nil, "ARTWORK")
+            button.accent:SetPoint("TOPLEFT", 0, -6)
+            button.accent:SetSize(2, 32)
+            button.accent:SetColorTexture(0.30, 0.67, 0.84, 1)
+            button.primary = button:CreateFontString(nil, "OVERLAY")
+            button.primary:SetJustifyH("LEFT")
+            KeepOneLine(button.primary)
+            RegisterFontString(button.primary, 12, nil, true, true, 12)
+            button.secondary = button:CreateFontString(nil, "OVERLAY")
+            button.secondary:SetPoint("TOPLEFT", 12, -25)
+            button.secondary:SetWidth(width - 42)
+            button.secondary:SetJustifyH("LEFT")
+            button.secondary:SetTextColor(0.55, 0.66, 0.74, 1)
+            KeepOneLine(button.secondary)
+            RegisterFontString(button.secondary, 10, nil, true, true, 10)
+            button:SetScript("OnEnter", function(self)
+                self.bg:SetColorTexture(0.12, 0.21, 0.27, 1)
+                Addon.ShowTextTooltip(self, self.text)
+            end)
+            button:SetScript("OnLeave", function(self)
+                self.bg:SetColorTexture(0.08, 0.16, 0.21, self.selected and 1 or 0)
+                HideItemTooltip()
+            end)
+            button:SetScript("OnClick", function(self)
+                local view, group = self.view, self.group
+                Addon.HideHistoryMenu()
+                if view ~= "history" then SelectView(view); return end
+                -- Resolve the saved object again; history may have moved since opening.
+                for historyIndex, current in ipairs(Addon.state.history) do
+                    if current == group then SelectView("history", historyIndex); return end
+                end
+            end)
+            picker.buttons[index] = button
+        end
+        button.text, button.view, button.group = entry.text, entry.view, entry.group
+        button.selected = Addon.selectedView == entry.view and (entry.view ~= "history" or Addon.state.history[Addon.selectedHistoryIndex] == entry.group)
+        if button.selected then selectedIndex = index end
+        button:SetSize(width - 16, 44)
+        button:ClearAllPoints(); button:SetPoint("TOPLEFT", 0, -(index - 1) * 44)
+        button.primary:ClearAllPoints(); button.primary:SetPoint("TOPLEFT", 12, entry.secondary and entry.secondary ~= "" and -7 or -15)
+        button.primary:SetWidth(width - 42)
+        button.primary:SetText(entry.primary)
+        button.primary:SetTextColor(button.selected and 0.80 or 0.87, button.selected and 0.93 or 0.91, 0.98, 1)
+        button.secondary:SetWidth(width - 42)
+        button.secondary:SetText(entry.secondary or "")
+        button.accent:SetShown(button.selected)
+        button.bg:SetColorTexture(0.08, 0.16, 0.21, button.selected and 1 or 0)
+        button:Show()
+    end
+    for index = #entries + 1, #picker.buttons do picker.buttons[index]:Hide() end
+    Addon.ScrollHistoryPicker(math.max(0, (selectedIndex - 1) * 44 - picker.viewportHeight + 44))
+    ApplyCurrentFont()
+    Addon.AnchorPopup(picker, owner, Addon.historyCatcher)
+    Addon.ShowPopupSafely(picker, Addon.historyCatcher)
 end
 
 function Addon.EquippedItemLinks(text)
@@ -4881,6 +5014,7 @@ CreateUI = function()
         RefreshRows()
     end)
     frame:SetScript("OnHide", function()
+        Addon.HideHistoryMenu()
         if Addon.linkFrame then Addon.linkFrame:Hide() end
         if type(Addon.EnterLootMode) == "function" then
             Addon.HideLootRows()
@@ -4915,11 +5049,10 @@ CreateUI = function()
     frame.title:SetTextColor(0.86, 0.94, 1, 1)
     RegisterFontString(frame.title, 16)
 
-    frame.historyButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate,BackdropTemplate")
+    frame.historyButton = Addon.CreateFlatSettingsButton(frame, HEADER_HISTORY_WIDTH)
     frame.historyButton:SetSize(HEADER_HISTORY_WIDTH, 22)
     frame.historyButton:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -42)
     frame.historyButton:SetText(L("Current"))
-    Addon.StyleButton(frame.historyButton, false)
     local historyText = frame.historyButton:GetFontString()
     historyText:ClearAllPoints()
     historyText:SetPoint("LEFT", frame.historyButton, "LEFT", 10, 0)
@@ -4928,7 +5061,18 @@ CreateUI = function()
     frame.historyButton:SetScript("OnClick", function(button)
         OpenHistoryMenu(button)
     end)
-    RegisterButtonFont(frame.historyButton, 11)
+    RegisterButtonFont(frame.historyButton, 11, nil, true, 12)
+    frame.historyButton.arrow = frame.historyButton:CreateFontString(nil, "OVERLAY")
+    frame.historyButton.arrow:SetFont(Core.GetDefaultFont(), 10, "")
+    frame.historyButton.arrow:SetText("v")
+    frame.historyButton.arrow:SetPoint("RIGHT", -9, 0)
+    frame.historyButton.arrow:SetTextColor(0.55, 0.71, 0.80, 1)
+    frame.historyButton:HookScript("OnEnter", function(button)
+        local title = button:GetText()
+        if Addon.selectedView == "history" then title = Addon.HistoryGroupMenuTitle(Addon.state.history[Addon.selectedHistoryIndex], Addon.selectedHistoryIndex) end
+        Addon.ShowTextTooltip(button, title)
+    end)
+    frame.historyButton:HookScript("OnLeave", HideItemTooltip)
     Addon.historyButton = frame.historyButton
 
     frame.demoButton = Addon.CreateFlatSettingsButton(frame, 110)
@@ -5029,7 +5173,7 @@ CreateUI = function()
 
     frame.scrollBadge = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     frame.scrollBadge:SetSize(76, 16)
-    frame.scrollBadge:SetPoint("TOPRIGHT", frame.historyButton, "TOPRIGHT", -2, -3)
+    frame.scrollBadge:SetPoint("TOPRIGHT", frame.historyButton, "TOPRIGHT", -26, -3)
     frame.scrollBadge:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         tile = true,
@@ -5045,7 +5189,7 @@ CreateUI = function()
     frame.scrollText:SetJustifyH("CENTER")
     frame.scrollText:SetTextColor(0.95, 0.95, 0.95, 1)
     KeepOneLine(frame.scrollText)
-    RegisterFontString(frame.scrollText, 11)
+    RegisterFontString(frame.scrollText, 10, nil, true, nil, 11)
     Addon.scrollText = frame.scrollText
 
     for index = 1, MAX_VISIBLE_ROWS do
@@ -5056,6 +5200,7 @@ CreateUI = function()
     _G.AntraktWindowLayers.Register(frame, function()
         if Addon.fontPickerFrame then Addon.fontPickerFrame:Hide() end
         Addon.HideLanguagePicker()
+        Addon.HideHistoryMenu()
         if Addon.linkFrame then Addon.linkFrame:Hide() end
         Addon.HideSettingsTooltip()
     end)
@@ -7162,6 +7307,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "PLAYER_REGEN_DISABLED" then
         HideFontPicker()
         Addon.HideLanguagePicker()
+        Addon.HideHistoryMenu()
         if Addon.linkFrame then Addon.linkFrame:Hide() end
     elseif event == "PLAYER_REGEN_ENABLED" then
         Addon.ResumeInspectWorkAfterCombat(3)

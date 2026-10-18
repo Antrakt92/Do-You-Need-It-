@@ -382,10 +382,9 @@ local function testNewLootButtonLeavesScrolledHistoryReadingIntact()
     local main = h.env.DoYouNeedItFrame
     h:fire("ENCOUNTER_END", 904, "Archived Boss")
     h:runTimers(11)
-    h.menuButtons = {}
     main.historyButton:FireScript("OnClick")
-    assertTruthy(h.menuButtons[3], "precondition: completed history group exists")
-    h.menuButtons[3].callback()
+    assertTruthy(h.env.DoYouNeedItHistoryPicker.buttons[3], "precondition: completed history group exists")
+    h.env.DoYouNeedItHistoryPicker.buttons[3]:FireScript("OnClick")
     main:FireScript("OnMouseWheel", -1)
     local anchor = h:visibleRows()[1].row
     local title = main.historyButton:GetText()

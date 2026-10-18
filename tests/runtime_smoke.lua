@@ -537,7 +537,7 @@ local function testChallengeCompletionKeepsEndLootInHistory()
     assertEqual(#h.env.DoYouNeedItDB.characters["Player-Ravencrest"].history, 1, "challenge history is saved in the character bucket")
 
     h.env.DoYouNeedItFrame.historyButton:FireScript("OnClick")
-    assertTruthy(h.menuButtons[3] and h.menuButtons[3].text:find("Ruby Life Pools", 1, true), "history menu lists the completed challenge group")
+    assertTruthy(h.env.DoYouNeedItHistoryPicker.buttons[3] and h.env.DoYouNeedItHistoryPicker.buttons[3].text:find("Ruby Life Pools", 1, true), "history menu lists the completed challenge group")
 end
 
 local function testPostEncounterLootMovesToHistoryAfterGrace()
@@ -638,9 +638,8 @@ local function testCurrentViewFallsBackToLatestHistoryGroup()
     h:runTimers(10)
     assertEqual(#h.env.DoYouNeedItDB.history, 1, "precondition: finalized loot is in latest history")
 
-    h.menuButtons = {}
     h.env.DoYouNeedItFrame.historyButton:FireScript("OnClick")
-    h.menuButtons[1].callback()
+    h.env.DoYouNeedItHistoryPicker.buttons[1]:FireScript("OnClick")
 
     local rows = h:visibleRows()
     assertEqual(#rows, 1, "current view falls back to the latest unified history rows")
@@ -1586,8 +1585,8 @@ local function testSavedDuplicateHistoryGroupsMergeOnLoad()
 
     h.env.DoYouNeedItFrame.historyButton:FireScript("OnClick")
 
-    assertEqual(#h.menuButtons, 3, "duplicate saved history groups load as one menu entry")
-    assertTruthy(h.menuButtons[3].text:find("%(2 drops%)"), "merged saved history title updates the drop count")
+    assertEqual(#h.env.DoYouNeedItHistoryPicker.buttons, 3, "duplicate saved history groups load as one menu entry")
+    assertTruthy(h.env.DoYouNeedItHistoryPicker.buttons[3].text:find("%(2 drops%)"), "merged saved history title updates the drop count")
 end
 
 local function testAccountWideSavedDropsDoNotLeakIntoCharacterHistory()
@@ -1855,9 +1854,9 @@ local function testHistoryMenuUsesLocalizedStaticLabels()
 
     h.env.DoYouNeedItFrame.historyButton:FireScript("OnClick")
 
-    assertEqual(h.menuButtons[1].text, "Текущий", "history menu localizes the current view entry")
-    assertEqual(h.menuButtons[2].text, "Эта сессия", "history menu localizes the session view entry")
-    assertEqual(h.menuButtons[3].text, "История 1", "history menu localizes fallback history entry titles")
+    assertEqual(h.env.DoYouNeedItHistoryPicker.buttons[1].text, "Текущий", "history menu localizes the current view entry")
+    assertEqual(h.env.DoYouNeedItHistoryPicker.buttons[2].text, "Эта сессия", "history menu localizes the session view entry")
+    assertEqual(h.env.DoYouNeedItHistoryPicker.buttons[3].text, "История 1", "history menu localizes fallback history entry titles")
 end
 
 local function testHistoryMenuShowsDropDateTime()
@@ -1883,7 +1882,7 @@ local function testHistoryMenuShowsDropDateTime()
     h.env.DoYouNeedItFrame.historyButton:FireScript("OnClick")
 
     local expectedTime = os.date("%d.%m %H:%M", endedAt)
-    assertTruthy(h.menuButtons[3].text:find(expectedTime, 1, true), "history menu appends the saved drop date/time")
+    assertTruthy(h.env.DoYouNeedItHistoryPicker.buttons[3].text:find(expectedTime, 1, true), "history menu appends the saved drop date/time")
 end
 
 local function testMissingSavedFontPathRepairsToAvailableFont()
