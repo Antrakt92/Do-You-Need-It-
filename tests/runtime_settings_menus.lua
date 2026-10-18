@@ -95,8 +95,8 @@ do
     local row = h.env.DoYouNeedItFontPickerContent.children[1]
     local main = h.env.DoYouNeedItFrame
     for _, pair in ipairs({
-        {main.settingsButton, main.close, 2},
-        {h.env.DoYouNeedItFeedbackButton, main.settingsButton, 2},
+        {main.settingsButton, h.env.DoYouNeedItSupportButton, 4},
+        {h.env.DoYouNeedItFeedbackButton, main.close, 2},
         {h.env.DoYouNeedItSupportButton, h.env.DoYouNeedItFeedbackButton, 4},
     }) do
         local point = pair[1].points[1]
@@ -105,6 +105,15 @@ do
         check(point[4] == -pair[3] and point[5] == 0, "header controls keep compact aligned gaps")
         check(pair[1]:GetWidth() == 24 and pair[1]:GetHeight() == 24, "header controls retain convenient click targets")
     end
+    check(main.close.closeText:GetText() == "×", "close uses the restrained cross glyph")
+    check(not main.close.closeHover:IsShown(), "close hover starts hidden")
+    main.close:FireScript("OnEnter")
+    check(main.close.closeHover:IsShown(), "close hover is visible on entry")
+    main.close:FireScript("OnMouseDown")
+    check(main.close.closePressed, "close tracks pressed feedback")
+    main.close:FireScript("OnLeave")
+    check(not main.close.closeHover:IsShown() and not main.close.closePressed,
+        "leaving clears close hover and pressed feedback")
     check(row and row.star, "favorite control exists")
     local path = row.fontPath
     click(row.star)
@@ -134,7 +143,7 @@ do
     check(settings.whisperEditBox:GetText() == draft, "label click preserves the message draft")
     click(settings.autoCheckLabelButton)
     check(h.env.DoYouNeedItDB.settings.autoWhisper == false, "second label click disables auto-whisper")
-    for _, button in ipairs({settings.back, settings.resetPosition, settings.whisperResetButton}) do
+    for _, button in ipairs({settings.back, settings.whisperResetButton}) do
         check(button.template == "BackdropTemplate", "Settings button uses its own consistent surface")
         check(button:GetHeight() == 24 and button:GetFontString():GetFont(), "compact actions retain a 24-pixel target")
         check(button:GetWidth() <= 156 and button:GetFontString().fontSize <= 11,

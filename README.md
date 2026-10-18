@@ -33,7 +33,7 @@ WoW does not expose another player's final personal-loot eligibility. **Likely**
 
 ## Whispers and settings
 
-Open the gear button or `/dyni settings` to change whispers, language, font, and font size. The window remembers its position, closes with Escape, and can be centered with **Center window** in Appearance.
+Open the gear button or `/dyni settings` to change whispers, language, font, and font size. The window remembers its position, closes with Escape, and can be centered with `/dyni resetpos`.
 
 Auto-whisper is **off by default**. If enabled, it waits 10 seconds by default; the delay can be set from 3 to 30 seconds. A pending whisper is cancelled when you ask manually, clear the current rows, disable auto-whisper, or the looter leaves the group.
 
@@ -43,7 +43,7 @@ Language defaults to **Auto**, following your client locale. Settings and loot-s
 
 The addon includes 46 fonts alongside available LibSharedMedia and Blizzard fonts. The picker shows available faces compatible with your selected language; star your favorites to keep them first. Font and language hover previews restore the saved choice when dismissed. Menus open beside their fields and stay above the window.
 
-The heart and feedback buttons beside Settings open copyable links to support the addon or report a problem on GitHub.
+The heart and feedback buttons beside Close open copyable links to support the addon or report a problem on GitHub.
 
 ## Commands
 

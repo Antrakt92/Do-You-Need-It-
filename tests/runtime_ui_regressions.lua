@@ -386,7 +386,7 @@ local function testSettingsResetPositionPersists()
     local main = h.env.DoYouNeedItFrame
     assertEqual(main.points[1][4], 123, "precondition: saved horizontal position restored")
     h:slash("settings")
-    h.env.DoYouNeedItSettingsFrame.resetPosition:FireScript("OnClick")
+    h:slash("resetpos")
     assertEqual(main.points[1][1], "CENTER", "Reset Position centers the window")
     assertEqual(main.points[1][4], 0, "Reset Position clears horizontal offset")
     assertEqual(main.points[1][5], 0, "Reset Position clears vertical offset")
@@ -413,7 +413,7 @@ local function testRussianClientSettingsUseGlyphCapableFont()
         "Russian client repairs a Latin-only saved font")
     assertEqual(settings.title:GetText(), "Настройки", "Russian client localizes the settings title")
     for _, control in ipairs({
-        settings.title, settings.back:GetFontString(), settings.resetPosition:GetFontString(),
+        settings.title, settings.back:GetFontString(),
         settings.autoCheckLabel, settings.delayLabel, settings.whisperLabel,
         settings.languageLabel, settings.fontLabel, settings.fontSizeLabel,
         settings.whisperResetButton:GetFontString(), settings.delaySlider.Low,
@@ -975,12 +975,8 @@ local function testSettingsSectionsAndCompactActions()
             local appearanceBottom = -frame.appearanceSurface.points[2][5]
             local whisperBottom = -frame.whispersSurface.points[2][5]
             assertTruthy(whisperBottom + 8 <= appearanceTop, "sections have a clear visual gap")
-            local centerTop = -frame.resetPosition.points[1][5]
-            assertTruthy(centerTop >= appearanceTop and centerTop + frame.resetPosition:GetHeight() <= topOffset(frame.languageDropdown),
-                "window centering belongs to Appearance and cannot cover its fields")
-            assertEqual(frame.resetPosition:GetText(), h.env.DoYouNeedItCore.GetLocaleLabel("Center window", locale),
-                "window action describes centering in the selected language")
-            for _, button in ipairs({frame.back, frame.resetPosition, frame.whisperResetButton}) do
+            assertEqual(frame.resetPosition, nil, "Appearance has no window-centering button")
+            for _, button in ipairs({frame.back, frame.whisperResetButton}) do
                 assertEqual(button:GetHeight(), 24, "secondary actions keep compact click targets at all font sizes")
                 assertTruthy(button:GetWidth() <= 156, "secondary actions do not become oversized")
             end
@@ -988,8 +984,8 @@ local function testSettingsSectionsAndCompactActions()
                 "message help stays inside the Whispers section")
             assertTruthy(topOffset(frame.fontWarning) + frame.fontWarning.fontSize <= appearanceBottom,
                 "font warning stays inside Appearance")
-            assertTruthy(topOffset(frame.languageDropdown) + frame.languageDropdown:GetHeight() + 6 <= topOffset(frame.fontDropdown),
-                "language and font controls have distinct rows")
+            assertTruthy(topOffset(frame.fontSizeSlider) + frame.fontSizeSlider:GetHeight() + 6 <= topOffset(frame.languageDropdown),
+                "language follows the font size on a separate row")
             assertTruthy(topOffset(frame.fontDropdown) + frame.fontDropdown:GetHeight() + 6 <= topOffset(frame.fontSizeSlider),
                 "font choice cannot overlap the size slider")
             assertTruthy(frame.languageDropdown:GetHeight() >= size + 8 and frame.fontDropdown:GetHeight() >= size + 8,

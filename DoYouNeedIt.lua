@@ -4723,6 +4723,40 @@ function Addon.ResetWindowPosition()
     Addon.RestoreWindowPosition()
 end
 
+function Addon.StyleCloseButton(button)
+    button:SetNormalTexture("")
+    button:SetPushedTexture("")
+    button:SetHighlightTexture("")
+    button:SetSize(24, 24)
+    local hover = button:CreateTexture(nil, "BACKGROUND")
+    hover:SetAllPoints(button)
+    hover:SetColorTexture(1, 0.3, 0.3, 0.14)
+    hover:Hide()
+    local text = button:CreateFontString(nil, "OVERLAY")
+    text:SetPoint("CENTER", 0, 1)
+    text:SetFont(Core.GetDefaultFont(), 18, "")
+    text:SetText("×")
+    local function refresh()
+        if button.closeHovered then hover:Show() else hover:Hide() end
+        if button.closePressed then text:SetTextColor(0.95, 0.97, 1, 1)
+        elseif button.closeHovered then text:SetTextColor(1, 0.3, 0.3, 1)
+        else text:SetTextColor(0.62, 0.71, 0.79, 1) end
+    end
+    button.closeText, button.closeHover = text, hover
+    button:SetScript("OnEnter", function() button.closeHovered = true; refresh() end)
+    button:SetScript("OnLeave", function()
+        button.closeHovered, button.closePressed = false, false
+        refresh()
+    end)
+    button:SetScript("OnMouseDown", function() button.closePressed = true; refresh() end)
+    button:SetScript("OnMouseUp", function() button.closePressed = false; refresh() end)
+    button:HookScript("OnHide", function()
+        button.closeHovered, button.closePressed = false, false
+        refresh()
+    end)
+    refresh()
+end
+
 function Addon.ShowDeveloperLink(url)
     if SafeCall(InCombatLockdown) == true then return end
     if not Addon.linkFrame then
@@ -4747,7 +4781,8 @@ function Addon.ShowDeveloperLink(url)
         frame.editBox:SetScript("OnEnterPressed", function() frame:Hide() end)
         frame:SetScript("OnHide", function() frame.editBox:ClearFocus() end)
         frame.close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-        frame.close:SetPoint("TOPRIGHT", 0, 0)
+        Addon.StyleCloseButton(frame.close)
+        frame.close:SetPoint("TOPRIGHT", -4, -4)
         frame.close:SetScript("OnClick", function() frame:Hide() end)
         frame:Hide()
         Addon.linkFrame = frame
@@ -4782,11 +4817,13 @@ function Addon.CreateDeveloperLinks(frame)
         button:SetScript("OnClick", function() Addon.ShowDeveloperLink(url) end)
         return button
     end
-    Addon.feedbackButton = create("DoYouNeedItFeedbackButton", frame.settingsButton, 2,
+    Addon.feedbackButton = create("DoYouNeedItFeedbackButton", frame.close, 2,
         "https://github.com/Antrakt92/Do-You-Need-It-/issues", "Report a bug or suggest a feature",
         nil, "transmog-icon-chat")
     Addon.supportButton = create("DoYouNeedItSupportButton", Addon.feedbackButton, 4,
         "https://ko-fi.com/antrakt92", "Support development", "Interface\\COMMON\\friendship-heart")
+    frame.settingsButton:ClearAllPoints()
+    frame.settingsButton:SetPoint("RIGHT", Addon.supportButton, "LEFT", -4, 0)
 end
 
 CreateUI = function()
@@ -4935,7 +4972,7 @@ CreateUI = function()
     }
 
     frame.close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    frame.close:SetSize(24, 24)
+    Addon.StyleCloseButton(frame.close)
     frame.close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -7)
 
     frame.settingsButton = CreateFrame("Button", nil, frame)
@@ -5163,22 +5200,18 @@ function Addon.LayoutSettings()
     place(frame.appearanceHeading, 12, 207 + extra * 6)
     place(frame.whispersRule, 12, 62)
     place(frame.appearanceRule, 12, 226 + extra * 6)
-    place(frame.languageLabel, 12, 238 + extra * 7)
-    place(frame.languageDropdown, SETTINGS_CONTROL_X, 234 + extra * 7)
-    place(frame.fontLabel, 12, 278 + extra * 9)
-    place(frame.fontDropdown, SETTINGS_CONTROL_X, 274 + extra * 9)
-    place(frame.fontSizeLabel, 12, 316 + extra * 11)
-    place(frame.fontSizeSlider, SETTINGS_CONTROL_X, 310 + extra * 11.5)
+    place(frame.fontLabel, 12, 238 + extra * 7)
+    place(frame.fontDropdown, SETTINGS_CONTROL_X, 234 + extra * 7)
+    place(frame.fontSizeLabel, 12, 278 + extra * 9)
+    place(frame.fontSizeSlider, SETTINGS_CONTROL_X, 272 + extra * 9)
+    place(frame.languageLabel, 12, 316 + extra * 11)
+    place(frame.languageDropdown, SETTINGS_CONTROL_X, 312 + extra * 11)
     place(frame.fontWarning, 12, 348 + extra * 12)
     frame.autoCheck:SetSize(20, 20)
     frame.whisperEditBox:SetHeight(math.max(26, size + 8))
     frame.languageDropdown:SetHeight(math.max(26, size + 8))
     frame.fontDropdown:SetHeight(math.max(26, size + 8))
     frame.whisperResetButton:SetSize(actionWidth("Reset", 60, 112), 24)
-    frame.resetPosition:ClearAllPoints()
-    frame.resetPosition:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -12, -(201 + extra * 6))
-    frame.resetPosition:SetSize(actionWidth("Center window", 112, 156), 24)
-    frame.appearanceHeading:SetWidth(476 - frame.resetPosition:GetWidth() - 12)
     frame.autoCheckLabelButton:SetHeight(math.max(24, size + 8))
     frame.whisperEditBox:SetWidth(SETTINGS_EDITBOX_WIDTH + 100 - extra * 2
         - frame.whisperResetButton:GetWidth())
@@ -5200,7 +5233,6 @@ RefreshSettingsControls = function()
     Addon.settingsFrame.whispersHeading:SetText(L("Whispers"))
     Addon.settingsFrame.appearanceHeading:SetText(L("Appearance"))
     Addon.settingsFrame.whisperHelp:SetText(L("Use {item} for the dropped item."))
-    Addon.settingsFrame.resetPosition:SetText(L("Center window"))
     if Addon.settingsTitle then
         Addon.settingsTitle:SetText(L("Settings"))
     end
@@ -5951,16 +5983,6 @@ CreateSettingsUI = function()
     frame.title:SetJustifyH("LEFT")
     RegisterFontString(frame.title, 14, "", true, nil, 16)
     Addon.settingsTitle = frame.title
-
-    frame.resetPosition = Addon.CreateFlatSettingsButton(frame, 112)
-    frame.resetPosition:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, 2)
-    frame.resetPosition:SetText(L("Center window"))
-    RegisterButtonFont(frame.resetPosition, 11, nil, true, 11)
-    frame.resetPosition:SetScript("OnClick", function()
-        if type(Addon.ResetWindowPosition) == "function" then
-            Addon.ResetWindowPosition()
-        end
-    end)
 
     frame.whispersSurface = frame:CreateTexture(nil, "BACKGROUND")
     frame.whispersSurface:SetColorTexture(0.045, 0.065, 0.085, 0.95)
