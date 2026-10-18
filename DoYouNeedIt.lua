@@ -502,6 +502,13 @@ end
 function Addon.ApplyRegionFont(region, path, size, flags)
     local oldPath, oldSize, oldFlags = SafeCall(region.GetFont, region)
     local oldObject = SafeCall(region.GetFontObject, region)
+    -- Keep private FontObjects, but avoid resetting unchanged regions on every
+    -- loot repaint. Recheck actual state so external font changes are repaired.
+    if region._dyniOwnedFont and oldObject == region._dyniOwnedFont
+        and Core.SameFontPath(oldPath, path) and CleanNumber(oldSize) == size
+        and (CleanString(oldFlags) or "") == (flags or "") then
+        return true
+    end
     local oldText = SafeCall(region.GetText, region)
     if type(region.SetFontObject) == "function" and type(_G.CreateFont) == "function" then
         if not region._dyniOwnedFont then
@@ -4993,20 +5000,20 @@ local function ConfigureSliderTemplateLabels(slider, lowText, highText)
     local valueText = GetDropdownChild(slider, "Text")
     if valueText then
         SafeCall(valueText.SetText, valueText, "")
-        SafeCall(valueText.SetFont, valueText, font, size, "")
+        Addon.ApplyRegionFont(valueText, font, size, "")
         SafeCall(valueText.Hide, valueText)
     end
     local low = GetDropdownChild(slider, "Low")
     if low then
         SafeCall(low.SetText, low, lowText or "")
-        SafeCall(low.SetFont, low, font, math.min(size, 10), "")
+        Addon.ApplyRegionFont(low, font, math.min(size, 10), "")
         SafeCall(low.SetTextColor, low, 0.51, 0.61, 0.70, 1)
         SafeCall(low.Show, low)
     end
     local high = GetDropdownChild(slider, "High")
     if high then
         SafeCall(high.SetText, high, highText or "")
-        SafeCall(high.SetFont, high, font, math.min(size, 10), "")
+        Addon.ApplyRegionFont(high, font, math.min(size, 10), "")
         SafeCall(high.SetTextColor, high, 0.51, 0.61, 0.70, 1)
         SafeCall(high.Show, high)
     end
