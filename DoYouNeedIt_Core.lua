@@ -468,6 +468,25 @@ for locale, values in pairs(demoLocaleLabels) do
     LABELS_BY_LOCALE[locale]["Preview sample loot. No whispers are sent."] = values[3]
 end
 
+local demoLoadLabels = {
+    enUS = { "Loading demo items...", "Demo items are unavailable.", "Try Demo again after your equipment has loaded." },
+    ruRU = { "Загрузка предметов демо...", "Предметы демо пока недоступны.", "Откройте демо снова после загрузки экипировки." },
+    deDE = { "Demogegenstände werden geladen...", "Demogegenstände sind nicht verfügbar.", "Demo nach dem Laden der Ausrüstung erneut öffnen." },
+    esES = { "Cargando objetos de demostración...", "Los objetos de demostración no están disponibles.", "Abre la demostración de nuevo cuando se cargue tu equipo." },
+    esMX = { "Cargando objetos de demostración...", "Los objetos de demostración no están disponibles.", "Abre la demostración de nuevo cuando se cargue tu equipo." },
+    frFR = { "Chargement des objets de démonstration...", "Les objets de démonstration sont indisponibles.", "Rouvrez la démo après le chargement de votre équipement." },
+    itIT = { "Caricamento degli oggetti dimostrativi...", "Gli oggetti dimostrativi non sono disponibili.", "Riapri la demo dopo il caricamento dell'equipaggiamento." },
+    ptBR = { "Carregando itens de demonstração...", "Os itens de demonstração não estão disponíveis.", "Abra a demonstração novamente após carregar seu equipamento." },
+    koKR = { "미리보기 아이템 불러오는 중...", "미리보기 아이템을 사용할 수 없습니다.", "장비를 불러온 후 미리보기를 다시 여세요." },
+    zhCN = { "正在加载演示物品...", "演示物品暂不可用。", "装备加载完成后，请重新打开演示。" },
+    zhTW = { "正在載入示範物品...", "示範物品暫時無法使用。", "裝備載入完成後，請重新開啟示範。" },
+}
+for locale, labels in pairs(demoLoadLabels) do
+    LABELS_BY_LOCALE[locale]["Loading demo items..."] = labels[1]
+    LABELS_BY_LOCALE[locale]["Demo items are unavailable."] = labels[2]
+    LABELS_BY_LOCALE[locale]["Try Demo again after your equipment has loaded."] = labels[3]
+end
+
 local DEFAULTS = {
     autoWhisper = false,
     debug = false,
@@ -2573,6 +2592,7 @@ function Core.BuildDemoRows(settings, timestamp)
     }
     items = Core.demoItems or items
     local function link(item)
+        if item.link then return item.link end
         return "|cffa335ee|Hitem:" .. item[1] .. ":::::::::::::|h[" .. item[2] .. "]|h|r"
     end
     local demo = Core.CreateState(settings)
@@ -2581,7 +2601,9 @@ function Core.BuildDemoRows(settings, timestamp)
     for index, item in ipairs(items) do
         local askable = index % 3 ~= 2 and index ~= 4
         local equipped
-        if item[3] == "INVTYPE_FINGER" then
+        if Core.GetForeverDemoEquippedText then
+            equipped = Core.GetForeverDemoEquippedText(item)
+        elseif item[3] == "INVTYPE_FINGER" then
             equipped = "Equipped: " .. link(item) .. " / " .. link(Core.demoRing or {251136, "Signet of Snarling Servitude"})
         elseif item[3] == "INVTYPE_TRINKET" then equipped = "Cached: " .. link(items[7]) .. " / " .. link(items[8])
         elseif index == 11 then equipped = "Equipped: unknown"

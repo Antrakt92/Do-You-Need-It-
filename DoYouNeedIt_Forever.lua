@@ -21,32 +21,57 @@ function Core.IsSupportedForeverClient()
     return interface == 16001 and WOW_PROJECT_ID == 18
 end
 
--- These are illustrative equipment links, not a beta dungeon loot table.
--- Resolve names from the client's catalogue rather than shipping Retail names.
-Core.demoItems = {
-    { 16914, "Item #16914", "INVTYPE_HEAD" },
-    { 16913, "Item #16913", "INVTYPE_HAND" },
-    { 16916, "Item #16916", "INVTYPE_CHEST" },
-    { 19379, "Item #19379", "INVTYPE_TRINKET" },
-    { 19341, "Item #19341", "INVTYPE_TRINKET" },
-    { 18832, "Item #18832", "INVTYPE_WEAPON" },
-    { 13968, "Item #13968", "INVTYPE_TRINKET" },
-    { 11815, "Item #11815", "INVTYPE_TRINKET" },
-    { 19384, "Item #19384", "INVTYPE_FINGER" },
-    { 19342, "Item #19342", "INVTYPE_TRINKET" },
-    { 16915, "Item #16915", "INVTYPE_LEGS" },
-    { 18713, "Item #18713", "INVTYPE_RANGED" },
-}
-Core.demoRing = { 19376, "Item #19376" }
+-- Request a bounded candidate set, but display only data the client resolved.
+Core.demoItemIDs = { 16914, 16913, 16916, 19379, 19341, 18832, 13968, 11815, 19384, 19342, 16915, 18713, 19376 }
+Core.demoItems = {}
+Core.foreverDemoRequests = {}
+Core.foreverDemoComparisons = {}
+
+local function Clean(value, kind)
+    local ok, secret = pcall(issecretvalue, value)
+    if ok and secret == false and type(value) == kind then return value end
+end
 
 function Core.RefreshForeverDemoNames()
-    if not C_Item or type(C_Item.GetItemInfo) ~= "function" then return end
-    local function resolve(item)
-        local ok, name = pcall(C_Item.GetItemInfo, "item:" .. item[1])
-        if not ok then return end
-        local clean, secret = pcall(issecretvalue, name)
-        if clean and secret == false and type(name) == "string" and name ~= "" then item[2] = name end
+    local requests, requested, resolved, items, comparisons = {}, {}, {}, {}, {}
+    local function collect(query)
+        query = Clean(query, "string")
+        local id = query and Core.ExtractItemID(query)
+        if not id then return end
+        if not requested[id] then
+            requested[id] = true
+            requests[#requests + 1] = query
+        end
+        if resolved[id] or not C_Item or type(C_Item.GetItemInfo) ~= "function" then return end
+        local values = { pcall(C_Item.GetItemInfo, query) }
+        if not values[1] then return end
+        local name, link = Clean(values[2], "string"), Clean(values[3], "string")
+        local equipLoc, classID = Clean(values[10], "string"), Clean(values[13], "number")
+        if not name or name == "" or not link or not link:find("|Hitem:", 1, true)
+            or Core.ExtractItemID(link) ~= id or not equipLoc or equipLoc == ""
+            or (classID ~= 2 and classID ~= 4) then return end
+        resolved[id] = true
+        items[#items + 1] = { id, name, equipLoc, link = link }
+        comparisons[equipLoc] = comparisons[equipLoc] or {}
+        if #comparisons[equipLoc] < 2 then
+            comparisons[equipLoc][#comparisons[equipLoc] + 1] = link
+        end
     end
-    for _, item in ipairs(Core.demoItems) do resolve(item) end
-    resolve(Core.demoRing)
+    for _, id in ipairs(Core.demoItemIDs) do collect("item:" .. id) end
+    -- Equipped items provide real beta examples even if old item IDs were removed.
+    if type(GetInventoryItemLink) == "function" then
+        for slot = 1, 18 do
+            if slot ~= 4 then
+                local ok, link = pcall(GetInventoryItemLink, "player", slot)
+                if ok then collect(link) end
+            end
+        end
+    end
+    while #items > 12 do table.remove(items) end
+    Core.demoItems, Core.foreverDemoRequests, Core.foreverDemoComparisons = items, requests, comparisons
+end
+
+function Core.GetForeverDemoEquippedText(item)
+    local links = Core.foreverDemoComparisons[item[3]] or { item.link }
+    return (#links > 1 and "Cached: " or "Equipped: ") .. table.concat(links, " / ")
 end

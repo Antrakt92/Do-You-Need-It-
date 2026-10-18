@@ -530,7 +530,8 @@ function Harness:itemInfo(itemLink)
     local itemID = linkItemID(itemLink)
     local info = self.items[itemID] or {}
     local name = info.name or defaultItemName(itemID)
-    local link = info.link or itemLink
+    local link = info.link or (itemLink:find("|Hitem:", 1, true) and itemLink)
+        or string.format("|cffa335ee|Hitem:%d:::::::::::::|h[%s]|h|r", itemID or 0, name)
     return itemID,
         nil,
         nil,

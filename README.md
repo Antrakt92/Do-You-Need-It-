@@ -46,6 +46,8 @@ comes from the beta client, including learned proficiencies and level restrictio
 no Retail armor-specialization filter is applied. Real drops use the beta's item,
 instance and encounter names. Demo examples use Classic-era item IDs with names
 resolved from the client, and do not describe a beta dungeon's loot table.
+Only items with resolved client names and hyperlinks are shown; unavailable
+examples are omitted. Your equipped gear can supply additional beta examples.
 
 Forever does not use Retail's personal-loot item-level transfer estimate.
 BoP items remain **Check with looter** unless a trade timer is detected; BoE,

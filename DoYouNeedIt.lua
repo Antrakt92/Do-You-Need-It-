@@ -2297,9 +2297,10 @@ local function RefreshRows()
     ApplyCurrentFont()
 
     if #rows == 0 then
-        Addon.emptyText:SetText(L("No gear drops in this view."))
+        local emptyDemo = Core.flavor == "forever" and Addon.demoRows ~= nil
+        Addon.emptyText:SetText(L(emptyDemo and (Addon.demoItemLoadPending and "Loading demo items..." or "Demo items are unavailable.") or "No gear drops in this view."))
         Addon.emptyText:Show()
-        Addon.emptyHelp:SetText(L("Gear from your dungeon or raid will appear here."))
+        Addon.emptyHelp:SetText(L(emptyDemo and "Try Demo again after your equipment has loaded." or "Gear from your dungeon or raid will appear here."))
         Addon.emptyHelp:Show()
         if Addon.scrollText then
             Addon.scrollText:Hide()
@@ -4037,6 +4038,7 @@ local function AddTestRow()
         historyGroup = Addon.selectedView == "history" and Addon.state.history[Addon.selectedHistoryIndex] or nil,
     }
     if Core.RefreshForeverDemoNames then Core.RefreshForeverDemoNames() end
+    Addon.demoItemLoadPending = Core.flavor == "forever"
     Addon.demoRows = Core.BuildDemoRows(Addon.state.settings, Now())
     Addon.selectedView = "current"
     Addon.selectedHistoryIndex = nil
@@ -4047,23 +4049,33 @@ local function AddTestRow()
     Addon.frame:Show()
     if Core.flavor == "forever" then
         local preview = Addon.demoRows
-        local requested = {}
-        for _, row in ipairs(preview) do
-            requested[#requested + 1] = row.itemLink
+        local remaining = #Core.foreverDemoRequests
+        local refreshScheduled = false
+        local function refreshPreview()
+            if Addon.demoRows ~= preview then return end
+            Core.RefreshForeverDemoNames()
+            local refreshed = Core.BuildDemoRows(Addon.state.settings, Now())
+            for index = #preview, 1, -1 do preview[index] = nil end
+            for index, row in ipairs(refreshed) do preview[index] = row end
+            Addon.demoItemLoadPending = remaining > 0
+            RefreshRows()
         end
-        requested[#requested + 1] = "item:" .. Core.demoRing[1]
-        for _, link in ipairs(requested) do
+        for _, link in ipairs(Core.foreverDemoRequests) do
             RequestItemLoad(link, function()
                 if Addon.demoRows ~= preview then return end
-                Core.RefreshForeverDemoNames()
-                local refreshed = Core.BuildDemoRows(Addon.state.settings, Now())
-                for index, row in ipairs(preview) do
-                    row.itemLink = refreshed[index].itemLink
-                    row.equippedText = refreshed[index].equippedText
-                end
-                RefreshRows()
+                remaining = remaining - 1
+                if refreshScheduled then return end
+                refreshScheduled = true
+                C_Timer.After(0, function()
+                    refreshScheduled = false
+                    refreshPreview()
+                end)
             end)
         end
+        C_Timer.After(10, function()
+            remaining = 0
+            refreshPreview()
+        end)
     end
 end
 
