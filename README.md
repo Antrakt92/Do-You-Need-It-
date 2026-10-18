@@ -116,6 +116,7 @@ The heart and feedback buttons in the title bar open copyable links to support t
 | `/dyni debug on` | Save the last 20 loot-processing diagnostic entries. |
 | `/dyni debug off` | Stop saving diagnostic entries and clear saved diagnostics. |
 | `/dyni diag` | Print the newest diagnostic entries. |
+| `/dyni fontdiag` | Record a small font-loading report; `/reload` saves it for troubleshooting. |
 | `/dyni status` | Print settings, build, and layout. |
 | `/dyni delay <seconds>` | Set the delay, clamped to 3–30 seconds. |
 

@@ -480,6 +480,24 @@ local function BuildFontsList(locale)
     return fonts
 end
 
+function Addon.ActivateFontAsset(path)
+    if type(_G.CreateFont) ~= "function" then return false end
+    Addon.fontAssetObject = Addon.fontAssetObject or _G.CreateFont("DoYouNeedItFontAssetActivator")
+    Addon.fontAssetHolder = Addon.fontAssetHolder or UIParent:CreateFontString(nil, "OVERLAY")
+    if not Addon.fontAssetObject or not Addon.fontAssetHolder then return false end
+    if not Addon.fontAssetAttached then
+        local ok = pcall(Addon.fontAssetHolder.SetFontObject, Addon.fontAssetHolder, Addon.fontAssetObject)
+        if not ok or SafeCall(Addon.fontAssetHolder.GetFontObject, Addon.fontAssetHolder) ~= Addon.fontAssetObject then
+            return false
+        end
+        Addon.fontAssetHolder:Hide()
+        Addon.fontAssetAttached = true
+    end
+    -- Keep this holder inherited forever: direct SetFont on it would stop
+    -- subsequent cold assets from activating through the attached object.
+    return pcall(Addon.fontAssetObject.SetFont, Addon.fontAssetObject, path, 12, "")
+end
+
 function Addon.FontAvailable(path)
     local key = Core.FontPathKey(path)
     if not key then return false end
@@ -488,13 +506,19 @@ function Addon.FontAvailable(path)
     Addon.fontProbe = Addon.fontProbe or UIParent:CreateFontString(nil, "OVERLAY")
     Addon.fontProbe:Hide()
     local valid = Addon.ApplyRegionFont(Addon.fontProbe, path, 12, "")
+    if not valid and Addon.ActivateFontAsset(path) then
+        valid = Addon.ApplyRegionFont(Addon.fontProbe, path, 12, "")
+    end
     if valid then Addon.availableFontPaths[key] = true end
     return valid
 end
 
 function Addon.RegionFontMatches(region, path, size, flags)
     local actual, actualSize, actualFlags = SafeCall(region.GetFont, region)
-    return Core.SameFontPath(actual, path) and CleanNumber(actualSize) == size
+    actualSize, size = CleanNumber(actualSize), CleanNumber(size)
+    if not actualSize or not size then return false end
+    -- Font metrics can round-trip through client floats with tiny differences.
+    return Core.SameFontPath(actual, path) and math.abs(actualSize - size) <= 0.01
         and (CleanString(actualFlags) or "") == (flags or "")
 end
 
@@ -504,8 +528,7 @@ function Addon.ApplyRegionFont(region, path, size, flags)
     -- Keep private FontObjects, but avoid resetting unchanged regions on every
     -- loot repaint. Recheck actual state so external font changes are repaired.
     if region._dyniOwnedFont and oldObject == region._dyniOwnedFont
-        and Core.SameFontPath(oldPath, path) and CleanNumber(oldSize) == size
-        and (CleanString(oldFlags) or "") == (flags or "") then
+        and Addon.RegionFontMatches(region, path, size, flags) then
         return true
     end
     local oldText = SafeCall(region.GetText, region)
@@ -7131,6 +7154,44 @@ function Addon.ShowSelfTestCopy()
     Print("selftest: copy window unavailable; full report above")
 end
 
+function Addon.RunFontDiagnostics()
+    if CleanBoolean(SafeCall(InCombatLockdown)) == true then
+        Print("fontdiag: run outside combat")
+        return
+    end
+    local lines = {}
+    local function emit(line)
+        lines[#lines + 1] = line
+    end
+    emit("DYNI FONT3: bundled=" .. #(Core.GetBundledFonts() or {}) .. " locale=" .. ActiveLocale())
+    for index, file in ipairs({"DejaVuSans.ttf", "Hack-Regular.ttf"}) do
+        local path = "Interface\\AddOns\\DoYouNeedIt\\fonts\\" .. file
+        local object = _G.CreateFont("DoYouNeedItDiagnosticFont" .. index)
+        local text = UIParent:CreateFontString(nil, "OVERLAY")
+        text:Hide()
+        local function snapshot(region)
+            local face, size, flags = SafeCall(region.GetFont, region)
+            return tostring(face and face:match("[^\\]+$") or face)
+                .. "/size=" .. (CleanNumber(size) and string.format("%.17g", size) or tostring(size))
+                .. "/same=" .. tostring(Core.SameFontPath(face, path)) .. "/flags=" .. string.format("%q", flags or "")
+        end
+        local ok, result = pcall(object.SetFont, object, path, 12, "")
+        emit("DYNI FONT3 " .. file .. ": compat=" .. tostring(Core.FontSupportsLocale(path, ActiveLocale()))
+            .. " available=" .. tostring(Addon.FontAvailable(path)))
+        emit("DYNI FONT3 object=" .. tostring(ok) .. "/" .. tostring(result) .. " " .. snapshot(object))
+        text:SetFontObject(object)
+        emit("DYNI FONT3 attached=" .. snapshot(text))
+        local directOK, directResult = pcall(text.SetFont, text, path, 12, "")
+        emit("DYNI FONT3 direct=" .. tostring(directOK) .. "/" .. tostring(directResult) .. " " .. snapshot(text))
+        text:SetText("Aa 123")
+        text:SetFontObject(object)
+        emit("DYNI FONT3 text+attach=" .. snapshot(text))
+    end
+    _G.DoYouNeedItSelfTest = type(_G.DoYouNeedItSelfTest) == "table" and _G.DoYouNeedItSelfTest or {}
+    _G.DoYouNeedItSelfTest.fontDiagnostics = { version = 3, lines = lines }
+    Print("DYNI FONT3: recorded; reload to save the report")
+end
+
 local function HandleSlash(message)
     message = CleanString(message) or ""
     local command, rest = message:match("^(%S*)%s*(.-)$")
@@ -7178,6 +7239,8 @@ local function HandleSlash(message)
         CycleHistoryView()
         CreateUI()
         Addon.frame:Show()
+    elseif command == "fontdiag" then
+        Addon.RunFontDiagnostics()
     elseif command == "settings" then
         OpenSettings()
     elseif command == "test" then

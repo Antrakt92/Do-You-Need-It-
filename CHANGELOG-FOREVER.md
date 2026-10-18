@@ -4,7 +4,11 @@
 
 - Restores the full compatible bundled and SharedMedia font list when the
   client applies a font without returning `true`. Font previews and selection
-  verify the applied face, size and style; unavailable faces remain excluded.
+  verify the applied face, size and style, allowing tiny client size-rounding
+  differences; unavailable faces remain excluded.
+- Loads cold font assets through a separate attached font object, so the whole
+  compatible catalogue is available without manually warming individual faces.
+- Adds `/dyni fontdiag` to record a small font-loading report for troubleshooting.
 - Uses the shared “Do You Need It?” window title without a client suffix.
 - Fixes Demo rows remaining labelled `Item #…` when the beta client cannot
   resolve an old example item. Unavailable examples are now omitted.

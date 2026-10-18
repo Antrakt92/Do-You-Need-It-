@@ -272,6 +272,16 @@ function FrameMethods:HighlightText()
 end
 
 function FrameMethods:SetFont(path, size, flags)
+    if self.harness.options.fontColdAssets and path:find("AddOns", 1, true) then
+        self.harness.loadedFontAssets = self.harness.loadedFontAssets or {}
+        if self.frameType == "Font" then
+            for _, region in ipairs(self.harness.frames) do
+                if region.fontObject == self and not region.font then
+                    self.harness.loadedFontAssets[path] = true
+                end
+            end
+        elseif not self.harness.loadedFontAssets[path] then return false end
+    end
     if (self.frameType == "EditBox" or self.frameType == "Font") and type(flags) ~= "string" then
         error("SetFont flags must be a string")
     end
@@ -287,7 +297,13 @@ function FrameMethods:SetFont(path, size, flags)
 end
 
 function FrameMethods:GetFont()
-    if not self.font and self.fontObject then return self.fontObject:GetFont() end
+    if not self.font and self.fontObject then
+        local path, size, flags = self.fontObject:GetFont()
+        if self.harness.options.fontColdAssets and self.frameType ~= "Font"
+            and path and path:find("AddOns", 1, true)
+            and not (self.harness.loadedFontAssets or {})[path] then return nil end
+        return path, size, flags
+    end
     return self.font, self.fontSize, self.fontFlags
 end
 

@@ -70,5 +70,55 @@ for _, flavor in ipairs({"retail", "forever"}) do
     client:slash("delay 13")
     check(client.env.DoYouNeedItFrame.title:GetFont() == custom, "refresh preserves selected face: " .. flavor)
     check(#client.sentMessages == 0, "font selection has no chat side effect: " .. flavor)
+    client:slash("fontdiag")
+    local report = client.env.DoYouNeedItSelfTest.fontDiagnostics
+    check(report.version == 3 and #report.lines == 11, "bounded font trace is saved: " .. flavor)
+    check(client.env.DoYouNeedItDB.settings.font == custom, "font trace preserves selection: " .. flavor)
+    check(#client.sentMessages == 0, "font trace never sends chat: " .. flavor)
+end
+for _, delta in ipairs({0.000001, -0.000001, 0.25}) do
+    local custom = "Interface\\AddOns\\DoYouNeedIt\\fonts\\DejaVuSans.ttf"
+    local rounded = Harness.new({fontSetReturn = function(region, path)
+        if path == custom then region.fontSize = region.fontSize + delta end
+        return true
+    end})
+    rounded:loadAddon(); rounded:slash("settings")
+    rounded.env.DoYouNeedItFontDropdown:FireScript("OnClick", "LeftButton")
+    local found = false
+    for _, row in ipairs(rounded.env.DoYouNeedItFontPickerContent.children) do
+        if row:IsShown() and row.fontPath == custom then found = true end
+    end
+    check(found == (math.abs(delta) < 0.01), "small client rounding is accepted, real size mismatch rejected: " .. delta)
+end
+for _, flavor in ipairs({"retail", "forever"}) do
+    local cold = Harness.new({flavor = flavor, fontColdAssets = true})
+    if flavor == "forever" then
+        cold.env.GetBuildInfo = function() return "1.60.1", "70450", "", 16001 end
+        cold.env.WOW_PROJECT_ID = 18
+    end
+    cold:loadAddon(); cold:slash("settings")
+    cold.env.DoYouNeedItFontDropdown:FireScript("OnClick", "LeftButton")
+    local selected, count = nil, 0
+    for _, row in ipairs(cold.env.DoYouNeedItFontPickerContent.children) do
+        if row:IsShown() and row.fontPath and row.fontPath:find("AddOns", 1, true) then
+            count = count + 1
+            selected = row
+        end
+    end
+    local expected = 0
+    for _, font in ipairs(cold.env.DoYouNeedItCore.GetBundledFonts()) do
+        if cold.env.DoYouNeedItCore.FontSupportsLocale(font.path, "enUS", "enUS") then expected = expected + 1 end
+    end
+    check(expected > 20 and count == expected, "cold catalogue activates every compatible face without a diagnostic warm-up: " .. flavor)
+    selected:FireScript("OnClick", "LeftButton")
+    check(cold.env.DoYouNeedItFrame.title:GetFont() == selected.fontPath, "cold face applies after selection: " .. flavor)
+    cold.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
+    cold:slash("settings")
+    cold.env.DoYouNeedItFontDropdown:FireScript("OnClick", "LeftButton")
+    local again = 0
+    for _, row in ipairs(cold.env.DoYouNeedItFontPickerContent.children) do
+        if row:IsShown() and row.fontPath and row.fontPath:find("AddOns", 1, true) then again = again + 1 end
+    end
+    check(again == count, "reopening retains the full cold-loaded catalogue: " .. flavor)
 end
 print("Font update regressions: PASS (" .. checks .. " assertions)")
