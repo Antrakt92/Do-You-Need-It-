@@ -62,11 +62,11 @@ local function testLoadAndSettings()
     assertEqual(h.env.DoYouNeedItFrame.tabAskable, nil, "loot tabs are no longer created")
     assertEqual(h.env.DoYouNeedItFrame.tabAllGear, nil, "all-gear tab is no longer created")
     assertEqual(h.env.DoYouNeedItFrame.historyButton:IsShown(), false, "settings mode hides the history selector")
-    assertTruthy(h.env.DoYouNeedItSettingsFrame.back, "settings panel has a back button")
+    assertTruthy(h.env.DoYouNeedItFrame.settingsButton.returnIcon:IsShown(), "settings has a return icon in the header")
     assertTruthy(h.env.DoYouNeedItLanguageDropdown.Text:GetText() ~= "", "language dropdown has visible text")
     assertTruthy(h.env.DoYouNeedItFontDropdown.Text:GetText() ~= "", "font dropdown has visible text")
 
-    h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
+    h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
     assertEqual(h.env.DoYouNeedItSettingsFrame:IsShown(), false, "back closes the embedded settings panel")
     assertEqual(h.env.DoYouNeedItFrame.historyButton:IsShown(), true, "back restores the history selector")
 end
@@ -154,7 +154,7 @@ local function testLootDropPreservesEmbeddedSettingsMode()
 
     assertEqual(h.env.DoYouNeedItFrame:IsShown(), true, "loot drop keeps the main frame visible")
     assertEqual(h.env.DoYouNeedItSettingsFrame:IsShown(), true, "loot drop keeps settings open")
-    h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
+    h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
     assertEqual(#h:visibleRows(), 1, "loot drop shows the visible loot row")
     assertEqual(h:visibleRows()[1].row.tradeStatusKey, "trade_likely", "live bind-on-equip loot keeps current transfer evidence")
     assertEqual(h:visibleRows()[1].trade:GetText(), "Trade: likely", "live loot renders its transfer status")
@@ -268,7 +268,7 @@ local function testLeavingSettingsClosesSharedDropdown()
     h.env.UIDROPDOWNMENU_OPEN_MENU = h.env.DoYouNeedItLanguageDropdown
     h.env.DropDownList1:Show()
 
-    h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
+    h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
 
     assertEqual(h.env.DropDownList1:IsShown(), false, "leaving settings closes the shared Blizzard dropdown")
     assertEqual(h.env.UIDROPDOWNMENU_OPEN_MENU, nil, "leaving settings clears the shared dropdown owner")

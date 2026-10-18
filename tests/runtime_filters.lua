@@ -56,7 +56,7 @@ local function testInvalidWhisperRemainsActionable()
         local edit = h.env.DoYouNeedItSettingsFrame.whisperEditBox
         edit:SetText("Need {item}?")
         edit:FireScript("OnEnterPressed")
-        h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
+        h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
         h:visibleRows()[1].whisper:FireScript("OnClick")
         h:runTimers(0)
         equal(#h.sentMessages, 1, "a corrected message sends once")
@@ -180,7 +180,7 @@ tests[#tests + 1] = function()
     local settings = h.env.DoYouNeedItSettingsFrame
     equal(settings.title:GetText(), "Настройки", "Russian client selects Russian settings")
     for _, control in ipairs({ settings.title, settings.autoCheckLabel, settings.delayLabel, settings.whisperLabel,
-        settings.languageLabel, settings.fontLabel, settings.fontSizeLabel, settings.back:GetFontString() }) do
+        settings.languageLabel, settings.fontLabel, settings.fontSizeLabel }) do
         equal(h.env.DoYouNeedItCore.FontSupportsLocale(control:GetFont(), "ruRU", "ruRU"), true,
             "Russian settings use a Cyrillic-capable font")
     end

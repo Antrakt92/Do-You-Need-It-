@@ -95,8 +95,8 @@ do
     local row = h.env.DoYouNeedItFontPickerContent.children[1]
     local main = h.env.DoYouNeedItFrame
     for _, pair in ipairs({
-        {main.settingsButton, h.env.DoYouNeedItSupportButton, 4},
-        {h.env.DoYouNeedItFeedbackButton, main.close, 2},
+        {main.settingsButton, main.close, 2},
+        {h.env.DoYouNeedItFeedbackButton, main.settingsButton, 4},
         {h.env.DoYouNeedItSupportButton, h.env.DoYouNeedItFeedbackButton, 4},
     }) do
         local point = pair[1].points[1]
@@ -143,7 +143,7 @@ do
     check(settings.whisperEditBox:GetText() == draft, "label click preserves the message draft")
     click(settings.autoCheckLabelButton)
     check(h.env.DoYouNeedItDB.settings.autoWhisper == false, "second label click disables auto-whisper")
-    for _, button in ipairs({settings.back, settings.whisperResetButton}) do
+    for _, button in ipairs({settings.whisperResetButton}) do
         check(button.template == "BackdropTemplate", "Settings button uses its own consistent surface")
         check(button:GetHeight() == 24 and button:GetFontString():GetFont(), "compact actions retain a 24-pixel target")
         check(button:GetWidth() <= 156 and button:GetFontString().fontSize <= 11,
@@ -223,4 +223,29 @@ do
     check(not h.env.GameTooltip:IsShown(), "selecting a font clears the row tooltip")
     released(h)
 end
+do
+    local h = Harness.new()
+    h:loadAddon(); h:slash("")
+    local main = h.env.DoYouNeedItFrame
+    local button = main.settingsButton
+    local neighbor = button.points[1][2]
+    check(not button.returnIcon:IsShown(), "loot mode shows the settings gear")
+    click(button)
+    local settings = h.env.DoYouNeedItSettingsFrame
+    check(settings:IsShown() and settings.back == nil, "header gear opens Settings without a second Back control")
+    check(button:IsVisible() and button.returnIcon:IsShown(), "same header target becomes a return arrow")
+    button:FireScript("OnEnter")
+    check(h.env.GameTooltip:GetText() == "Back — Loot", "return tooltip names the destination")
+    settings.whisperEditBox:SetText("Keep this draft {item}")
+    click(h.env.DoYouNeedItFontDropdown)
+    click(button)
+    check(not settings:IsShown() and not button.returnIcon:IsShown(), "return restores loot mode and gear")
+    check(not h.env.DoYouNeedItFontPicker:IsShown(), "return dismisses the font popup")
+    check(h.env.DoYouNeedItDB.settings.whisperTemplate == "Keep this draft {item}", "return saves the message draft")
+    check(button.points[1][2] == neighbor, "navigation never moves between modes")
+    check(not h.env.GameTooltip:IsShown(), "navigation clears its old tooltip")
+    click(button)
+    check(settings:IsShown() and button.returnIcon:IsShown(), "header navigation remains repeatable")
+end
+
 print("Settings popup regressions: PASS (" .. count .. " assertions)")

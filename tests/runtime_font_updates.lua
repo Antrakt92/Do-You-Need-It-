@@ -4,7 +4,7 @@ local function check(ok, label) checks = checks + 1; assert(ok, label) end
 local h = Harness.new({fontSetResult = function() writes = writes + 1; return true end})
 h:loadAddon(); h:slash("settings")
 local settings = h.env.DoYouNeedItSettingsFrame
-settings.back:FireScript("OnClick")
+h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
 local expectedPath, expectedSize, expectedFlags = settings.whisperLabel:GetFont()
 writes = 0
 for _ = 1, 10 do h:slash("delay 11") end
@@ -24,7 +24,7 @@ settings.fontSizeSlider:SetValue(24)
 check(settings.whisperEditBox.fontSize >= expectedSize, "real size previews still apply")
 settings.fontSizeSlider:FireScript("OnMouseUp")
 check(h.env.DoYouNeedItDB.settings.fontSize == 24, "size changes still persist")
-settings.back:FireScript("OnClick")
+h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
 writes = 0
 h:slash("delay 14")
 check(writes == 0, "new stable size also avoids redundant assignments")

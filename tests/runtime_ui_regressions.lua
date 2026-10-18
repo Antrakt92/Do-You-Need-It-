@@ -53,7 +53,7 @@ local function testLeavingSettingsRestoresLootHeight()
     assertEqual(main:GetHeight(), 300, "loot starts at compact height")
     h:slash("settings")
     assertTruthy(main:GetHeight() > 300, "settings use expanded height")
-    h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
+    h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
     assertEqual(main:GetHeight(), 300, "Back restores loot height")
     h:slash("settings")
     main:Hide()
@@ -118,7 +118,7 @@ local function testNewLootKeepsSettingsAndDraft()
     assertEqual(settings.whisperEditBox:GetText(), "Could you spare {item} please?", "incoming loot preserves the focused draft")
     assertEqual(h.env.DoYouNeedItDB.settings.whisperTemplate, "Hey, do you need {item}?", "incoming loot does not prematurely commit a draft")
     assertEqual(#h.env.DoYouNeedItDB.sessionAllRows, 1, "incoming loot is retained while settings are open")
-    settings.back:FireScript("OnClick")
+    h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
     assertEqual(#h:visibleRows(), 1, "Back reveals the retained new loot")
     assertEqual(h.env.DoYouNeedItFrame:GetHeight(), 300, "Back after incoming loot restores compact height")
     assertEqual(h.env.DoYouNeedItDB.settings.whisperTemplate, "Could you spare {item} please?", "leaving settings deliberately saves the draft")
@@ -261,7 +261,7 @@ local function testBothEquippedItemsHaveSeparateTargets()
             local settings = h.env.DoYouNeedItSettingsFrame
             settings.fontSizeSlider:SetValue(size)
             settings.fontSizeSlider:FireScript("OnMouseUp")
-            settings.back:FireScript("OnClick")
+            h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
             assertEqual(row.equipped:GetWidth(), row.equipped2:GetWidth(), "both items get the same full column")
             assertTruthy(topOffset(row.equippedLink) + row.equippedLink:GetHeight() <= topOffset(row.equippedLink2),
                 "paired targets stay separate for every slot and font size")
@@ -273,7 +273,7 @@ local function testBothEquippedItemsHaveSeparateTargets()
     h:slash("settings")
     h.env.DoYouNeedItSettingsFrame.fontSizeSlider:SetValue(12)
     h.env.DoYouNeedItSettingsFrame.fontSizeSlider:FireScript("OnMouseUp")
-    h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
+    h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
     row.equippedLink:FireScript("OnEnter")
     assertEqual(tooltip.hyperlink, first, "first equipped hover opens first item")
     row.equippedLink2:FireScript("OnEnter")
@@ -302,7 +302,7 @@ local function testLargeFontsAdaptRowsWithoutClipping()
         "large-font settings panel stays inside expanded window")
     assertTruthy(topOffset(settings.fontWarning) + settings.fontWarning.fontSize <= settings:GetHeight(),
         "large-font warning stays inside settings")
-    settings.back:FireScript("OnClick")
+    h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
     local rows = h:visibleRows()
     assertTruthy(#rows < 6 and #rows >= 3, "large fonts use fewer taller rows")
     assertEqual(h.env.DoYouNeedItFrame:GetHeight(), 300, "large-font loot stays compact")
@@ -322,7 +322,7 @@ local function testLargeFontsAdaptRowsWithoutClipping()
     assertTruthy(rows[#rows].drop:GetText():find("22401", 1, true), "large-font scrolling still reaches oldest loot")
     h:slash("settings")
     settings.fontSizeSlider:SetValue(8)
-    settings.back:FireScript("OnClick")
+    h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
     rows = h:visibleRows()
     assertEqual(#rows, 6, "small font restores full six-row capacity")
     assertEqual(rows[1].drop.fontSize, 8, "small-font preference remains supported")
@@ -337,7 +337,7 @@ local function testSettingsTooltipDismissalIsOwnerScoped()
         assertEqual(tooltip:GetOwner(), settings.autoCheck, "checkbox owns its help tooltip")
         assertEqual(tooltip:IsShown(), true, "checkbox help appears before closing settings")
         if close == "back" then
-            settings.back:FireScript("OnClick")
+            h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
         else
             h.env.DoYouNeedItFrame:Hide()
         end
@@ -350,7 +350,7 @@ local function testSettingsTooltipDismissalIsOwnerScoped()
         tooltip:SetText("Unrelated help")
         tooltip:Show()
         if close == "back" then
-            settings.back:FireScript("OnClick")
+            h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
         else
             h.env.DoYouNeedItFrame:Hide()
         end
@@ -439,7 +439,7 @@ local function testRussianClientSettingsUseGlyphCapableFont()
         "Russian client repairs a Latin-only saved font")
     assertEqual(settings.title:GetText(), "Настройки", "Russian client localizes the settings title")
     for _, control in ipairs({
-        settings.title, settings.back:GetFontString(),
+        settings.title,
         settings.autoCheckLabel, settings.delayLabel, settings.whisperLabel,
         settings.languageLabel, settings.fontLabel, settings.fontSizeLabel,
         settings.whisperResetButton:GetFontString(), settings.delaySlider.Low,
@@ -526,7 +526,7 @@ local function testNewLootShortcutFollowsLanguageChanges()
         end
         assertTruthy(selected, "requested language appears in the settings picker")
         selected:FireScript("OnClick")
-        h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
+        h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
         assertEqual(h.env.DoYouNeedItFrame.newLootButton:IsShown(), true, "language change keeps incoming loot available")
         assertEqual(h.env.DoYouNeedItFrame.newLootButton:GetText(), option[2], "new loot shortcut follows the selected language")
     end
@@ -622,7 +622,7 @@ local function testFontListCacheBoundsSharedMediaLookups()
     h:setUnit("party1", { name = "Игрок", realm = "Ravencrest", guid = "CacheGUID", classToken = "PALADIN" })
     addRealGear(h, 22531)
     h:slash("settings")
-    h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
+    h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
     assertTruthy(#h:visibleRows() > 0, "precondition: cyrillic loot row is visible")
     listCalls, fetchCalls = 0, 0
     for _ = 1, 20 do
@@ -735,7 +735,7 @@ local function testTradeColumnFollowsEquippedColumn()
     h:slash("settings")
     h.env.DoYouNeedItSettingsFrame.fontSizeSlider:SetValue(24)
     h.env.DoYouNeedItSettingsFrame.fontSizeSlider:FireScript("OnMouseUp")
-    h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
+    h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
     assertEqual(main.columnDrop.points[1][4], 136, "large-font drop header anchor")
     assertEqual(main.columnEquipped.points[1][4], 346, "large-font equipped header anchor")
     assertEqual(main.columnTrade.points[1][4], 506, "trade header follows the equipped column end at large font")
@@ -759,7 +759,7 @@ local function testLeavingSettingsDisarmsWhisperReset()
     local settings = h.env.DoYouNeedItSettingsFrame
     settings.whisperResetButton:FireScript("OnClick")
     assertEqual(settings.whisperResetButton:GetText(), "Reset?", "precondition: first reset click arms confirmation")
-    settings.back:FireScript("OnClick")
+    h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
     h:slash("settings")
     settings = h.env.DoYouNeedItSettingsFrame
     assertEqual(settings.whisperResetButton:GetText(), "Reset", "leaving settings disarms the reset confirmation")
@@ -810,7 +810,7 @@ local function testSlidersPersistOnRelease()
     settings.fontSizeSlider:FireScript("OnMouseUp")
     assertEqual(h.env.DoYouNeedItDB.settings.fontSize, 20, "font-size release stores the dragged value")
     settings.delaySlider:SetValue(18)
-    settings.back:FireScript("OnClick")
+    h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
     assertEqual(h.env.DoYouNeedItDB.settings.autoDelay, 18, "leaving settings persists an unreleased drag")
 end
 
@@ -843,7 +843,7 @@ local function testSliderPreviewNeverLeaksIntoScheduler()
     -- Committing the preview feeds the scheduler normally afterwards.
     settings.delaySlider:FireScript("OnMouseUp")
     assertEqual(h.env.DoYouNeedItDB.settings.autoDelay, 25, "release commits the previewed delay")
-    settings.back:FireScript("OnClick")
+    h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
     addRealGear(h, 22563)
     local committed
     for _, frame in ipairs(h:visibleRows()) do
@@ -861,7 +861,7 @@ local function testWheelIgnoredInSettings()
     local scrolled = h:visibleRows()[1].row
     h:slash("settings")
     main:FireScript("OnMouseWheel", -1)
-    h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
+    h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
     assertEqual(h:visibleRows()[1].row, scrolled, "wheel in settings does not move the loot reading position")
 end
 
@@ -876,7 +876,7 @@ local function testColumnWidthsScaleWithFont()
     h:slash("settings")
     h.env.DoYouNeedItSettingsFrame.fontSizeSlider:SetValue(24)
     h.env.DoYouNeedItSettingsFrame.fontSizeSlider:FireScript("OnMouseUp")
-    h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
+    h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
     row = h:visibleRows()[1]
     assertEqual(row.looter:GetWidth(), 110, "large-font looter column grows")
     assertEqual(row.drop:GetWidth(), 200, "large-font drop column grows")
@@ -993,7 +993,7 @@ local function testSettingsSectionsAndCompactActions()
             h:loadAddon(); h:slash("settings")
             local frame = h.env.DoYouNeedItSettingsFrame
             assertEqual(frame.title.points[1][1], "TOPLEFT", "Settings has a stable page-heading position")
-            assertEqual(frame.back.points[1][1], "TOPRIGHT", "Back is separated from the page heading")
+            assertEqual(frame.back, nil, "Settings has no separate Back button")
             assertTruthy(frame.title.fontSize <= 16, "page title keeps a restrained type size")
             assertEqual(frame.whispersHeading.fontSize, frame.appearanceHeading.fontSize, "sections share one heading style")
             assertTruthy(frame.appearanceHeading.fontSize <= 14, "section headings remain subordinate to the title")
@@ -1002,7 +1002,7 @@ local function testSettingsSectionsAndCompactActions()
             local whisperBottom = -frame.whispersSurface.points[2][5]
             assertTruthy(whisperBottom + 8 <= appearanceTop, "sections have a clear visual gap")
             assertEqual(frame.resetPosition, nil, "Appearance has no window-centering button")
-            for _, button in ipairs({frame.back, frame.whisperResetButton}) do
+            for _, button in ipairs({frame.whisperResetButton}) do
                 assertEqual(button:GetHeight(), 24, "secondary actions keep compact click targets at all font sizes")
                 assertTruthy(button:GetWidth() <= 156, "secondary actions do not become oversized")
             end
@@ -1051,7 +1051,7 @@ local function testSettingsTextRolesRemainReadableAcrossHudSizes()
                 assertTruthy(labelSize * 207.76 / 24 <= frame.fontSizeLabel:GetWidth(), "Russian label fits its actual glyph advances")
                 assertTruthy(helpSize * 598.74 / 22 <= frame.whisperHelp:GetWidth(), "Russian helper fits its actual glyph advances")
             end
-            frame.back:FireScript("OnClick")
+            h.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
             h:slash("test")
             local row = h:visibleRows()[1]
             local _, hudSize = row.looter:GetFont()

@@ -2004,7 +2004,13 @@ function Addon.SetLootChromeShown(shown)
 
     setShown(Addon.historyButton)
     setShown(Addon.demoButton)
-    setShown(Addon.settingsButton)
+    if Addon.settingsButton then
+        Addon.settingsButton:Show()
+        Addon.settingsButton.returnIcon:SetShown(not shown)
+        local texture = shown and "Interface\\Buttons\\UI-OptionsButton" or ""
+        Addon.settingsButton:SetNormalTexture(texture)
+        Addon.settingsButton:SetPushedTexture(texture)
+    end
     if Addon.newLootButton then
         if shown and Addon.newLootPending then Addon.newLootButton:Show()
         else Addon.newLootButton:Hide() end
@@ -4825,13 +4831,11 @@ function Addon.CreateDeveloperLinks(frame)
         button:SetScript("OnClick", function() Addon.ShowDeveloperLink(url) end)
         return button
     end
-    Addon.feedbackButton = create("DoYouNeedItFeedbackButton", frame.close, 2,
+    Addon.feedbackButton = create("DoYouNeedItFeedbackButton", frame.settingsButton, 4,
         "https://github.com/Antrakt92/Do-You-Need-It-/issues", "Report a bug or suggest a feature",
         nil, "transmog-icon-chat")
     Addon.supportButton = create("DoYouNeedItSupportButton", Addon.feedbackButton, 4,
         "https://ko-fi.com/antrakt92", "Support development", "Interface\\COMMON\\friendship-heart")
-    frame.settingsButton:ClearAllPoints()
-    frame.settingsButton:SetPoint("RIGHT", Addon.supportButton, "LEFT", -4, 0)
 end
 
 CreateUI = function()
@@ -4989,11 +4993,21 @@ CreateUI = function()
     frame.settingsButton:SetNormalTexture("Interface\\Buttons\\UI-OptionsButton")
     frame.settingsButton:SetPushedTexture("Interface\\Buttons\\UI-OptionsButton")
     frame.settingsButton:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+    frame.settingsButton.returnIcon = frame.settingsButton:CreateFontString(nil, "OVERLAY")
+    frame.settingsButton.returnIcon:SetPoint("CENTER", 0, 1)
+    frame.settingsButton.returnIcon:SetFont(Core.GetDefaultFont(), 24, "")
+    frame.settingsButton.returnIcon:SetText("‹")
+    frame.settingsButton.returnIcon:SetTextColor(0.78, 0.89, 0.96, 1)
+    frame.settingsButton.returnIcon:Hide()
     frame.settingsButton:SetScript("OnEnter", function(button)
-        Addon.ShowTextTooltip(button, L("Settings"))
+        Addon.ShowTextTooltip(button, Addon.contentMode == "settings" and (L("Back") .. " — " .. L("Loot")) or L("Settings"))
     end)
     frame.settingsButton:SetScript("OnLeave", HideItemTooltip)
-    frame.settingsButton:SetScript("OnClick", OpenSettings)
+    frame.settingsButton:SetScript("OnClick", function()
+        Addon.HideSettingsTooltip()
+        if Addon.contentMode == "settings" then Addon.CloseSettings()
+        else OpenSettings() end
+    end)
     Addon.settingsButton = frame.settingsButton
     Addon.CreateDeveloperLinks(frame)
 
@@ -5195,9 +5209,6 @@ function Addon.LayoutSettings()
         label:SetWidth(SETTINGS_CONTROL_X - 12 - 8)
     end
     place(frame.title, 10, 2)
-    frame.back:ClearAllPoints()
-    frame.back:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, 2)
-    frame.back:SetSize(actionWidth("Back", 64, 112), 24)
     place(frame.whispersHeading, 12, 43)
     place(frame.autoCheck, SETTINGS_CONTROL_X, 68 + extra)
     place(frame.delayLabel, 12, 102 + extra * 2)
@@ -5243,9 +5254,6 @@ RefreshSettingsControls = function()
     Addon.settingsFrame.whisperHelp:SetText(L("Use {item} for the dropped item."))
     if Addon.settingsTitle then
         Addon.settingsTitle:SetText(L("Settings"))
-    end
-    if Addon.settingsBackButton then
-        Addon.settingsBackButton:SetText(L("Back"))
     end
     if Addon.autoCheck then
         Addon.autoCheck:SetChecked(settings.autoWhisper == true)
@@ -5973,14 +5981,6 @@ CreateSettingsUI = function()
         Addon.HideLanguagePicker()
         CancelSettingsPreview()
     end)
-
-    frame.back = Addon.CreateFlatSettingsButton(frame, 78)
-    frame.back:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 2)
-    frame.back:SetScript("OnClick", function()
-        Addon.CloseSettings()
-    end)
-    RegisterButtonFont(frame.back, 11, nil, true, 11)
-    Addon.settingsBackButton = frame.back
 
     frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -2)
