@@ -4813,7 +4813,7 @@ function Addon.CreateDeveloperLinks(frame)
     local function create(name, neighbor, gap, url, label, texture, atlas)
         local button = CreateFrame("Button", name, frame)
         button:SetSize(24, 24)
-        button:SetPoint("RIGHT", neighbor, "LEFT", -gap, 0)
+        button:SetPoint("LEFT", neighbor, "RIGHT", gap, 0)
         local icon = button:CreateTexture(nil, "ARTWORK")
         icon:SetSize(16, 16)
         icon:SetPoint("CENTER", 0, texture and 3 or 0)
@@ -4831,11 +4831,11 @@ function Addon.CreateDeveloperLinks(frame)
         button:SetScript("OnClick", function() Addon.ShowDeveloperLink(url) end)
         return button
     end
-    Addon.feedbackButton = create("DoYouNeedItFeedbackButton", frame.settingsButton, 4,
+    Addon.supportButton = create("DoYouNeedItSupportButton", frame.title, 4,
+        "https://ko-fi.com/antrakt92", "Support development", "Interface\\COMMON\\friendship-heart")
+    Addon.feedbackButton = create("DoYouNeedItFeedbackButton", Addon.supportButton, 2,
         "https://github.com/Antrakt92/Do-You-Need-It-/issues", "Report a bug or suggest a feature",
         nil, "transmog-icon-chat")
-    Addon.supportButton = create("DoYouNeedItSupportButton", Addon.feedbackButton, 4,
-        "https://ko-fi.com/antrakt92", "Support development", "Interface\\COMMON\\friendship-heart")
 end
 
 CreateUI = function()
@@ -4909,7 +4909,6 @@ CreateUI = function()
 
     frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -10)
-    frame.title:SetWidth(238)
     frame.title:SetJustifyH("LEFT")
     KeepOneLine(frame.title)
     frame.title:SetText(L("Do You Need It?"))
