@@ -1287,12 +1287,75 @@ local function GetItemInfoCompat(itemLink)
     return SafeCall(GetItemInfo, itemLink)
 end
 
+Addon.ItemDisplayColors = {
+    [0] = "9d9d9d", [1] = "ffffff", [2] = "1eff00", [3] = "0070dd",
+    [4] = "a335ee", [5] = "ff8000", [6] = "e6cc80", [7] = "00ccff", [8] = "00ccff",
+}
+
+function Addon.ItemDisplayLoadComplete(state, entry, timedOut)
+    if timedOut then
+        if entry.finished then return end
+    else
+        if entry.callbackReceived then return end
+        entry.callbackReceived = true
+    end
+    if not entry.finished then
+        entry.finished = true
+        state.pending = state.pending - 1
+        state.completed[#state.completed + 1] = entry
+        -- Failed or empty completions also stay remembered, preventing repaint
+        -- retry loops. Eviction permits new IDs throughout a long session.
+        if #state.completed > 256 then
+            local oldest = table.remove(state.completed, 1)
+            if state.entries[oldest.id] == oldest then state.entries[oldest.id] = nil end
+        end
+    end
+    -- A timeout releases capacity, but the actual loader may still finish
+    -- later. Its first callback can repaint without accounting twice.
+    if timedOut then return end
+    C_Timer.After(0, function()
+        if Addon.itemDisplayLoads ~= state or state.generation ~= Addon.lootGeneration
+            or not Addon.frame or not Addon.frame:IsShown() or Addon.contentMode ~= "loot" then return end
+        -- Repaint only existing text. Never retain a row, change views, or
+        -- invoke loot ingestion from an item-cache completion.
+        for _, rowFrame in ipairs(Addon.rowFrames) do
+            if rowFrame:IsShown() and rowFrame.row then
+                for _, region in ipairs({rowFrame.drop, rowFrame.equipped, rowFrame.equipped2}) do
+                    local text = CleanString(SafeCall(region.GetText, region))
+                    if text then
+                        for link in text:gmatch("|Hitem:[^|]+|h%[.-%]|h") do
+                            if Core.ExtractItemID(link) == entry.id then
+                                region:SetText(Addon.ItemDisplayText(text))
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+function Addon.ItemDisplayRequestLoad(link)
+    local id = Core.ExtractItemID(link)
+    if not id or not C_Timer or type(C_Timer.After) ~= "function" then return end
+    local state = Addon.itemDisplayLoads
+    if not state or state.generation ~= Addon.lootGeneration then
+        state = {generation = Addon.lootGeneration, entries = {}, completed = {}, pending = 0}
+        Addon.itemDisplayLoads = state
+    end
+    if state.entries[id] or state.pending >= 64 then return end
+    local entry = {id = id}
+    state.entries[id] = entry
+    state.pending = state.pending + 1
+    local function complete() Addon.ItemDisplayLoadComplete(state, entry) end
+    -- Register before requesting: item-cache callbacks can run synchronously.
+    if not RequestItemLoad(link, complete) then complete() end
+    C_Timer.After(10, function() Addon.ItemDisplayLoadComplete(state, entry, true) end)
+end
+
 function Addon.ItemDisplayText(text)
     if type(text) ~= "string" then return "" end
-    local colors = {
-        [0] = "9d9d9d", [1] = "ffffff", [2] = "1eff00", [3] = "0070dd",
-        [4] = "a335ee", [5] = "ff8000", [6] = "e6cc80", [7] = "00ccff", [8] = "00ccff",
-    }
     -- Encounter/history links may omit their color. Repair display only: the
     -- original payload remains authoritative for tooltips, whispers and variants.
     local display = text:gsub("()(|Hitem:[^|]+|h%[.-%]|h)", function(start, link)
@@ -1300,7 +1363,8 @@ function Addon.ItemDisplayText(text)
             return link
         end
         local _, _, quality = GetItemInfoCompat(link)
-        local color = colors[CleanNumber(quality)]
+        local color = Addon.ItemDisplayColors[CleanNumber(quality)]
+        if not color then Addon.ItemDisplayRequestLoad(link) end
         return color and ("|cff" .. color .. link .. "|r") or link
     end)
     return display
