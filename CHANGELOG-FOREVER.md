@@ -1,6 +1,6 @@
 # Do You Need It? — Forever Beta
 
-## 1.0.1 - 18-Oct-2026 — Quality filters and font fixes
+## 1.0.1 - 18-Oct-2026 — Fonts, filters and window resizing
 
 - Adds the same quality checkboxes on the right of Settings as Retail, with saved
   settings and reversible filtering of current loot, history and Demo.
