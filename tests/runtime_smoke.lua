@@ -78,7 +78,7 @@ local function testSlashTestRowsAndManualWhisper()
 
     assertEqual(h.env.DoYouNeedItFrame:IsShown(), true, "test command shows main frame")
     local rows = h:visibleRows()
-    assertEqual(#rows, 6, "test command fills the visible page of the expanded demo")
+    assertEqual(#rows, 4, "test command fills the taller paired-comparison page")
     local askableRow = findVisibleAskableRow(rows)
     local boundRow = findVisibleRow(rows, function(frame)
         return frame.drop:GetText():find("Voidweaver's Leggings", 1, true) ~= nil
@@ -124,7 +124,7 @@ local function testLootSlashCommandsLeaveEmbeddedSettingsMode()
 
     h:slash("test")
     assertEqual(h.env.DoYouNeedItSettingsFrame:IsShown(), false, "test command leaves embedded settings mode")
-    assertEqual(#h:visibleRows(), 6, "test command shows a full page of demo loot")
+    assertEqual(#h:visibleRows(), 4, "test command shows a full stacked-comparison page")
 
     h:slash("settings")
     assertEqual(h.env.DoYouNeedItSettingsFrame:IsShown(), true, "precondition: settings panel reopens")
@@ -371,7 +371,7 @@ local function testMainWindowLayoutBoundsLongText()
     assertEqual(frame.tabAllGear, nil, "main window does not create an all-gear tab")
 
     local rows = h:visibleRows()
-    assertEqual(#rows, 6, "layout test has a full page of demo rows")
+    assertEqual(#rows, 4, "layout test has a full page of stacked demo rows")
     local row = findVisibleAskableRow(rows)
     assertTruthy(row, "layout test has an askable row")
     local fontStrings = {

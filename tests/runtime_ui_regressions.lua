@@ -81,7 +81,7 @@ local function testDemoNeverSendsRealWhispers()
     h:slash("auto on")
     h:slash("test")
     local rows = h:visibleRows()
-    assertEqual(#rows, 6, "demo fills the visible comparison page")
+    assertEqual(#rows, 4, "stacked comparisons fill a four-row demo page")
     for _, frame in ipairs(rows) do
         if frame.whisper:IsShown() then
             frame.whisper:FireScript("OnClick")
@@ -247,8 +247,33 @@ local function testBothEquippedItemsHaveSeparateTargets()
     assertEqual(row.equippedLink2:IsShown(), true, "second equipped target is visible")
     assertTruthy(row.equipped:GetText():find("Cached:", 1, true), "paired items retain cached evidence label")
     assertEqual(row.equipped2:GetText(), second, "second equipped item has its own readable label")
-    assertTruthy(row.equippedLink.points[1][4] + row.equippedLink:GetWidth() <= row.equippedLink2.points[1][4],
-        "equipped hover targets do not overlap")
+    assertEqual(row.equipped:GetWidth(), 150, "first paired item gets the full column")
+    assertEqual(row.equipped2:GetWidth(), 150, "second paired item gets the full column")
+    assertEqual(row.equippedLink.points[1][4], row.equippedLink2.points[1][4], "paired targets share one column")
+    assertTruthy(topOffset(row.equippedLink) + row.equippedLink:GetHeight() <= topOffset(row.equippedLink2),
+        "stacked equipped hover targets do not overlap")
+    assertTruthy(topOffset(row.equippedLink2) + row.equippedLink2:GetHeight() <= row:GetHeight() - row.tradeInfo:GetHeight() - 1,
+        "second item stays above the transfer-status line")
+    for _, equipLoc in ipairs({"INVTYPE_FINGER", "INVTYPE_TRINKET", "INVTYPE_WEAPON"}) do
+        for _, size in ipairs({8, 12, 24}) do
+            row.row.equipLoc = equipLoc
+            h:slash("settings")
+            local settings = h.env.DoYouNeedItSettingsFrame
+            settings.fontSizeSlider:SetValue(size)
+            settings.fontSizeSlider:FireScript("OnMouseUp")
+            settings.back:FireScript("OnClick")
+            assertEqual(row.equipped:GetWidth(), row.equipped2:GetWidth(), "both items get the same full column")
+            assertTruthy(topOffset(row.equippedLink) + row.equippedLink:GetHeight() <= topOffset(row.equippedLink2),
+                "paired targets stay separate for every slot and font size")
+            assertTruthy(topOffset(row.equippedLink2) + row.equippedLink2:GetHeight() <= row:GetHeight() - row.tradeInfo:GetHeight() - 1,
+                "paired comparison leaves room for trade at every font size")
+            assertTruthy(topOffset(row) + row:GetHeight() <= 292, "tall comparison stays within the window")
+        end
+    end
+    h:slash("settings")
+    h.env.DoYouNeedItSettingsFrame.fontSizeSlider:SetValue(12)
+    h.env.DoYouNeedItSettingsFrame.fontSizeSlider:FireScript("OnMouseUp")
+    h.env.DoYouNeedItSettingsFrame.back:FireScript("OnClick")
     row.equippedLink:FireScript("OnEnter")
     assertEqual(tooltip.hyperlink, first, "first equipped hover opens first item")
     row.equippedLink2:FireScript("OnEnter")
@@ -265,6 +290,7 @@ local function testBothEquippedItemsHaveSeparateTargets()
     assertEqual(row.equippedLink2:IsShown(), false, "single-item comparison removes second hover target")
     assertEqual(tooltip:IsShown(), false, "removing the second equipped item clears its owned tooltip")
     assertEqual(row.equipped:GetWidth(), 150, "single item uses the full equipped column")
+    assertEqual(row:GetHeight(), 30, "single-item view restores compact rows")
 end
 
 local function testLargeFontsAdaptRowsWithoutClipping()
@@ -680,7 +706,7 @@ local function testTradeBlockScalesWithFont()
             assertEqual(row.tradeInfo:GetHeight(), math.min(24, math.max(11, math.floor(11 * scale + 0.5))),
                 "trade hover height scales at font " .. size)
             -- Second-line boxes stay disjoint: status yields to the trade block.
-            local statusLeft = row.looter.points[1][4] + row.status.points[1][4]
+            local statusLeft = row.status.points[1][4]
             assertTruthy(statusLeft + row.status:GetWidth() <= 504 - tradeWidth,
                 "status and scaled trade boxes do not overlap at font " .. size)
         end
@@ -721,7 +747,7 @@ local function testTradeColumnFollowsEquippedColumn()
     assertEqual(row.tradeInfo:GetHeight(), 23, "trade hover grows with the font")
     -- Second-line boxes stay disjoint: status yields to the trade block,
     -- whose right edge sits at the row right margin.
-    local statusLeft = row.looter.points[1][4] + row.status.points[1][4]
+    local statusLeft = row.status.points[1][4]
     assertTruthy(statusLeft + row.status:GetWidth() <= 504 - row.trade:GetWidth(),
         "status and trade row boxes do not overlap")
 end

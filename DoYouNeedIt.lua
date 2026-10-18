@@ -1883,6 +1883,15 @@ function Addon.LootRowMetrics()
     local body = Core.ResolveFontSize(11, size)
     local detail = Core.ResolveFontSize(10, size)
     local height = math.max(ROW_HEIGHT, body + detail + 6)
+    -- Use one stable row height throughout a view so scrolling cannot clip a
+    -- paired comparison or move the status line onto its second item.
+    for _, row in ipairs(RowsForSelectedView()) do
+        local _, second = Addon.EquippedItemLinks(row.equippedText)
+        if second then
+            height = math.max(height, body * 2 + math.max(detail, body, 11) + 10)
+            break
+        end
+    end
     local stride = height + 4
     local startY = ROW_START_Y - math.max(0, size - 12) * 2
     local count = math.min(MAX_VISIBLE_ROWS, math.floor((WINDOW_HEIGHT + startY - 8) / stride))
@@ -2189,35 +2198,40 @@ local function RefreshRows()
             rowFrame.equippedLink:ClearAllPoints()
             rowFrame.equippedLink:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", equippedLinkX, -1)
             rowFrame.equippedLink:SetWidth(columnWidths.equipped + 8)
+            rowFrame.equipped:ClearAllPoints()
+            rowFrame.equipped:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", equippedLinkX + 2, -2)
+            rowFrame.equipped:SetHeight(bodyHeight)
+            rowFrame.equipped2:ClearAllPoints()
+            rowFrame.equipped2:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", equippedLinkX + 2, -(bodyHeight + 5))
+            rowFrame.equipped2:SetHeight(bodyHeight)
             if secondEquipped then
                 local prefix = IsCachedEquippedText(row.equippedText) and DisplayEquippedText("Cached: ") or ""
                 rowFrame.equipped:SetText(prefix .. Addon.ItemDisplayText(firstEquipped))
-                rowFrame.equipped:SetWidth((columnWidths.equipped - 8) / 2)
-                rowFrame.equippedLink:SetWidth((columnWidths.equipped - 8) / 2 + 2)
-                rowFrame.equipped2:SetWidth((columnWidths.equipped - 8) / 2)
+                rowFrame.equipped:SetWidth(columnWidths.equipped)
+                rowFrame.equipped2:SetWidth(columnWidths.equipped)
                 rowFrame.equippedLink2:ClearAllPoints()
-                rowFrame.equippedLink2:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", equippedLinkX + (columnWidths.equipped - 8) / 2 + 8, -1)
-                rowFrame.equippedLink2:SetWidth((columnWidths.equipped - 8) / 2 + 2)
+                rowFrame.equippedLink2:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", equippedLinkX, -(bodyHeight + 4))
+                rowFrame.equippedLink2:SetWidth(columnWidths.equipped + 8)
                 rowFrame.equipped2:SetText(Addon.ItemDisplayText(secondEquipped))
                 rowFrame.equipped2:Show()
-                rowFrame.equippedDivider:Show()
             else
                 rowFrame.equipped:SetText(Addon.ItemDisplayText(DisplayEquippedText(row.equippedText)))
                 rowFrame.equipped:SetWidth(columnWidths.equipped)
                 rowFrame.equippedLink:SetWidth(columnWidths.equipped + 8)
                 rowFrame.equipped2:Hide()
-                rowFrame.equippedDivider:Hide()
             end
             local tradeStatusKey = Core.GetTradeStatusKey(row)
             rowFrame.trade:SetText(Core.GetTradeStatusText(row, ActiveLocale()))
             Addon.ApplyTradeStatusColor(rowFrame.trade, tradeStatusKey)
-            -- Trade shares the second row line with the status text: the
+            -- Trade shares the bottom line with the status text: the
             -- block keeps the row right edge while its scaled width grows
             -- left, and the status yields so the two boxes never overlap.
             rowFrame.trade:ClearAllPoints()
             rowFrame.trade:SetPoint("BOTTOMRIGHT", rowFrame, "BOTTOMRIGHT", -6, 2)
             rowFrame.trade:SetWidth(tradeWidth)
             rowFrame.status:SetWidth((ROW_WIDTH - 6 - tradeWidth) - 8 - 6)
+            rowFrame.status:ClearAllPoints()
+            rowFrame.status:SetPoint("BOTTOMLEFT", rowFrame, "BOTTOMLEFT", 8, 2)
             rowFrame.tradeInfo:ClearAllPoints()
             rowFrame.tradeInfo:SetPoint("BOTTOMRIGHT", rowFrame, "BOTTOMRIGHT", -6, 1)
             rowFrame.tradeInfo:SetSize(tradeWidth, tradeInfoHeight)
@@ -2257,7 +2271,6 @@ local function RefreshRows()
             rowFrame.equippedLink:Hide()
             rowFrame.equippedLink2:Hide()
             rowFrame.equipped2:Hide()
-            rowFrame.equippedDivider:Hide()
             rowFrame.tradeInfo:Hide()
             rowFrame:Hide()
         end
@@ -4620,20 +4633,15 @@ local function CreateRow(parent, index)
     row.equippedLink:Hide()
 
     row.equipped2 = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    row.equipped2:SetPoint("LEFT", row.equipped, "RIGHT", 8, 0)
-    row.equipped2:SetWidth((ROW_EQUIPPED_WIDTH - 8) / 2)
+    row.equipped2:SetPoint("TOPLEFT", row.equipped, "BOTTOMLEFT", 0, -3)
+    row.equipped2:SetWidth(ROW_EQUIPPED_WIDTH)
     row.equipped2:SetJustifyH("LEFT")
     KeepOneLine(row.equipped2)
     RegisterFontString(row.equipped2, 11, nil, false, true)
     row.equipped2:Hide()
-    row.equippedDivider = row:CreateTexture(nil, "ARTWORK")
-    row.equippedDivider:SetPoint("LEFT", row.equipped, "RIGHT", 3, 0)
-    row.equippedDivider:SetSize(1, 10)
-    row.equippedDivider:SetColorTexture(0.45, 0.55, 0.66, 0.5)
-    row.equippedDivider:Hide()
     row.equippedLink2 = CreateFrame("Button", nil, row)
-    row.equippedLink2:SetPoint("TOPLEFT", row, "TOPLEFT", 294 + (ROW_EQUIPPED_WIDTH - 8) / 2 + 8, -1)
-    row.equippedLink2:SetSize((ROW_EQUIPPED_WIDTH - 8) / 2 + 2, ROW_HEIGHT)
+    row.equippedLink2:SetPoint("TOPLEFT", row, "TOPLEFT", 294, -15)
+    row.equippedLink2:SetSize(ROW_EQUIPPED_HOVER_WIDTH, ROW_HEIGHT)
     row.equippedLink2:RegisterForClicks("AnyUp")
     row.equippedLink2:SetScript("OnEnter", function(button)
         ShowItemTooltip(button, button.itemLink)

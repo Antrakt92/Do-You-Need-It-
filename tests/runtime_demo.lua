@@ -34,7 +34,7 @@ do
     check(paired >= 3, "rings and trinkets exercise two equipped tooltip targets")
     click(frame.demoButton)
     check(frame.historyButton:GetText() == "Demo" and frame.demoButton:GetText() == "Exit demo", "demo has a clear mode and exit action")
-    check(#h:visibleRows() == 6 and frame.scrollText:GetText():find("12", 1, true), "first page renders with an overflow count")
+    check(#h:visibleRows() == 4 and frame.scrollText:GetText():find("12", 1, true), "first page renders with an overflow count")
     for _, row in ipairs(h:visibleRows()) do
         check(row.row.isTest and not row.whisper:IsEnabled(), "demo Ask controls cannot send")
         click(row.whisper)
@@ -44,7 +44,7 @@ do
     click(frame.demoButton)
     check(#h:visibleRows() == 0 and frame.demoButton:GetText() == "Demo", "second click restores the empty real view")
     h:slash("test")
-    check(#h:visibleRows() == 6, "slash uses the same demo path")
+    check(#h:visibleRows() == 4, "slash uses the same demo path")
     h:slash("test")
     check(#h:visibleRows() == 0, "slash also exits without duplicate rows")
 end
