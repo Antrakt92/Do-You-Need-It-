@@ -4538,15 +4538,19 @@ function Addon.CreateHistoryPicker()
     catcher:SetScript("OnMouseDown", Addon.HideHistoryMenu)
     catcher:Hide()
     local scroll = CreateFrame("ScrollFrame", nil, picker)
-    scroll:SetPoint("TOPLEFT", 6, -6)
+    scroll:SetPoint("TOPLEFT", 6, -50)
     scroll:SetPoint("BOTTOMRIGHT", -10, 6)
     local content = CreateFrame("Frame", nil, scroll)
     scroll:SetScrollChild(content)
     picker.scroll, picker.content = scroll, content
     picker.track = picker:CreateTexture(nil, "ARTWORK")
-    picker.track:SetPoint("TOPRIGHT", -4, -6)
+    picker.track:SetPoint("TOPRIGHT", -4, -50)
     picker.track:SetWidth(2)
     picker.track:SetColorTexture(0.16, 0.25, 0.30, 1)
+    picker.divider = picker:CreateTexture(nil, "ARTWORK")
+    picker.divider:SetPoint("TOPLEFT", 10, -42)
+    picker.divider:SetHeight(1)
+    picker.divider:SetColorTexture(0.20, 0.30, 0.37, 1)
     picker.thumb = picker:CreateTexture(nil, "OVERLAY")
     picker.thumb:SetWidth(2)
     picker.thumb:SetColorTexture(0.38, 0.64, 0.76, 1)
@@ -4573,7 +4577,7 @@ function Addon.ScrollHistoryPicker(offset)
     picker.thumb:ClearAllPoints()
     local travel = picker.viewportHeight - picker.thumb:GetHeight()
     local y = picker.maxScroll > 0 and offset / picker.maxScroll * travel or 0
-    picker.thumb:SetPoint("TOPRIGHT", picker, "TOPRIGHT", -4, -6 - y)
+    picker.thumb:SetPoint("TOPRIGHT", picker, "TOPRIGHT", -4, -50 - y)
 end
 
 local function OpenHistoryMenu(owner)
@@ -4600,21 +4604,25 @@ local function OpenHistoryMenu(owner)
     end
     local screenWidth = CleanNumber(SafeCall(UIParent.GetWidth, UIParent)) or 1920
     local screenHeight = CleanNumber(SafeCall(UIParent.GetHeight, UIParent)) or 1080
-    local width = math.min(440, math.max(160, screenWidth - 24))
-    local height = math.min(#entries * 44 + 12, math.max(56, math.min(364, screenHeight - 24)))
+    local width = math.min(CleanNumber(SafeCall(owner.GetWidth, owner)) or HEADER_HISTORY_WIDTH, math.max(160, screenWidth - 24))
+    local historyHeight = (#entries - 2) * 44
+    local height = historyHeight > 0 and math.min(historyHeight + 56, math.max(100, math.min(364, screenHeight - 24))) or 40
     picker:SetSize(width, height)
-    picker.viewportHeight = height - 12
-    picker.content:SetSize(width - 16, #entries * 44)
-    picker.maxScroll = math.max(0, #entries * 44 - picker.viewportHeight)
+    picker.viewportHeight = math.max(1, height - 56)
+    picker.scroll:SetShown(historyHeight > 0)
+    picker.divider:SetShown(historyHeight > 0)
+    picker.divider:SetWidth(width - 20)
+    picker.content:SetSize(width - 16, math.max(1, historyHeight))
+    picker.maxScroll = math.max(0, historyHeight - picker.viewportHeight)
     picker.track:SetHeight(picker.viewportHeight)
-    picker.thumb:SetHeight(math.max(16, picker.viewportHeight * picker.viewportHeight / (#entries * 44)))
+    picker.thumb:SetHeight(math.max(16, picker.viewportHeight * picker.viewportHeight / math.max(1, historyHeight)))
     picker.track:SetShown(picker.maxScroll > 0)
     picker.thumb:SetShown(picker.maxScroll > 0)
-    local selectedIndex = 1
+    local selectedOffset = 0
     for index, entry in ipairs(entries) do
         local button = picker.buttons[index]
         if not button then
-            button = CreateFrame("Button", nil, picker.content)
+            button = CreateFrame("Button", nil, index <= 2 and picker or picker.content)
             button.bg = button:CreateTexture(nil, "BACKGROUND")
             button.bg:SetAllPoints()
             button.accent = button:CreateTexture(nil, "ARTWORK")
@@ -4624,7 +4632,7 @@ local function OpenHistoryMenu(owner)
             button.primary = button:CreateFontString(nil, "OVERLAY")
             button.primary:SetJustifyH("LEFT")
             KeepOneLine(button.primary)
-            RegisterFontString(button.primary, 12, nil, true, true, 12)
+            RegisterFontString(button.primary, index <= 2 and 11 or 12, nil, true, true, index <= 2 and 11 or 12)
             button.secondary = button:CreateFontString(nil, "OVERLAY")
             button.secondary:SetPoint("TOPLEFT", 12, -25)
             button.secondary:SetWidth(width - 42)
@@ -4653,21 +4661,36 @@ local function OpenHistoryMenu(owner)
         end
         button.text, button.view, button.group = entry.text, entry.view, entry.group
         button.selected = Addon.selectedView == entry.view and (entry.view ~= "history" or Addon.state.history[Addon.selectedHistoryIndex] == entry.group)
-        if button.selected then selectedIndex = index end
-        button:SetSize(width - 16, 44)
-        button:ClearAllPoints(); button:SetPoint("TOPLEFT", 0, -(index - 1) * 44)
-        button.primary:ClearAllPoints(); button.primary:SetPoint("TOPLEFT", 12, entry.secondary and entry.secondary ~= "" and -7 or -15)
-        button.primary:SetWidth(width - 42)
+        local mode = index <= 2
+        local rowHeight = mode and 28 or 44
+        local rowWidth = mode and (width - 16) / 2 or width - 16
+        button:SetSize(rowWidth, rowHeight)
+        button:ClearAllPoints()
+        if mode then
+            button:SetPoint("TOPLEFT", picker, "TOPLEFT", 6 + (index - 1) * (rowWidth + 4), -6)
+        else
+            local offset = (index - 3) * 44
+            button:SetPoint("TOPLEFT", 0, -offset)
+            if button.selected then selectedOffset = math.max(0, offset - picker.viewportHeight + rowHeight) end
+        end
+        button.accent:SetHeight(rowHeight - 12)
+        button.primary:ClearAllPoints()
+        if mode then button.primary:SetPoint("LEFT", 8, 0)
+        else button.primary:SetPoint("TOPLEFT", 4, entry.secondary and entry.secondary ~= "" and -7 or -15) end
+        button.primary:SetWidth(rowWidth - 16)
         button.primary:SetText(entry.primary)
-        button.primary:SetTextColor(button.selected and 0.80 or 0.87, button.selected and 0.93 or 0.91, 0.98, 1)
-        button.secondary:SetWidth(width - 42)
+        button.primary:SetTextColor(button.selected and 0.80 or (mode and 0.64 or 0.87), button.selected and 0.93 or (mode and 0.76 or 0.91), 0.98, 1)
+        button.secondary:ClearAllPoints()
+        button.secondary:SetPoint("TOPLEFT", 4, -25)
+        button.secondary:SetWidth(rowWidth - 16)
+        button.secondary:SetShown(not mode)
         button.secondary:SetText(entry.secondary or "")
         button.accent:SetShown(button.selected)
         button.bg:SetColorTexture(0.08, 0.16, 0.21, button.selected and 1 or 0)
         button:Show()
     end
     for index = #entries + 1, #picker.buttons do picker.buttons[index]:Hide() end
-    Addon.ScrollHistoryPicker(math.max(0, (selectedIndex - 1) * 44 - picker.viewportHeight + 44))
+    Addon.ScrollHistoryPicker(selectedOffset)
     ApplyCurrentFont()
     Addon.AnchorPopup(picker, owner, Addon.historyCatcher)
     Addon.ShowPopupSafely(picker, Addon.historyCatcher)

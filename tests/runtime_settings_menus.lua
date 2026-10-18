@@ -269,6 +269,18 @@ for _, locale in ipairs({"enUS", "ruRU", "deDE", "esES", "esMX", "frFR", "itIT",
         check(picker.clampedToScreen and picker:GetHeight() <= 364, "long history stays bounded")
         check(picker.backdropColor[4] >= 0.99, "opaque surface separates history from loot behind it")
         check(#picker.buttons == 12, "current, session and ten saved groups remain available")
+        check(picker:GetWidth() == main.historyButton:GetWidth(), "popup matches the selector width")
+        check(picker.buttons[1]:GetParent() == picker and picker.buttons[2]:GetParent() == picker,
+            "Current and This Session stay in the fixed header")
+        check(picker.buttons[1]:GetHeight() == 28 and picker.buttons[2]:GetHeight() == 28,
+            "live views use compact controls")
+        check(picker.buttons[1].points[1][5] == picker.buttons[2].points[1][5], "live views share one header row")
+        check(picker.buttons[1].primary.fontSize <= 11 and not picker.buttons[1].secondary:IsShown(),
+            "live views have a separate compact text role")
+        check(picker.divider:IsShown() and picker.content:GetHeight() == 10 * 44,
+            "a divider separates fixed live views from scrollable saved encounters")
+        check(picker.scroll.points[1][2] + picker.buttons[3].primary.points[1][2] == main.historyButton:GetFontString().points[1][4],
+            "history text lines up with the selector caption")
         check(picker.buttons[1].selected and picker.buttons[1].accent:IsShown(), "current view has a selected marker")
         local saved = picker.buttons[3]
         check(saved.primary:GetText() == "Boss 1", "boss has a separate primary line")
@@ -277,6 +289,8 @@ for _, locale in ipairs({"enUS", "ruRU", "deDE", "esES", "esMX", "frFR", "itIT",
         check(picker.maxScroll > 0 and picker.thumb:IsShown(), "long history offers a scroll indicator")
         picker:FireScript("OnMouseWheel", -100)
         check(picker.scroll:GetVerticalScroll() == picker.maxScroll, "history scroll clamps to its last entry")
+        check(picker.buttons[1].points[1][5] == -6 and picker.buttons[2].points[1][5] == -6,
+            "live view controls stay at the top while history scrolls")
         picker:FireScript("OnMouseWheel", 100)
         check(picker.scroll:GetVerticalScroll() == 0, "history scroll clamps at the top")
         saved:FireScript("OnEnter")
@@ -289,6 +303,14 @@ for _, locale in ipairs({"enUS", "ruRU", "deDE", "esES", "esMX", "frFR", "itIT",
         check(picker.buttons[3].selected, "reopened menu marks the selected history group")
         click(main.historyButton)
         check(not picker:IsShown(), "second trigger click closes the popup")
+        released(h)
+        click(main.historyButton)
+        click(picker.buttons[2])
+        check(main.historyButton:GetText() == h.env.DoYouNeedItCore.GetLocaleLabel("This Session", locale),
+            "compact session control changes the view")
+        click(main.historyButton)
+        check(picker.buttons[2].selected, "session selection has its own header marker")
+        click(main.historyButton)
         released(h)
         click(main.historyButton)
         h:slash("settings")
@@ -317,6 +339,8 @@ do
     click(trigger)
     local picker = h.env.DoYouNeedItHistoryPicker
     check(picker:GetWidth() <= 256 and picker:GetHeight() <= 156, "history fits a narrow viewport")
+    check(picker:GetHeight() == 40 and not picker.divider:IsShown() and not picker.scroll:IsShown(),
+        "empty history shows only the compact live-view header")
     check(picker.points[1][1] == "BOTTOMLEFT", "history flips above a low trigger")
     local external = h:newFrame("Button", nil, h.env.UIParent)
     h.env.GameTooltip:SetOwner(external, "ANCHOR_RIGHT")
