@@ -960,7 +960,48 @@ local function testBareItemLinksRecoverQualityWithoutChangingPayload()
     assertEqual(#h.sentMessages, 0, "display and transfer copy never send a whisper")
 end
 
+local function testSettingsSectionsAndCompactActions()
+    for _, locale in ipairs({"enUS", "ruRU", "deDE", "frFR", "esES", "esMX", "itIT", "ptBR", "koKR", "zhCN", "zhTW"}) do
+        for _, size in ipairs({8, 12, 24}) do
+            local h = Harness.new({db = {settings = {forceLocale = locale, fontSize = size}}})
+            h:loadAddon(); h:slash("settings")
+            local frame = h.env.DoYouNeedItSettingsFrame
+            assertEqual(frame.title.points[1][1], "TOPLEFT", "Settings has a stable page-heading position")
+            assertEqual(frame.back.points[1][1], "TOPRIGHT", "Back is separated from the page heading")
+            assertTruthy(frame.title.fontSize <= 16, "page title keeps a restrained type size")
+            assertEqual(frame.whispersHeading.fontSize, frame.appearanceHeading.fontSize, "sections share one heading style")
+            assertTruthy(frame.appearanceHeading.fontSize <= 14, "section headings remain subordinate to the title")
+            local appearanceTop = -frame.appearanceSurface.points[1][5]
+            local appearanceBottom = -frame.appearanceSurface.points[2][5]
+            local whisperBottom = -frame.whispersSurface.points[2][5]
+            assertTruthy(whisperBottom + 8 <= appearanceTop, "sections have a clear visual gap")
+            local centerTop = -frame.resetPosition.points[1][5]
+            assertTruthy(centerTop >= appearanceTop and centerTop + frame.resetPosition:GetHeight() <= topOffset(frame.languageDropdown),
+                "window centering belongs to Appearance and cannot cover its fields")
+            assertEqual(frame.resetPosition:GetText(), h.env.DoYouNeedItCore.GetLocaleLabel("Center window", locale),
+                "window action describes centering in the selected language")
+            for _, button in ipairs({frame.back, frame.resetPosition, frame.whisperResetButton}) do
+                assertEqual(button:GetHeight(), 24, "secondary actions keep compact click targets at all font sizes")
+                assertTruthy(button:GetWidth() <= 156, "secondary actions do not become oversized")
+            end
+            assertTruthy(topOffset(frame.whisperHelp) + frame.whisperHelp.fontSize + 4 <= whisperBottom,
+                "message help stays inside the Whispers section")
+            assertTruthy(topOffset(frame.fontWarning) + frame.fontWarning.fontSize <= appearanceBottom,
+                "font warning stays inside Appearance")
+            assertTruthy(topOffset(frame.languageDropdown) + frame.languageDropdown:GetHeight() + 6 <= topOffset(frame.fontDropdown),
+                "language and font controls have distinct rows")
+            assertTruthy(topOffset(frame.fontDropdown) + frame.fontDropdown:GetHeight() + 6 <= topOffset(frame.fontSizeSlider),
+                "font choice cannot overlap the size slider")
+            assertTruthy(frame.languageDropdown:GetHeight() >= size + 8 and frame.fontDropdown:GetHeight() >= size + 8,
+                "large dropdown captions have vertical padding")
+            assertTruthy(126 + frame.whisperEditBox:GetWidth() + 8 + frame.whisperResetButton:GetWidth() <= frame:GetWidth() - 4,
+                "message and Reset fit in one aligned row")
+        end
+    end
+end
+
 local tests = {
+    { "grouped Settings and compact actions in all locales", testSettingsSectionsAndCompactActions },
     { "bare item quality and variant preservation", testBareItemLinksRecoverQualityWithoutChangingPayload },
     { "main window toplevel and geometry", testMainWindowToplevelAndGeometry },
     { "guarded text tooltips", testTextTooltipsUseGuardedHelper },

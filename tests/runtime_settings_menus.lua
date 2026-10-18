@@ -136,7 +136,9 @@ do
     check(h.env.DoYouNeedItDB.settings.autoWhisper == false, "second label click disables auto-whisper")
     for _, button in ipairs({settings.back, settings.resetPosition, settings.whisperResetButton}) do
         check(button.template == "BackdropTemplate", "Settings button uses its own consistent surface")
-        check(button:GetHeight() >= 26 and button:GetFontString():GetFont(), "button has readable text and a large target")
+        check(button:GetHeight() == 24 and button:GetFontString():GetFont(), "compact actions retain a 24-pixel target")
+        check(button:GetWidth() <= 156 and button:GetFontString().fontSize <= 11,
+            "secondary actions stay smaller than the main Settings controls")
     end
     check(settings.delaySlider:GetHeight() >= 24 and settings.fontSizeSlider:GetHeight() >= 24,
         "slim slider tracks retain convenient hit areas")

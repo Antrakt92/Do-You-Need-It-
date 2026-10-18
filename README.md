@@ -33,7 +33,7 @@ WoW does not expose another player's final personal-loot eligibility. **Likely**
 
 ## Whispers and settings
 
-Open the gear button or `/dyni settings` to change whispers, language, font, and font size. The window remembers its position, closes with Escape, and can be centered with **Reset Position**.
+Open the gear button or `/dyni settings` to change whispers, language, font, and font size. The window remembers its position, closes with Escape, and can be centered with **Center window** in Appearance.
 
 Auto-whisper is **off by default**. If enabled, it waits 10 seconds by default; the delay can be set from 3 to 30 seconds. A pending whisper is cancelled when you ask manually, clear the current rows, disable auto-whisper, or the looter leaves the group.
 

@@ -420,6 +420,16 @@ for locale, label in pairs(tradeConfirmationLabels) do
     LABELS_BY_LOCALE[locale].trade_unknown = label
 end
 
+local centerWindowLocaleLabels = {
+    enUS = "Center window", ruRU = "По центру", deDE = "Fenster zentrieren",
+    esES = "Centrar ventana", esMX = "Centrar ventana", frFR = "Centrer la fenêtre",
+    itIT = "Centra finestra", ptBR = "Centralizar janela", koKR = "창 중앙 정렬",
+    zhCN = "窗口居中", zhTW = "視窗置中",
+}
+for locale, label in pairs(centerWindowLocaleLabels) do
+    LABELS_BY_LOCALE[locale]["Center window"] = label
+end
+
 local developerLinkLocaleLabels = {
     enUS = { "Support development", "Report a bug or suggest a feature" },
     ruRU = { "Поддержать разработку", "Сообщить об ошибке или предложить функцию" },
