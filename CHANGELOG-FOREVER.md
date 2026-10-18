@@ -1,5 +1,9 @@
 # Do You Need It? — Forever Beta
 
+## Unreleased
+
+- Refines compact Settings: Auto whisper and Delay sit side by side, Appearance fields clear the heading, and the quality column moves right without increasing window height.
+
 ## 1.0.1 - 18-Oct-2026 — Fonts, filters and window resizing
 
 - Adds the same quality checkboxes on the right of Settings as Retail, with saved

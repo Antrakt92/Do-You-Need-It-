@@ -97,6 +97,12 @@ for _, flavor in ipairs({"retail", "forever"}) do
     h:slash("settings")
     local settings = h.env.DoYouNeedItSettingsFrame
     check(main:GetWidth() == 800 and main:GetHeight() == 600, "Settings retains resized window dimensions")
+    for _, row in ipairs(settings.qualityButtons) do
+        check(row.points[1][4] + row:GetWidth() <= settings:GetWidth() - 8,
+            "quality choices stay inside a widened window: " .. flavor)
+    end
+    check(settings.autoCheck.points[1][4] + settings.autoCheck:GetWidth() + settings.autoCheckLabelButton:GetWidth() + 8
+        <= settings.delaySlider.points[1][4], "wide Settings preserves separate toggle/slider hit areas")
     settings.whisperEditBox:FireScript("OnEditFocusGained")
     settings.whisperEditBox:SetText("Keep draft {item}")
     settings.qualityButtons[5]:FireScript("OnClick")

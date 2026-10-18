@@ -136,7 +136,9 @@ do
     local settings = h.env.DoYouNeedItSettingsFrame
     local draft = "Please keep this unsaved draft {item}"
     settings.whisperEditBox:SetText(draft)
-    check(settings.autoCheck.points[1][4] == 126, "checkbox aligns with the input column")
+    check(settings.autoCheck.points[1][4] < settings.delaySlider.points[1][4], "auto toggle sits left of delay")
+    check(settings.autoCheck.points[1][4] + settings.autoCheck:GetWidth() + settings.autoCheckLabelButton:GetWidth() + 8
+        <= settings.delaySlider.points[1][4], "auto label hit target ends before delay")
     check(settings.autoCheckLabelButton.points[1][2] == settings.autoCheck, "label target follows checkbox")
     click(settings.autoCheckLabelButton)
     check(h.env.DoYouNeedItDB.settings.autoWhisper == true, "label click enables auto-whisper explicitly")

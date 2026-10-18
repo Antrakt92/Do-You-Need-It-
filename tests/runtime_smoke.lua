@@ -2024,7 +2024,7 @@ local function testSettingsSliderTemplateTextDoesNotLeak()
     assertEqual(frame.fontSizeSlider.Text:GetText(), "", "font size slider hides unused template value text")
 end
 
-local function testSettingsControlsUseFixedColumnLayout()
+local function testSettingsControlsKeepLabelsWithTheirInputs()
     local h = Harness.new()
     h:loadAddon()
     h:slash("settings")
@@ -2038,21 +2038,33 @@ local function testSettingsControlsUseFixedColumnLayout()
     assertEqual(frame.fontDropdown.points[1][2], frame, "font dropdown is anchored to the settings frame column")
     assertEqual(frame.fontSizeSlider.points[1][2], frame, "font size slider is anchored to the settings frame column")
 
-    local labels = {
-        frame.delayLabel,
-        frame.whisperLabel,
-        frame.languageLabel,
-        frame.fontLabel,
-        frame.fontSizeLabel,
+    local pairs = {
+        {frame.delayLabel, frame.delaySlider, "above"},
+        {frame.whisperLabel, frame.whisperEditBox, "above"},
+        {frame.languageLabel, frame.languageDropdown},
+        {frame.fontLabel, frame.fontDropdown},
+        {frame.fontSizeLabel, frame.fontSizeSlider},
     }
-    for index = 1, #labels do
-        local labelLeft = labels[index].points[1][4]
-        local controlLeft = frame.delaySlider.points[1][4]
-        assertTruthy(labelLeft + labels[index]:GetWidth() + 8 <= controlLeft,
-            "settings label " .. index .. " cannot overlap its control column")
-        assertEqual(labels[index].maxLines, 1, "settings label " .. index .. " is capped to one line")
-        assertEqual(labels[index].wordWrap, false, "settings label " .. index .. " disables word wrap")
-        assertEqual(labels[index].nonSpaceWrap, false, "settings label " .. index .. " disables non-space wrap")
+    for index, pair in ipairs(pairs) do
+        local label, control = pair[1], pair[2]
+        local labelLeft, controlLeft = label.points[1][4], control.points[1][4]
+        if pair[3] == "above" then
+            assertEqual(labelLeft, controlLeft, "caption aligns with its input")
+            local labelBottom = -label.points[1][5] + label.fontSize
+            local controlTop = -control.points[1][5]
+            if control == frame.delaySlider then
+                local trackTop = controlTop + (control:GetHeight() - control.track:GetHeight()) / 2
+                assertTruthy(labelBottom + 6 <= trackTop, "delay caption clears the visible slider track")
+            else
+                assertTruthy(labelBottom + 2 <= controlTop, "message caption clears its field")
+            end
+        else
+            assertTruthy(labelLeft + label:GetWidth() + 8 <= controlLeft,
+                "inline settings label cannot overlap its own input")
+        end
+        assertEqual(label.maxLines, 1, "settings label " .. index .. " is capped to one line")
+        assertEqual(label.wordWrap, false, "settings label " .. index .. " disables word wrap")
+        assertEqual(label.nonSpaceWrap, false, "settings label " .. index .. " disables non-space wrap")
     end
 end
 
@@ -2174,7 +2186,7 @@ testForcedCjkLocalesUseLocaleSpecificBlizzardFontsOnWesternClients()
 testCustomFontPickerGridPreviewAndCommit()
 testLanguageDropdownCloseRepairsCaptionsAfterSharedListCleanup()
 testSettingsSliderTemplateTextDoesNotLeak()
-testSettingsControlsUseFixedColumnLayout()
+testSettingsControlsKeepLabelsWithTheirInputs()
 testSettingsWhisperTemplateEditBoxSaves()
 testSettingsRefreshKeepsFocusedWhisperDraft()
 testSettingsCloseSavesFocusedWhisperDraft()

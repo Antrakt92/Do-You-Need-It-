@@ -1000,6 +1000,27 @@ local function testSettingsSectionsAndCompactActions()
             local appearanceBottom = -frame.appearanceSurface.points[2][5]
             local whisperBottom = -frame.whispersSurface.points[2][5]
             assertTruthy(whisperBottom + 8 <= appearanceTop, "sections have a clear visual gap")
+            assertTruthy(appearanceTop + 20 + 8 <= topOffset(frame.fontDropdown),
+                "Appearance header has breathing room before the first field")
+            assertTruthy(topOffset(frame.languageDropdown) + frame.languageDropdown:GetHeight() + 8 <= appearanceBottom,
+                "Language has bottom padding inside Appearance")
+            local autoX, autoY = frame.autoCheck.points[1][4], topOffset(frame.autoCheck)
+            local delayX, delayY = frame.delaySlider.points[1][4], topOffset(frame.delaySlider)
+            assertEqual(autoY + frame.autoCheck:GetHeight() / 2, delayY + frame.delaySlider:GetHeight() / 2,
+                "Auto whisper and Delay share one control centerline")
+            assertTruthy(autoX + frame.autoCheck:GetWidth() + frame.autoCheckLabelButton:GetWidth() + 8 <= delayX,
+                "toggle label hit target cannot intercept delay slider clicks")
+            assertTruthy(topOffset(frame.delayLabel) >= 26 and frame.delaySlider:GetWidth() >= 100,
+                "delay caption clears the heading and slider stays usable")
+            assertTruthy(delayX + frame.delaySlider:GetWidth() + 12 + frame.delayValue:GetWidth() <= frame.whispersSurface.points[2][4] - 8,
+                "delay value stays inside its group")
+            for _, row in ipairs(frame.qualityButtons) do
+                assertTruthy(row.points[1][4] >= frame.whispersSurface.points[2][4] + 16,
+                    "quality choices are separated from the settings controls")
+                assertTruthy(row.points[1][4] + row:GetWidth() <= frame:GetWidth() - 8,
+                    "quality hit targets retain a right margin")
+                assertTruthy(26 + row.text:GetWidth() <= row:GetWidth(), "quality caption fits its hit target")
+            end
             assertEqual(frame.resetPosition, nil, "Appearance has no window-centering button")
             for _, button in ipairs({frame.whisperResetButton}) do
                 assertEqual(button:GetHeight(), 24, "secondary actions keep compact click targets at all font sizes")
@@ -1009,9 +1030,9 @@ local function testSettingsSectionsAndCompactActions()
                 "message help stays inside the Whispers section")
             assertTruthy(topOffset(frame.fontWarning) + frame.fontWarning.fontSize <= appearanceBottom,
                 "font warning stays inside Appearance")
-            assertTruthy(topOffset(frame.fontSizeSlider) + frame.fontSizeSlider:GetHeight() + 6 <= topOffset(frame.languageDropdown),
+            assertTruthy(topOffset(frame.fontSizeSlider) + frame.fontSizeSlider:GetHeight() + 4 <= topOffset(frame.languageDropdown),
                 "language follows the font size on a separate row")
-            assertTruthy(topOffset(frame.fontDropdown) + frame.fontDropdown:GetHeight() + 6 <= topOffset(frame.fontSizeSlider),
+            assertTruthy(topOffset(frame.fontDropdown) + frame.fontDropdown:GetHeight() + 4 <= topOffset(frame.fontSizeSlider),
                 "font choice cannot overlap the size slider")
             assertTruthy(frame.languageDropdown:GetHeight() >= frame.languageDropdown.Text.fontSize + 8 and frame.fontDropdown:GetHeight() >= frame.fontDropdown.Text.fontSize + 8,
                 "large dropdown captions have vertical padding")
@@ -1034,7 +1055,12 @@ local function testSettingsTextRolesRemainReadableAcrossHudSizes()
                 assertTruthy(actualSize <= 12, "fixed Settings columns retain a restrained label size")
                 assertTruthy(h.env.DoYouNeedItCore.FontSupportsText(path, label:GetText(), locale), "Settings role preserves native glyphs")
                 local x = label.points[1][4]
-                assertTruthy(x + label:GetWidth() <= 118, "label leaves an eight-pixel gap before the input column")
+                if label == frame.delayLabel then
+                    assertTruthy(x + label:GetWidth() <= frame.whispersSurface.points[2][4] - 12,
+                        "delay caption stays inside the right half of its group")
+                else
+                    assertTruthy(x + label:GetWidth() <= 118, "label leaves an eight-pixel gap before the input column")
+                end
             end
             local _, helpSize = frame.whisperHelp:GetFont()
             assertTruthy(helpSize <= 10, "fixed-width help does not scale with the HUD")

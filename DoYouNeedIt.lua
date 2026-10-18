@@ -5500,7 +5500,7 @@ function Addon.LayoutSettings()
     local frame = Addon.settingsFrame
     if not frame then return end
     frame:SetSize(Addon.frame:GetWidth() - 32, Addon.frame:GetHeight() - 56)
-    local left = frame:GetWidth() - 172
+    local left = frame:GetWidth() - 160
     local controlX = 126
     local function place(control, x, y)
         control:ClearAllPoints()
@@ -5509,48 +5509,57 @@ function Addon.LayoutSettings()
     frame.title:Hide()
     frame.headerRule:Hide()
     place(frame.whispersHeading, 12, 4)
-    place(frame.autoCheck, controlX, 24)
-    place(frame.delayLabel, 12, 52)
-    place(frame.delaySlider, controlX, 46)
-    place(frame.whisperLabel, 12, 76)
-    place(frame.whisperEditBox, 12, 88)
-    place(frame.whisperHelp, 12, 114)
-    place(frame.appearanceHeading, 12, 140)
-    place(frame.fontLabel, 12, 160)
-    place(frame.fontDropdown, controlX, 154)
+    place(frame.autoCheck, 12, 38)
+    place(frame.delayLabel, 196, 26)
+    place(frame.delaySlider, 196, 36)
+    place(frame.whisperLabel, 12, 64)
+    place(frame.whisperEditBox, 12, 78)
+    place(frame.whisperHelp, 12, 105)
+    place(frame.appearanceHeading, 12, 132)
+    place(frame.fontLabel, 12, 162)
+    place(frame.fontDropdown, controlX, 156)
     place(frame.fontSizeLabel, 12, 190)
     place(frame.fontSizeSlider, controlX, 184)
-    place(frame.languageLabel, 12, 220)
-    place(frame.languageDropdown, controlX, 214)
+    place(frame.languageLabel, 12, 218)
+    place(frame.languageDropdown, controlX, 212)
     place(frame.whispersRule, 12, 20)
-    place(frame.appearanceRule, 12, 152)
+    place(frame.appearanceRule, 12, 148)
     for _, label in ipairs({frame.delayLabel, frame.whisperLabel, frame.languageLabel, frame.fontLabel, frame.fontSizeLabel}) do
         label:SetWidth(controlX - 20)
     end
     for _, heading in ipairs({frame.whispersHeading, frame.appearanceHeading}) do heading:SetWidth(left - 24) end
     for _, rule in ipairs({frame.whispersRule, frame.appearanceRule}) do rule:SetWidth(left - 24) end
     frame.autoCheck:SetSize(20, 20)
-    frame.autoCheckLabel:SetWidth(left - controlX - 28)
-    frame.autoCheckLabelButton:SetSize(left - controlX - 24, 24)
+    -- Keep the toggle and delay together without letting the label hit area
+    -- reach over the slider. Extra width belongs to the delay control.
+    frame.autoCheckLabel:SetWidth(146)
+    frame.autoCheckLabelButton:SetSize(154, 24)
+    frame.delayLabel:SetWidth(left - 208)
+    frame.delayValue:SetWidth(28)
     local _, resetCharacters = L("Reset"):gsub("[^\128-\191]", "")
     frame.whisperResetButton:SetSize(math.min(100, math.max(60, resetCharacters * 6.5 + 20)), 24)
     frame.whisperEditBox:SetSize(left - 32 - frame.whisperResetButton:GetWidth(), 24)
     frame.whisperHelp:SetWidth(left - 24)
     frame.fontDropdown:SetSize(left - controlX - 12, 24)
     frame.languageDropdown:SetSize(left - controlX - 12, 24)
-    frame.delaySlider:SetWidth(left - controlX - 58)
+    frame.delaySlider:SetWidth(left - 246)
     frame.fontSizeSlider:SetWidth(left - controlX - 58)
     frame.whispersSurface:ClearAllPoints()
     frame.whispersSurface:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-    frame.whispersSurface:SetPoint("BOTTOMRIGHT", frame, "TOPLEFT", left, -128)
+    frame.whispersSurface:SetPoint("BOTTOMRIGHT", frame, "TOPLEFT", left, -120)
     frame.appearanceSurface:ClearAllPoints()
-    frame.appearanceSurface:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -136)
+    frame.appearanceSurface:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -128)
     frame.appearanceSurface:SetPoint("BOTTOMRIGHT", frame, "TOPLEFT", left, -244)
     place(frame.qualityHeading, left + 22, 4)
-    frame.qualityHeading:SetWidth(138)
-    for quality = 0, 6 do place(frame.qualityButtons[quality + 1], left + 20, 26 + quality * 25) end
+    frame.qualityHeading:SetWidth(126)
+    for quality = 0, 6 do
+        local row = frame.qualityButtons[quality + 1]
+        place(row, left + 20, 26 + quality * 25)
+        row:SetWidth(132)
+        row.text:SetWidth(106)
+    end
     place(frame.fontWarning, left + 22, 218)
-    frame.fontWarning:SetWidth(138)
+    frame.fontWarning:SetWidth(126)
 end
 
 RefreshSettingsControls = function()

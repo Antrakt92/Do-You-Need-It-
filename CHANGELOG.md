@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Aligns Auto whisper and Delay side by side, adds clear spacing below section headings and above the bottom border, and gives Settings fields more width without enlarging the window.
+
 - Adds independent gear-quality checkboxes on the right of Settings.
 - Applies the saved filter to live loot, session/history and Demo. Hidden records are retained, and disabled qualities do not open the window or send automatic whispers.
 - Fits Settings into the same compact window as loot, with whisper and appearance controls on the left and quality choices on the right.

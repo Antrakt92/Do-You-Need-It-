@@ -39,7 +39,10 @@ try {
     Assert-Case ($result.Metadata.releaseType -ceq 'beta') 'Forever upload must be beta'
     Assert-Case ($result.ExpectedGameVersionTypeId -eq 88568) 'Wrong marketplace flavor'
     Assert-Case (@($result.Metadata.gameVersions).Count -eq 1 -and $result.Metadata.gameVersions[0] -eq 222) 'Retail version must never be selected'
-    Assert-Case ($result.Metadata.changelog -ceq $changelog.Substring($changelog.IndexOf('## ')).Trim() + "`n") 'Wrong beta release notes'
+    $normalizedChangelog = $changelog -replace "`r`n?", "`n"
+    $releaseHeading = [regex]::Match($normalizedChangelog, '(?m)^## ' + [regex]::Escape($version) + ' - ')
+    $expectedReleaseNotes = $normalizedChangelog.Substring($releaseHeading.Index).Trim() + "`n"
+    Assert-Case ($result.Metadata.changelog -ceq $expectedReleaseNotes) 'Wrong beta release notes or unreleased notes leaked'
     $errors = $null
     $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $repoRoot 'scripts/upload-curseforge.ps1'), [ref]$null, [ref]$errors)
     Assert-Case (@($errors).Count -eq 0) 'Uploader syntax error'
