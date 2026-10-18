@@ -4643,10 +4643,10 @@ function Addon.ShowDeveloperLink(url)
 end
 
 function Addon.CreateDeveloperLinks(frame)
-    local function create(name, offset, url, label, texture, atlas)
+    local function create(name, neighbor, gap, url, label, texture, atlas)
         local button = CreateFrame("Button", name, frame)
         button:SetSize(24, 24)
-        button:SetPoint("TOPRIGHT", frame, "TOPRIGHT", offset, -7)
+        button:SetPoint("RIGHT", neighbor, "LEFT", -gap, 0)
         local icon = button:CreateTexture(nil, "ARTWORK")
         icon:SetSize(16, 16)
         icon:SetPoint("CENTER", 0, texture and 3 or 0)
@@ -4664,10 +4664,10 @@ function Addon.CreateDeveloperLinks(frame)
         button:SetScript("OnClick", function() Addon.ShowDeveloperLink(url) end)
         return button
     end
-    Addon.feedbackButton = create("DoYouNeedItFeedbackButton", -62,
+    Addon.feedbackButton = create("DoYouNeedItFeedbackButton", frame.settingsButton, 2,
         "https://github.com/Antrakt92/Do-You-Need-It-/issues", "Report a bug or suggest a feature",
         nil, "transmog-icon-chat")
-    Addon.supportButton = create("DoYouNeedItSupportButton", -90,
+    Addon.supportButton = create("DoYouNeedItSupportButton", Addon.feedbackButton, 4,
         "https://ko-fi.com/antrakt92", "Support development", "Interface\\COMMON\\friendship-heart")
 end
 
@@ -4816,9 +4816,13 @@ CreateUI = function()
         frame.columnTrade,
     }
 
+    frame.close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+    frame.close:SetSize(24, 24)
+    frame.close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -7)
+
     frame.settingsButton = CreateFrame("Button", nil, frame)
-    frame.settingsButton:SetSize(22, 22)
-    frame.settingsButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -34, -8)
+    frame.settingsButton:SetSize(24, 24)
+    frame.settingsButton:SetPoint("RIGHT", frame.close, "LEFT", -2, 0)
     frame.settingsButton:SetNormalTexture("Interface\\Buttons\\UI-OptionsButton")
     frame.settingsButton:SetPushedTexture("Interface\\Buttons\\UI-OptionsButton")
     frame.settingsButton:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
@@ -4829,9 +4833,6 @@ CreateUI = function()
     frame.settingsButton:SetScript("OnClick", OpenSettings)
     Addon.settingsButton = frame.settingsButton
     Addon.CreateDeveloperLinks(frame)
-
-    frame.close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    frame.close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
 
     frame.emptyText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisable")
     frame.emptyText:SetPoint("CENTER", frame, "CENTER", 0, 2)

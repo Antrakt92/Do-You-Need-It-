@@ -93,6 +93,18 @@ do
     local h = Harness.new()
     h:loadAddon(); h:slash("settings"); click(h.env.DoYouNeedItFontDropdown)
     local row = h.env.DoYouNeedItFontPickerContent.children[1]
+    local main = h.env.DoYouNeedItFrame
+    for _, pair in ipairs({
+        {main.settingsButton, main.close, 2},
+        {h.env.DoYouNeedItFeedbackButton, main.settingsButton, 2},
+        {h.env.DoYouNeedItSupportButton, h.env.DoYouNeedItFeedbackButton, 4},
+    }) do
+        local point = pair[1].points[1]
+        check(point[1] == "RIGHT" and point[2] == pair[2] and point[3] == "LEFT",
+            "header controls follow the preceding control toward Close")
+        check(point[4] == -pair[3] and point[5] == 0, "header controls keep compact aligned gaps")
+        check(pair[1]:GetWidth() == 24 and pair[1]:GetHeight() == 24, "header controls retain convenient click targets")
+    end
     check(row and row.star, "favorite control exists")
     local path = row.fontPath
     click(row.star)
