@@ -2029,11 +2029,6 @@ local function testSettingsControlsUseFixedColumnLayout()
 
     local frame = h.env.DoYouNeedItSettingsFrame
     assertTruthy(frame, "settings frame exists")
-    assertTruthy((frame.delayLabel:GetWidth() or 999) <= 96, "delay label is width-bounded")
-    assertTruthy((frame.whisperLabel:GetWidth() or 999) <= 96, "whisper label is width-bounded")
-    assertTruthy((frame.languageLabel:GetWidth() or 999) <= 96, "language label is width-bounded")
-    assertTruthy((frame.fontLabel:GetWidth() or 999) <= 96, "font label is width-bounded")
-    assertTruthy((frame.fontSizeLabel:GetWidth() or 999) <= 96, "font size label is width-bounded")
 
     assertEqual(frame.delaySlider.points[1][2], frame, "delay slider is anchored to the settings frame column")
     assertEqual(frame.whisperEditBox.points[1][2], frame, "whisper edit box is anchored to the settings frame column")
@@ -2049,6 +2044,10 @@ local function testSettingsControlsUseFixedColumnLayout()
         frame.fontSizeLabel,
     }
     for index = 1, #labels do
+        local labelLeft = labels[index].points[1][4]
+        local controlLeft = frame.delaySlider.points[1][4]
+        assertTruthy(labelLeft + labels[index]:GetWidth() + 8 <= controlLeft,
+            "settings label " .. index .. " cannot overlap its control column")
         assertEqual(labels[index].maxLines, 1, "settings label " .. index .. " is capped to one line")
         assertEqual(labels[index].wordWrap, false, "settings label " .. index .. " disables word wrap")
         assertEqual(labels[index].nonSpaceWrap, false, "settings label " .. index .. " disables non-space wrap")

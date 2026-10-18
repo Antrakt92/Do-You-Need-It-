@@ -5075,7 +5075,7 @@ end
 
 local function DropdownCaptionFont()
     local settings = Addon.state and Addon.state.settings or Core.NormalizeSettings({})
-    return StableSettingsFont(), Core.ResolveFontSize(12, settings.fontSize)
+    return StableSettingsFont(), math.min(12, Core.ResolveFontSize(12, settings.fontSize))
 end
 
 local function ShowDropdownPart(dropdown, suffix)
@@ -5168,6 +5168,9 @@ function Addon.LayoutSettings()
     local function actionWidth(key, minimum, maximum)
         local _, count = L(key):gsub("[^\128-\191]", "")
         return math.min(maximum, math.max(minimum, math.ceil(count * 6.5) + 20))
+    end
+    for _, label in ipairs({frame.delayLabel, frame.whisperLabel, frame.languageLabel, frame.fontLabel, frame.fontSizeLabel}) do
+        label:SetWidth(SETTINGS_CONTROL_X - 12 - 8)
     end
     place(frame.title, 10, 2)
     frame.back:ClearAllPoints()
@@ -5553,7 +5556,7 @@ function Addon.PopulateFontPicker()
             end
 
             button.text = button:CreateFontString(nil, "OVERLAY")
-            RegisterFontString(button.text, 12, nil, true)
+            RegisterFontString(button.text, 12, nil, true, nil, 12)
             button.text:SetPoint("LEFT", 6, 0)
             button.text:SetPoint("RIGHT", -28, 0)
             button.text:SetJustifyH("LEFT")
@@ -5596,8 +5599,10 @@ function Addon.PopulateFontPicker()
                 btn.bg:SetColorTexture(0.8, 0.65, 0.2, 0.18)
                 Addon.fontPickerHoverGen = (Addon.fontPickerHoverGen or 0) + 1
                 PreviewFont(btn.fontPath)
+                Addon.ShowTextTooltip(btn, btn.fontName)
             end)
             button:SetScript("OnLeave", function(btn)
+                if GameTooltip and CleanBoolean(SafeCall(GameTooltip.IsOwned, GameTooltip, btn)) == true then HideItemTooltip() end
                 btn.bg:SetColorTexture(0.12, 0.22, 0.28, btn.selected and 0.9 or 0)
                 local generation = Addon.fontPickerHoverGen or 0
                 local function restoreIfStillAway()
@@ -5611,7 +5616,12 @@ function Addon.PopulateFontPicker()
                     restoreIfStillAway()
                 end
             end)
+            button:SetScript("OnHide", function(btn)
+                if GameTooltip and (CleanBoolean(SafeCall(GameTooltip.IsOwned, GameTooltip, btn)) == true
+                    or CleanBoolean(SafeCall(GameTooltip.IsOwned, GameTooltip, btn.star)) == true) then HideItemTooltip() end
+            end)
             button:SetScript("OnClick", function(btn)
+                if GameTooltip and CleanBoolean(SafeCall(GameTooltip.IsOwned, GameTooltip, btn)) == true then HideItemTooltip() end
                 SetFontPath(btn.fontPath)
                 HideFontPicker()
             end)
@@ -6015,7 +6025,7 @@ CreateSettingsUI = function()
     frame.whisperHelp:SetTextColor(0.51, 0.61, 0.70, 1)
     frame.whisperHelp:SetText(L("Use {item} for the dropped item."))
     KeepOneLine(frame.whisperHelp)
-    RegisterFontString(frame.whisperHelp, 10, nil, true)
+    RegisterFontString(frame.whisperHelp, 10, nil, true, nil, 10)
 
     frame.headerRule = frame:CreateTexture(nil, "BACKGROUND")
     frame.headerRule:SetColorTexture(0.26, 0.34, 0.42, 0.55)
@@ -6069,7 +6079,7 @@ CreateSettingsUI = function()
     frame.delayLabel:SetTextColor(0.67, 0.76, 0.84, 1)
     frame.delayLabel:SetJustifyH("LEFT")
     KeepOneLine(frame.delayLabel)
-    RegisterFontString(frame.delayLabel, 12, nil, true)
+    RegisterFontString(frame.delayLabel, 12, nil, true, nil, 12)
     Addon.delayLabel = frame.delayLabel
 
     frame.delaySlider = CreateFrame("Slider", "DoYouNeedItDelaySlider", frame, "OptionsSliderTemplate,BackdropTemplate")
@@ -6108,7 +6118,7 @@ CreateSettingsUI = function()
     frame.whisperLabel:SetTextColor(0.67, 0.76, 0.84, 1)
     frame.whisperLabel:SetJustifyH("LEFT")
     KeepOneLine(frame.whisperLabel)
-    RegisterFontString(frame.whisperLabel, 12, nil, true)
+    RegisterFontString(frame.whisperLabel, 12, nil, true, nil, 12)
     Addon.whisperLabel = frame.whisperLabel
 
     frame.whisperEditBox = CreateFrame("EditBox", "DoYouNeedItWhisperEditBox", frame, "BackdropTemplate")
@@ -6195,7 +6205,7 @@ CreateSettingsUI = function()
     frame.languageLabel:SetTextColor(0.67, 0.76, 0.84, 1)
     frame.languageLabel:SetJustifyH("LEFT")
     KeepOneLine(frame.languageLabel)
-    RegisterFontString(frame.languageLabel, 12, nil, true)
+    RegisterFontString(frame.languageLabel, 12, nil, true, nil, 12)
     Addon.languageLabel = frame.languageLabel
 
     frame.languageDropdown = Addon.CreateSettingsDropdown("DoYouNeedItLanguageDropdown", frame, Addon.ToggleLanguagePicker)
@@ -6209,7 +6219,7 @@ CreateSettingsUI = function()
     frame.fontLabel:SetTextColor(0.67, 0.76, 0.84, 1)
     frame.fontLabel:SetJustifyH("LEFT")
     KeepOneLine(frame.fontLabel)
-    RegisterFontString(frame.fontLabel, 12, nil, true)
+    RegisterFontString(frame.fontLabel, 12, nil, true, nil, 12)
     Addon.fontLabel = frame.fontLabel
 
     frame.fontDropdown = Addon.CreateSettingsDropdown("DoYouNeedItFontDropdown", frame, ToggleFontPicker)
@@ -6223,7 +6233,7 @@ CreateSettingsUI = function()
     frame.fontSizeLabel:SetTextColor(0.67, 0.76, 0.84, 1)
     frame.fontSizeLabel:SetJustifyH("LEFT")
     KeepOneLine(frame.fontSizeLabel)
-    RegisterFontString(frame.fontSizeLabel, 12, nil, true)
+    RegisterFontString(frame.fontSizeLabel, 12, nil, true, nil, 12)
     Addon.fontSizeLabel = frame.fontSizeLabel
 
     frame.fontSizeSlider = CreateFrame("Slider", "DoYouNeedItFontSizeSlider", frame, "OptionsSliderTemplate,BackdropTemplate")

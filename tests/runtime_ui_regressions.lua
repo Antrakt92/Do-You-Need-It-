@@ -443,7 +443,7 @@ local function testLargeFontPickerRowsFitText()
         assertTruthy(current and current.text, "font picker exposes the first option")
         if first then assertEqual(current, first, "font picker reuses existing option frames after size changes") end
         first = current
-        assertEqual(first.text.fontSize, size, "font picker respects the configured font size")
+        assertEqual(first.text.fontSize, math.min(size, 12), "font names keep a compact UI role while HUD size changes")
         assertTruthy(first.text.fontSize + 4 <= first:GetHeight(), "font picker row accommodates large text and vertical padding")
         local nextRow = h:findFrame(function(frame) return frame.fontName == "Test Font 1" end, picker)
         assertTruthy(nextRow and nextRow.points[1][3] < first.points[1][3], "custom fonts extend the grid to another row")
@@ -1000,7 +1000,46 @@ local function testSettingsSectionsAndCompactActions()
     end
 end
 
+local function testSettingsTextRolesRemainReadableAcrossHudSizes()
+    local locales = { "enUS", "deDE", "esES", "esMX", "frFR", "itIT", "ptBR", "ruRU", "koKR", "zhCN", "zhTW" }
+    for _, locale in ipairs(locales) do
+        for _, size in ipairs({ 8, 12, 24 }) do
+            local h = Harness.new({ db = { settings = { forceLocale = locale, fontSize = size } } })
+            h:loadAddon()
+            h:slash("settings")
+            local frame = h.env.DoYouNeedItSettingsFrame
+            for _, label in ipairs({ frame.delayLabel, frame.whisperLabel, frame.languageLabel, frame.fontLabel, frame.fontSizeLabel }) do
+                local path, actualSize = label:GetFont()
+                assertTruthy(actualSize <= 12, "fixed Settings columns retain a restrained label size")
+                assertTruthy(h.env.DoYouNeedItCore.FontSupportsText(path, label:GetText(), locale), "Settings role preserves native glyphs")
+                local x = label.points[1][4]
+                assertTruthy(x + label:GetWidth() <= 118, "label leaves an eight-pixel gap before the input column")
+            end
+            local _, helpSize = frame.whisperHelp:GetFont()
+            assertTruthy(helpSize <= 10, "fixed-width help does not scale with the HUD")
+            for _, field in ipairs({ frame.languageDropdown, frame.fontDropdown }) do
+                local path, captionSize = field.Text:GetFont()
+                assertTruthy(captionSize <= 12, "collapsed captions remain readable inside compact fields")
+                assertTruthy(h.env.DoYouNeedItCore.FontSupportsText(path, field.Text:GetText(), locale), "captions retain native glyphs")
+            end
+            if locale == "ruRU" then
+                -- Real DejaVu Sans cmap/hmtx advances, normalized by unitsPerEm:
+                -- at 24px this label requires 207.76px, not the old 92px box.
+                local _, labelSize = frame.fontSizeLabel:GetFont()
+                assertTruthy(labelSize * 207.76 / 24 <= frame.fontSizeLabel:GetWidth(), "Russian label fits its actual glyph advances")
+                assertTruthy(helpSize * 598.74 / 22 <= frame.whisperHelp:GetWidth(), "Russian helper fits its actual glyph advances")
+            end
+            frame.back:FireScript("OnClick")
+            h:slash("test")
+            local row = h:visibleRows()[1]
+            local _, hudSize = row.looter:GetFont()
+            assertEqual(hudSize, h.env.DoYouNeedItCore.ResolveFontSize(11, size), "Settings caps never shrink the HUD")
+        end
+    end
+end
+
 local tests = {
+    { "Settings text roles across all locales and HUD sizes", testSettingsTextRolesRemainReadableAcrossHudSizes },
     { "grouped Settings and compact actions in all locales", testSettingsSectionsAndCompactActions },
     { "bare item quality and variant preservation", testBareItemLinksRecoverQualityWithoutChangingPayload },
     { "main window toplevel and geometry", testMainWindowToplevelAndGeometry },

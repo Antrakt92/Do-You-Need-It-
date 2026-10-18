@@ -185,4 +185,33 @@ do
     check(settings.whisperEditBox:GetText() == "Edited {item} draft", "typing disarms Reset before the next click")
     check(settings.whisperResetButton:GetText() == "Reset?", "Reset rearms for the edited draft")
 end
+do
+    local h = Harness.new({db = {settings = {fontSize = 24}}})
+    h:loadAddon(); h:slash("settings")
+    click(h.env.DoYouNeedItFontDropdown)
+    local row
+    for _, candidate in ipairs(h.env.DoYouNeedItFontPickerContent.children) do
+        if candidate:IsShown() and candidate.fontName and #candidate.fontName > 15 then
+            row = candidate
+            break
+        end
+    end
+    check(row ~= nil, "font list contains a long name to inspect")
+    row:FireScript("OnEnter")
+    check(h.env.GameTooltip:IsOwned(row) and h.env.GameTooltip:GetText() == row.fontName,
+        "hovering a font name exposes its complete name")
+    row:FireScript("OnLeave")
+    check(not h.env.GameTooltip:IsShown(), "leaving a font row clears its tooltip")
+    row:FireScript("OnEnter")
+    row.star:FireScript("OnEnter")
+    row:FireScript("OnLeave")
+    check(h.env.GameTooltip:IsOwned(row.star) and h.env.GameTooltip:IsShown(),
+        "row leave preserves the favorite target's replacement tooltip")
+    row:FireScript("OnHide")
+    check(not h.env.GameTooltip:IsShown(), "a recycled or hidden row clears its owned tooltip")
+    row:FireScript("OnEnter")
+    click(row)
+    check(not h.env.GameTooltip:IsShown(), "selecting a font clears the row tooltip")
+    released(h)
+end
 print("Settings popup regressions: PASS (" .. count .. " assertions)")

@@ -36,6 +36,10 @@ function FrameMethods:GetParent()
     return self.parent
 end
 
+function FrameMethods:IsOwned(owner)
+    return self.owner == owner
+end
+
 function FrameMethods:GetChildren()
     local result = {}
     for _, child in ipairs(self.children or {}) do
