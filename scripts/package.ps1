@@ -1,12 +1,14 @@
 param(
-    [string]$OutDir = "dist"
+    [string]$OutDir = "dist",
+    [ValidateSet("Retail", "Forever")][string]$Flavor = "Retail"
 )
 
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $addonName = "DoYouNeedIt"
-$tocPath = Join-Path $repoRoot "$addonName.toc"
+$tocName = if ($Flavor -eq "Forever") { "DoYouNeedIt_Forever.toc" } else { "$addonName.toc" }
+$tocPath = Join-Path $repoRoot $tocName
 
 if (-not (Test-Path -LiteralPath $tocPath)) {
     throw "Missing addon TOC: $tocPath"
@@ -47,12 +49,14 @@ New-Item -ItemType Directory -Path $resolvedOutDir -Force | Out-Null
 
 $stagingRoot = Join-Path $resolvedOutDir ("_package-" + [System.Guid]::NewGuid().ToString("N"))
 $addonRoot = Join-Path $stagingRoot $addonName
-$zipPath = Join-Path $resolvedOutDir "$addonName-$version.zip"
+$zipName = if ($Flavor -eq "Forever") { "$addonName-$version-Forever-beta.zip" } else { "$addonName-$version.zip" }
+$zipPath = Join-Path $resolvedOutDir $zipName
 
 function Copy-PackageFile {
     param(
         [Parameter(Mandatory = $true)]
-        [string]$RelativePath
+        [string]$RelativePath,
+        [string]$DestinationPath = $RelativePath
     )
 
     if ([System.IO.Path]::IsPathRooted($RelativePath) -or $RelativePath.Contains(':') -or
@@ -62,7 +66,7 @@ function Copy-PackageFile {
         throw "Unsafe package path: $RelativePath"
     }
     $source = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $RelativePath))
-    $destination = [System.IO.Path]::GetFullPath((Join-Path $addonRoot $RelativePath))
+    $destination = [System.IO.Path]::GetFullPath((Join-Path $addonRoot $DestinationPath))
     $sourcePrefix = [System.IO.Path]::GetFullPath($repoRoot).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
     $destinationPrefix = [System.IO.Path]::GetFullPath($addonRoot).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
     if (-not $source.StartsWith($sourcePrefix, [System.StringComparison]::OrdinalIgnoreCase) -or
@@ -108,7 +112,7 @@ function Resolve-AddonRelativeTexture {
 try {
     New-Item -ItemType Directory -Path $addonRoot -Force | Out-Null
 
-    Copy-PackageFile "$addonName.toc"
+    Copy-PackageFile $tocName "$addonName.toc"
     foreach ($entry in $tocEntries) {
         Copy-PackageFile ($entry -replace '/', '\')
     }
@@ -117,7 +121,8 @@ try {
         Copy-PackageFile $iconRelativePath
     }
     Copy-PackageFile "README.md"
-    Copy-PackageFile "CHANGELOG.md"
+    if ($Flavor -eq "Forever") { Copy-PackageFile "CHANGELOG-FOREVER.md" "CHANGELOG.md" }
+    else { Copy-PackageFile "CHANGELOG.md" }
     Copy-PackageFile "LICENSE"
     Copy-PackageFile "THIRD-PARTY-NOTICES.md"
     Copy-PackageFile "LICENSES/CallbackHandler-1.0-BSD-2-Clause.txt"

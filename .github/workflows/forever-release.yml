@@ -1,0 +1,215 @@
+name: Forever Beta Release
+
+on:
+  push:
+    tags:
+      - 'forever-v*'
+
+concurrency:
+  group: dyni-forever-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  package-and-upload:
+    # Only the first attempt for a fresh, non-force tag creation may mutate
+    # release state. Recovery uses the exact-tag manual workflow below.
+    if: ${{ github.event.created == true && github.event.forced == false && github.event.deleted == false }}
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Reject ambiguous release rerun
+        if: ${{ github.run_attempt != 1 }}
+        shell: pwsh
+        run: |
+          throw "Tag release reruns are intentionally blocked. Reconcile existing uploads before recovering forward under a new beta version."
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify tag matches addon version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_NAME -notmatch '^forever-v((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))$') {
+            throw "Release tag must use exact forever-vMAJOR.MINOR.PATCH format"
+          }
+          $tagVersion = $Matches[1]
+          $toc = Get-Content -LiteralPath .\DoYouNeedIt_Forever.toc -Raw
+          if ($toc -notmatch '(?m)^##\s*Version:\s*(\S+)\s*$') {
+            throw "DoYouNeedIt_Forever.toc is missing ## Version"
+          }
+          $tocVersion = $Matches[1]
+          if ($tocVersion -ne $tagVersion) {
+            throw "Tag/version mismatch: tag=$tagVersion toc=$tocVersion"
+          }
+
+          $tagCommit = git rev-parse "refs/tags/$env:GITHUB_REF_NAME^{commit}"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not resolve release tag commit"
+          }
+          $headCommit = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not resolve checkout HEAD"
+          }
+          if ($tagCommit -ne $headCommit -or $tagCommit -ne $env:GITHUB_SHA) {
+            throw "Release tag, checkout HEAD, and event SHA must identify the same commit"
+          }
+
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not fetch origin/main for release ancestry check"
+          }
+          git merge-base --is-ancestor $tagCommit origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw "Release tag commit is not reachable from origin/main"
+          }
+
+          .\scripts\check-release-ref.ps1 `
+            -Forever -Tag $env:GITHUB_REF_NAME `
+            -ExpectedCommit $tagCommit
+
+      - name: Verify immutable publication policy
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}
+        run: .\scripts\check-release-policy.ps1 -Forever
+
+      - name: Install check tools
+        shell: pwsh
+        run: .\scripts\install-check-tools.ps1 -Install
+
+      - name: Check addon
+        shell: pwsh
+        run: .\scripts\check.ps1
+
+      - name: Package addon
+        shell: pwsh
+        run: .\scripts\package.ps1 -Flavor Forever
+
+      - name: Prepare verified GitHub draft
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = $env:GITHUB_REF_NAME.Substring(9)
+          $zipName = "DoYouNeedIt-$version-Forever-beta.zip"
+          $zipPath = Join-Path (Get-Location) "dist\$zipName"
+          if (-not (Test-Path -LiteralPath $zipPath -PathType Leaf)) {
+            throw "Expected package was not created: $zipPath"
+          }
+          $headCommit = (git rev-parse HEAD).Trim()
+          .\scripts\check-release-ref.ps1 `
+            -Forever -Tag $env:GITHUB_REF_NAME `
+            -ExpectedCommit $headCommit
+
+          gh release view $env:GITHUB_REF_NAME `
+            --repo $env:GITHUB_REPOSITORY `
+            --json tagName 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            throw "A GitHub release already exists for $env:GITHUB_REF_NAME; refusing to mutate it"
+          }
+
+          $releaseData = .\scripts\upload-curseforge.ps1 `
+            -Flavor Forever -ZipPath $zipPath `
+            -DryRun | ConvertFrom-Json
+          $notesPath = Join-Path $env:RUNNER_TEMP "release-notes.md"
+          [System.IO.File]::WriteAllText(
+            $notesPath,
+            [string]$releaseData.Metadata.changelog,
+            [System.Text.UTF8Encoding]::new($false)
+          )
+          gh release create $env:GITHUB_REF_NAME $zipPath `
+            --repo $env:GITHUB_REPOSITORY `
+            --verify-tag `
+            --draft `
+            --title "DoYouNeedIt $version — Forever Beta" `
+            --prerelease `
+            --notes-file $notesPath
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub draft creation failed for $env:GITHUB_REF_NAME"
+          }
+          $releaseJson = gh release view $env:GITHUB_REF_NAME `
+            --repo $env:GITHUB_REPOSITORY `
+            --json tagName,isDraft,isPrerelease,assets
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub draft could not be read back"
+          }
+          $release = $releaseJson | ConvertFrom-Json
+          if ($release.tagName -ne $env:GITHUB_REF_NAME -or -not $release.isDraft -or -not $release.isPrerelease) {
+            throw "GitHub release is not the expected draft for $env:GITHUB_REF_NAME"
+          }
+          $matchingAssets = @($release.assets | Where-Object { $_.name -eq $zipName })
+          if (@($release.assets).Count -ne 1 -or $matchingAssets.Count -ne 1) {
+            throw "GitHub release must contain only one $zipName asset"
+          }
+
+          $downloadDir = Join-Path $env:RUNNER_TEMP "github-release-asset"
+          New-Item -ItemType Directory -Path $downloadDir -Force | Out-Null
+          gh release download $env:GITHUB_REF_NAME `
+            --repo $env:GITHUB_REPOSITORY `
+            --pattern $zipName `
+            --dir $downloadDir `
+            --clobber
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub release asset download failed for $zipName"
+          }
+          $remoteZip = Join-Path $downloadDir $zipName
+          $localHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash
+          $remoteHash = (Get-FileHash -LiteralPath $remoteZip -Algorithm SHA256).Hash
+          if ($localHash -ne $remoteHash) {
+            throw "GitHub release asset does not match the packaged archive"
+          }
+
+      - name: Upload to CurseForge
+        shell: pwsh
+        env:
+          CURSEFORGE_API_TOKEN: ${{ secrets.CURSEFORGE_API_TOKEN }}
+        run: |
+          $version = $env:GITHUB_REF_NAME.Substring(9)
+          .\scripts\upload-curseforge.ps1 -Flavor Forever -ZipPath "dist\DoYouNeedIt-$version-Forever-beta.zip"
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $headCommit = (git rev-parse HEAD).Trim()
+          .\scripts\check-release-ref.ps1 `
+            -Forever -Tag $env:GITHUB_REF_NAME `
+            -ExpectedCommit $headCommit
+          gh release edit $env:GITHUB_REF_NAME `
+            --repo $env:GITHUB_REPOSITORY `
+            --draft=false --prerelease --latest=false
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub release publication failed for $env:GITHUB_REF_NAME"
+          }
+          $version = $env:GITHUB_REF_NAME.Substring(9)
+          $zipName = "DoYouNeedIt-$version-Forever-beta.zip"
+          $zipPath = Join-Path (Get-Location) "dist\$zipName"
+          $expectedHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedSize = (Get-Item -LiteralPath $zipPath).Length
+          $deadline = (Get-Date).AddSeconds(60)
+          do {
+            $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:GITHUB_REF_NAME" | ConvertFrom-Json
+            $matchingAssets = @($release.assets | Where-Object { $_.name -ceq $zipName })
+            if ($LASTEXITCODE -eq 0 -and
+                $release.tag_name -ceq $env:GITHUB_REF_NAME -and
+                $release.draft -is [bool] -and -not $release.draft -and
+                $release.prerelease -is [bool] -and $release.prerelease -and
+                $release.immutable -is [bool] -and $release.immutable -and
+                @($release.assets).Count -eq 1 -and
+                $matchingAssets.Count -eq 1 -and
+                [string]$matchingAssets[0].digest -ceq "sha256:$expectedHash" -and
+                [long]$matchingAssets[0].size -eq $expectedSize) {
+              .\scripts\check-release-ref.ps1 `
+                -Forever -Tag $env:GITHUB_REF_NAME `
+                -ExpectedCommit $headCommit
+              Write-Host "Published immutable GitHub release matches the exact-tag package."
+              exit 0
+            }
+            Start-Sleep -Seconds 5
+          } while ((Get-Date) -lt $deadline)
+          throw "Published GitHub release did not become immutable or match the exact-tag package"

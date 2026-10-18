@@ -18,6 +18,7 @@ local slotIDs = {
     BackSlot = 15,
     MainHandSlot = 16,
     SecondaryHandSlot = 17,
+    RangedSlot = 18,
 }
 
 local slotNamesByID = {}
@@ -151,6 +152,9 @@ function FrameMethods:RegisterForClicks(...)
 end
 
 function FrameMethods:RegisterEvent(event)
+    if self.harness.options.unsupportedEvents and self.harness.options.unsupportedEvents[event] then
+        error("unsupported event: " .. event)
+    end
     self.events = self.events or {}
     self.events[event] = true
     self.harness.eventFrames[self] = true
@@ -707,6 +711,12 @@ function Harness:loadAddon()
     local coreChunk = assert(loadfile("DoYouNeedIt_Core.lua"))
     setfenv(coreChunk, self.env)
     coreChunk()
+
+    if self.options.flavor == "forever" then
+        local foreverChunk = assert(loadfile("DoYouNeedIt_Forever.lua"))
+        setfenv(foreverChunk, self.env)
+        foreverChunk()
+    end
 
     local fontsChunk = assert(loadfile("DoYouNeedIt_Fonts.lua"))
     setfenv(fontsChunk, self.env)

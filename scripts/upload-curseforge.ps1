@@ -1,4 +1,6 @@
 param(
+    [ValidateSet("Retail", "Forever")][string]$Flavor = "Retail",
+    [string]$GameVersionsJson = "",
     [int]$ProjectId = 0,
     [string]$ZipPath = "",
     [string]$DisplayName = "",
@@ -15,7 +17,12 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $addonName = "DoYouNeedIt"
-$tocPath = Join-Path $repoRoot "$addonName.toc"
+$tocName = if ($Flavor -eq "Forever") { "DoYouNeedIt_Forever.toc" } else { "$addonName.toc" }
+$tocPath = Join-Path $repoRoot $tocName
+if ($Flavor -eq "Forever") {
+    $ReleaseType = "beta"
+    if ($ChangelogPath -eq "CHANGELOG.md") { $ChangelogPath = "CHANGELOG-FOREVER.md" }
+}
 
 function Get-TocField {
     param(
@@ -100,8 +107,9 @@ function Resolve-UploadZip {
         return (Resolve-Path -LiteralPath $path).Path
     }
 
-    $defaultZip = Join-Path $repoRoot "dist\$addonName-$Version.zip"
-    & (Join-Path $repoRoot "scripts\package.ps1") | Write-Host
+    $zipName = if ($Flavor -eq "Forever") { "$addonName-$Version-Forever-beta.zip" } else { "$addonName-$Version.zip" }
+    $defaultZip = Join-Path $repoRoot "dist\$zipName"
+    & (Join-Path $repoRoot "scripts\package.ps1") -Flavor $Flavor | Write-Host
     if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
         throw "scripts\package.ps1 failed with exit code $LASTEXITCODE"
     }
@@ -129,9 +137,17 @@ if (-not $ProjectId) {
 }
 
 if (-not $DisplayName) {
-    $DisplayName = "$addonName $version"
+    $DisplayName = if ($Flavor -eq "Forever") { "$addonName $version — Forever Beta" } else { "$addonName $version" }
 }
 
+if ($Flavor -eq "Forever") {
+    if ((Get-TocField -Name "Interface") -cne "16001" -or
+        (Get-TocField -Name "X-DoYouNeedIt-Flavor") -cne "forever" -or
+        ($GameVersionNames.Count -gt 0 -and ($GameVersionNames -join ",") -cne "1.60.1")) {
+        throw "Forever upload requires Interface 16001 and exact game version 1.60.1"
+    }
+    $GameVersionNames = @("1.60.1")
+}
 if ($GameVersionNames.Count -eq 0) {
     $interfaceText = Get-TocField -Name "Interface"
     if (-not $interfaceText) {
@@ -144,7 +160,7 @@ if ($GameVersionNames.Count -eq 0) {
 }
 
 $resolvedZipPath = Resolve-UploadZip -RequestedPath $ZipPath -Version $version
-& (Join-Path $PSScriptRoot "check-package.ps1") -ZipPath $resolvedZipPath
+& (Join-Path $PSScriptRoot "check-package.ps1") -ZipPath $resolvedZipPath -Flavor $Flavor
 $changelog = Get-ReleaseChangelog -Path $ChangelogPath -Version $version
 
 $metadata = [ordered]@{
@@ -155,11 +171,25 @@ $metadata = [ordered]@{
     releaseType = $ReleaseType
     isMarkedForManualRelease = [bool]$ManualRelease
 }
+function Resolve-ForeverVersionId {
+    param([string]$Json)
+    $versions = @($Json | ConvertFrom-Json | Where-Object { $_.name -ceq '1.60.1' -and $_.gameVersionTypeID -eq 88568 })
+    if ($versions.Count -ne 1 -or $versions[0].id -isnot [long] -and $versions[0].id -isnot [int] -or $versions[0].id -le 0) {
+        throw 'CurseForge must expose exactly one numeric Forever 1.60.1 version in gameVersionTypeID 88568'
+    }
+    return [int]$versions[0].id
+}
+if ($Flavor -eq 'Forever' -and $GameVersionsJson) {
+    if (-not $DryRun) { throw 'GameVersionsJson is a dry-run fixture only' }
+    $metadata.Remove('gameVersionNames')
+    $metadata.gameVersions = @(Resolve-ForeverVersionId $GameVersionsJson)
+}
 $metadataJson = $metadata | ConvertTo-Json -Depth 10 -Compress
 
 if ($DryRun) {
     [pscustomobject]@{
         ProjectId = $ProjectId
+        ExpectedGameVersionTypeId = $(if ($Flavor -eq "Forever") { 88568 } else { 517 })
         ZipPath = $resolvedZipPath
         Metadata = $metadata
     } | ConvertTo-Json -Depth 10
@@ -172,6 +202,14 @@ if ([string]::IsNullOrWhiteSpace($token)) {
 }
 if ([string]::IsNullOrWhiteSpace($token)) {
     throw "Set CURSEFORGE_API_TOKEN (or CF_API_KEY) before uploading to CurseForge."
+}
+
+if ($Flavor -eq 'Forever') {
+    # Resolve the exact flavor, not merely a similarly named game version.
+    $versions = Invoke-RestMethod -Uri 'https://wow.curseforge.com/api/game/wow/versions' -Headers @{ 'X-Api-Token' = $token }
+    $metadata.Remove('gameVersionNames')
+    $metadata.gameVersions = @(Resolve-ForeverVersionId (ConvertTo-Json -InputObject @($versions) -Depth 10))
+    $metadataJson = $metadata | ConvertTo-Json -Depth 10 -Compress
 }
 
 Add-Type -AssemblyName System.Net.Http

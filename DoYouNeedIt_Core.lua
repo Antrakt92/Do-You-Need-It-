@@ -1,6 +1,7 @@
 local Core = {}
 
 Core.VERSION = "1.0.0"
+Core.flavor = "retail"
 
 local GLYPH_LATIN = "LATIN"
 local GLYPH_CYR = "CYR"
@@ -1985,7 +1986,8 @@ function Core.ClassifyGearLoot(item, looter, settings)
     if not isValidClassID(item.classID or item.itemClassID) then
         return { visible = false, reason = "not_equipment_class" }
     end
-    if VALID_EQUIP_LOCS[item.equipLoc or ""] ~= true then
+    if VALID_EQUIP_LOCS[item.equipLoc or ""] ~= true
+        and not (Core.flavor == "forever" and (item.equipLoc == "INVTYPE_RELIC" or item.equipLoc == "INVTYPE_THROWN")) then
         return { visible = false, reason = "not_equipment_slot" }
     end
 
@@ -1997,6 +1999,13 @@ end
 
 function Core.ResolvePlayerCanEquip(item, playerClassToken, apiCanEquip)
     if type(item) ~= "table" then
+        return nil
+    end
+
+    -- Forever's learned proficiencies and level requirements belong to the client.
+    -- Retail's maximum armor type does not describe a leveling character here.
+    if Core.flavor == "forever" then
+        if type(apiCanEquip) == "boolean" then return apiCanEquip end
         return nil
     end
 
@@ -2562,6 +2571,7 @@ function Core.BuildDemoRows(settings, timestamp)
         {281235, "Voidweaver's Leggings", "INVTYPE_LEGS", "raid"},
         {280799, "Lu'selama, Light's Justice", "INVTYPE_2HWEAPON", "raid"},
     }
+    items = Core.demoItems or items
     local function link(item)
         return "|cffa335ee|Hitem:" .. item[1] .. ":::::::::::::|h[" .. item[2] .. "]|h|r"
     end
@@ -2572,7 +2582,7 @@ function Core.BuildDemoRows(settings, timestamp)
         local askable = index % 3 ~= 2 and index ~= 4
         local equipped
         if item[3] == "INVTYPE_FINGER" then
-            equipped = "Equipped: " .. link(item) .. " / " .. link({251136, "Signet of Snarling Servitude"})
+            equipped = "Equipped: " .. link(item) .. " / " .. link(Core.demoRing or {251136, "Signet of Snarling Servitude"})
         elseif item[3] == "INVTYPE_TRINKET" then equipped = "Cached: " .. link(items[7]) .. " / " .. link(items[8])
         elseif index == 11 then equipped = "Equipped: unknown"
         else equipped = "Equipped: " .. link(item) end
@@ -2580,8 +2590,8 @@ function Core.BuildDemoRows(settings, timestamp)
             isTest = true, looter = names[(index - 1) % #names + 1],
             classToken = classes[(index - 1) % #classes + 1],
             itemID = item[1], itemLink = link(item), equipLoc = item[3],
-            instanceName = item[4] == "raid" and "The Unbinding of Kith'ix" or "Murder Row",
-            encounterName = item[4] == "raid" and "Kith'ix" or (index == 7 and "Zaen Bladesorrow" or "Kystia Manaheart"),
+            instanceName = Core.flavor == "forever" and "Forever Beta — Demo" or (item[4] == "raid" and "The Unbinding of Kith'ix" or "Murder Row"),
+            encounterName = Core.flavor == "forever" and "Demo" or (item[4] == "raid" and "Kith'ix" or (index == 7 and "Zaen Bladesorrow" or "Kystia Manaheart")),
             timestamp = timestamp, reason = index == 4 and "not_tradeable" or (askable and "test row" or "bind_on_pickup"),
             statusKey = index == 4 and "not_tradeable" or (askable and "test_row" or "bind_on_pickup"), equippedText = equipped,
             tradeStatusKey = index == 4 and "trade_no" or (index == 7 and "trade_confirmed" or (not askable and "trade_unknown" or "trade_likely")),

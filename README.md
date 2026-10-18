@@ -6,6 +6,12 @@ Compare dungeon and raid gear drops with the looter's equipped items, review rec
 
 **1.0 is the first stable release.** Existing settings and loot history carry forward. For World of Warcraft Retail / Midnight 12.1.5.
 
+**WoW Forever beta has a separate build.** Use the
+[`forever-v1.0.0` beta release](https://github.com/Antrakt92/Do-You-Need-It-/releases/tag/forever-v1.0.0)
+and its `DoYouNeedIt-1.0.0-Forever-beta.zip` archive for Forever 1.60.1
+(Interface 16001). Retail and Forever update independently; the latest stable
+Retail release does not select the Forever file. The screenshots below show Retail.
+
 ![Real raid loot and equipped-item comparisons](https://raw.githubusercontent.com/Antrakt92/Do-You-Need-It-/v1.0.0/screenshots/loot-comparison.png)
 
 <details>
@@ -26,6 +32,27 @@ Compare dungeon and raid gear drops with the looter's equipped items, review rec
 Install through CurseForge, or extract the `DoYouNeedIt-<version>.zip` release asset into `World of Warcraft/_retail_/Interface/AddOns/`. The resulting folder must be named `DoYouNeedIt` and contain `DoYouNeedIt.toc` directly inside it.
 
 Run `/reload`, then `/dyni` to open the window. `/dyni status` should report `build=1.0.0`. Click **Demo** to preview 12 Midnight raid and dungeon items, then **Exit demo** to return to your loot. Examples cannot send whispers and are not saved to your history.
+
+### Forever beta installation
+
+Extract the explicitly labelled Forever beta ZIP into the beta client's
+`_classic_beta_/Interface/AddOns/`, with `DoYouNeedIt/DoYouNeedIt.toc` directly
+inside. Use the CurseForge file labelled **Forever Beta**, not its Retail file.
+The addon list, window and `/dyni status` identify the Forever build. It uses
+the same `/dyni` commands, Settings, fonts, history and opt-in whispers.
+
+Forever comparisons include the separate ranged/relic slot. Player usability
+comes from the beta client, including learned proficiencies and level restrictions;
+no Retail armor-specialization filter is applied. Real drops use the beta's item,
+instance and encounter names. Demo examples use Classic-era item IDs with names
+resolved from the client, and do not describe a beta dungeon's loot table.
+
+Forever does not use Retail's personal-loot item-level transfer estimate.
+BoP items remain **Check with looter** unless a trade timer is detected; BoE,
+unbound and bind-on-use items retain the binding-based **Likely** estimate.
+This initial beta still needs native group-loot, inspection, combat and reload
+coverage. Other Classic branches are not supported by this package. See the
+[Forever changelog](CHANGELOG-FOREVER.md) for its separate release history.
 
 ## Loot and comparison
 

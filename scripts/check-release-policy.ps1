@@ -1,5 +1,6 @@
 param(
-    [string]$Repository = $env:GITHUB_REPOSITORY
+    [string]$Repository = $env:GITHUB_REPOSITORY,
+    [switch]$Forever
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,12 +27,14 @@ if ($LASTEXITCODE -ne 0 -or $summaries.Count -ne 1) {
 }
 
 $ruleset = gh api "repos/$Repository/rulesets/$($summaries[0].id)?includes_parents=false" | ConvertFrom-Json
+$included = @($ruleset.conditions.ref_name.include)
+$validIncludes = ($included.Count -eq 1 -and $included[0] -ceq 'refs/tags/v*' -and -not $Forever) -or
+    ($included.Count -eq 2 -and $included -ccontains 'refs/tags/v*' -and $included -ccontains 'refs/tags/forever-v*')
 $ruleTypes = @($ruleset.rules | ForEach-Object { [string]$_.type } | Sort-Object)
 if ($LASTEXITCODE -ne 0 -or
     $ruleset.enforcement -cne "active" -or
     @($ruleset.bypass_actors).Count -ne 0 -or
-    @($ruleset.conditions.ref_name.include).Count -ne 1 -or
-    [string]$ruleset.conditions.ref_name.include[0] -cne "refs/tags/v*" -or
+    -not $validIncludes -or
     @($ruleset.conditions.ref_name.exclude).Count -ne 0 -or
     ($ruleTypes -join ",") -cne "deletion,non_fast_forward") {
     throw "Release tags must reject deletion and non-fast-forward updates without bypass actors"

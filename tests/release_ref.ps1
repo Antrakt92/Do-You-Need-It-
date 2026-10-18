@@ -70,5 +70,17 @@ foreach ($tagCase in @(
 if ("v01.02.03" -match $workflowTagPattern) {
     throw "tag pattern accepts leading zeros"
 }
+function git {
+    $global:LASTEXITCODE = 0
+    "$commit`trefs/tags/forever-v1.0.0"
+}
+$output = & $guard -Forever -Tag forever-v1.0.0 -ExpectedCommit $commit -Remote test-only
+if ($output -notmatch [regex]::Escape("resolves to $commit.")) { throw 'Forever remote ref was not verified' }
+foreach ($invalid in @('v1.0.0', 'forever-v01.0.0', 'forever-v1.0.0-beta')) {
+    $rejected = $false
+    try { & $guard -Forever -Tag $invalid -ExpectedCommit $commit -Remote test-only | Out-Null }
+    catch { $rejected = $_.Exception.Message.Contains('canonical') }
+    if (-not $rejected) { throw "Forever guard accepted $invalid" }
+}
 $global:LASTEXITCODE = 0
-Write-Output "Release ref checks passed (14 cases)."
+Write-Output "Release ref checks passed (18 cases)."

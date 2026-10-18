@@ -3,12 +3,14 @@ param(
     [string]$Tag,
     [Parameter(Mandatory = $true)]
     [string]$ExpectedCommit,
-    [string]$Remote = "origin"
+    [string]$Remote = "origin",
+    [switch]$Forever
 )
 
 $ErrorActionPreference = "Stop"
 
-if ($Tag -notmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+$tagPattern = if ($Forever) { '^forever-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' } else { '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' }
+if ($Tag -notmatch $tagPattern) {
     throw "Release tag must use canonical vMAJOR.MINOR.PATCH format"
 }
 if ($ExpectedCommit -cnotmatch '^[0-9a-f]{40}$') {

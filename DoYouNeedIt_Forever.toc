@@ -1,0 +1,30 @@
+## Interface: 16001
+## Title: Do You Need It? — Forever Beta
+## Notes: Group gear drops, equipment comparisons and whispers for WoW Forever beta.
+## Category: Loot
+## Category-deDE: Beute
+## Category-esES: Botín
+## Category-esMX: Botín
+## Category-frFR: Butin
+## Category-itIT: Bottino
+## Category-koKR: 전리품
+## Category-ptBR: Saque
+## Category-ruRU: Добыча
+## Category-zhCN: 战利品
+## Category-zhTW: 戰利品
+## Author: Antrakt92
+## Version: 1.0.0
+## IconTexture: Interface\AddOns\DoYouNeedIt\media\icon.png
+## SavedVariables: DoYouNeedItDB DoYouNeedItSelfTest
+## X-Curse-Project-ID: 1595368
+## X-DoYouNeedIt-Flavor: forever
+## X-DoYouNeedIt-Channel: beta
+
+libs\LibStub\LibStub.lua
+libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
+AntraktWindowLayers.lua
+DoYouNeedIt_Core.lua
+DoYouNeedIt_Forever.lua
+DoYouNeedIt_Fonts.lua
+DoYouNeedIt.lua

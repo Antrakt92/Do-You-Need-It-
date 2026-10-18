@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory = $true)]
-    [string]$ZipPath
+    [string]$ZipPath,
+    [ValidateSet("Retail", "Forever")][string]$Flavor = "Retail"
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,7 +30,7 @@ function Get-EntryHash {
 
 try {
     # Compare files, not ZIP bytes: archive compression and timestamps may differ.
-    & (Join-Path $PSScriptRoot "package.ps1") -OutDir $comparisonRoot
+    & (Join-Path $PSScriptRoot "package.ps1") -OutDir $comparisonRoot -Flavor $Flavor
     $expectedZips = @(Get-ChildItem -LiteralPath $comparisonRoot -Filter '*.zip' -File)
     if ($expectedZips.Count -ne 1) {
         throw "Expected exactly one reference package"

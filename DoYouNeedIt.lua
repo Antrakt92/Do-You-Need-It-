@@ -131,6 +131,10 @@ local EQUIP_LOC_SLOTS = {
     INVTYPE_RANGEDRIGHT = { "MainHandSlot" },
 }
 
+for equipLoc, slots in pairs(Core.equipLocOverrides or {}) do
+    EQUIP_LOC_SLOTS[equipLoc] = slots
+end
+
 local function Print(message)
     DEFAULT_CHAT_FRAME:AddMessage("|cff7ccfffDo You Need It?|r " .. tostring(message))
 end
@@ -1429,6 +1433,11 @@ local function CanPlayerEquipItem(itemLink, classID, subclassID, equipLoc)
         apiCanEquip = true
     end
 
+    -- IsEquippableItem identifies gear, not a learned player proficiency.
+    if Core.flavor == "forever" then
+        apiCanEquip = isUsable
+        if isEquippable == false then apiCanEquip = false end
+    end
     return Core.ResolvePlayerCanEquip({
         classID = CleanNumber(classID),
         subclassID = CleanNumber(subclassID),
@@ -1530,7 +1539,8 @@ local function ReadEquippedLinks(unit, equipLoc)
 
     local links = {}
     for index = 1, #slotNames do
-        local slotID = SafeCall(GetInventorySlotInfo, slotNames[index])
+        local slotReader = C_PaperDollInfo and C_PaperDollInfo.GetInventorySlotInfo or GetInventorySlotInfo
+        local slotID = CleanNumber(SafeCall(slotReader, slotNames[index]))
         if slotID then
             local link = SafeCall(GetInventoryItemLink, unit, slotID)
             link = CleanString(link)
@@ -3253,6 +3263,8 @@ function Addon.RevalidateTrackedLootMetadata(row)
 end
 
 function Addon.PromotePersonalLootRowFromEquipped(row, equippedLinks)
+    -- Forever does not establish Retail's personal-loot item-level trade rule.
+    if Core.flavor == "forever" then return false end
     if type(row) ~= "table"
         or row.askable == true
         or row.reason ~= "bind_on_pickup"
@@ -3298,7 +3310,7 @@ local function CompleteInspectRow(row, equippedText, equippedLinks)
     row.inspectToken = nil
     if not row.itemLevel then row.itemLevel = Addon.ReadItemLevel(row.itemLink) end
     Addon.PromotePersonalLootRowFromEquipped(row, equippedLinks)
-    if row.reason == "bind_on_pickup" and row.playerCanEquip == true and not row.unsafe then
+    if Core.flavor ~= "forever" and row.reason == "bind_on_pickup" and row.playerCanEquip == true and not row.unsafe then
         local slots = EQUIP_LOC_SLOTS[row.equipLoc]
         local requiredCount = type(slots) == "table" and #slots or 1
         local levels = Addon.ReadEquippedItemLevels(equippedLinks)
@@ -4024,6 +4036,7 @@ local function AddTestRow()
         view = Addon.selectedView, scrollOffset = Addon.rowScrollOffset,
         historyGroup = Addon.selectedView == "history" and Addon.state.history[Addon.selectedHistoryIndex] or nil,
     }
+    if Core.RefreshForeverDemoNames then Core.RefreshForeverDemoNames() end
     Addon.demoRows = Core.BuildDemoRows(Addon.state.settings, Now())
     Addon.selectedView = "current"
     Addon.selectedHistoryIndex = nil
@@ -4032,6 +4045,26 @@ local function AddTestRow()
     RefreshRows()
     CreateUI()
     Addon.frame:Show()
+    if Core.flavor == "forever" then
+        local preview = Addon.demoRows
+        local requested = {}
+        for _, row in ipairs(preview) do
+            requested[#requested + 1] = row.itemLink
+        end
+        requested[#requested + 1] = "item:" .. Core.demoRing[1]
+        for _, link in ipairs(requested) do
+            RequestItemLoad(link, function()
+                if Addon.demoRows ~= preview then return end
+                Core.RefreshForeverDemoNames()
+                local refreshed = Core.BuildDemoRows(Addon.state.settings, Now())
+                for index, row in ipairs(preview) do
+                    row.itemLink = refreshed[index].itemLink
+                    row.equippedText = refreshed[index].equippedText
+                end
+                RefreshRows()
+            end)
+        end
+    end
 end
 
 local RetryPendingItem
@@ -5068,7 +5101,7 @@ CreateUI = function()
     frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -10)
     frame.title:SetJustifyH("LEFT")
     KeepOneLine(frame.title)
-    frame.title:SetText(L("Do You Need It?"))
+    frame.title:SetText(L("Do You Need It?") .. (Core.flavor == "forever" and " — Forever Beta" or ""))
     frame.title:SetTextColor(0.86, 0.94, 1, 1)
     RegisterFontString(frame.title, 16)
 
@@ -5496,7 +5529,7 @@ end
 
 RefreshLocalization = function()
     if Addon.frame and Addon.frame.title then
-        Addon.frame.title:SetText(L("Do You Need It?"))
+        Addon.frame.title:SetText(L("Do You Need It?") .. (Core.flavor == "forever" and " — Forever Beta" or ""))
         Addon.frame.columnPlayer:SetText(L("Player"))
         Addon.frame.columnDrop:SetText(L("Dropped"))
         Addon.frame.columnEquipped:SetText(L("Equipped now"))
@@ -7184,7 +7217,7 @@ local function HandleSlash(message)
             .. ", scan queue=" .. tostring(#(Addon.equipmentScanQueue or {}))
             .. ", debug=" .. tostring(Addon.state.settings.debug)
             .. ", diagnostics=" .. tostring(#(Addon.diagnostics or {}))
-            .. ", build=" .. tostring(Core.VERSION)
+            .. ", flavor=" .. Core.flavor .. ", build=" .. tostring(Core.VERSION)
             .. ", locale=" .. tostring(Core.ResolveActiveLocale(Addon.state.settings.forceLocale, ClientLocale()))
             .. ", font=" .. tostring(FindFontName(Addon.ValidatedDisplayFont()))
             .. ", fontSize=" .. tostring(Addon.state.settings.fontSize)
@@ -7202,6 +7235,10 @@ local function HandleSlash(message)
 end
 
 local function Initialize()
+    if Core.flavor == "forever" and not Core.IsSupportedForeverClient() then
+        Print("Forever Beta requires the WoW Forever beta client (Interface 16001).")
+        return
+    end
     DoYouNeedItDB = DoYouNeedItDB or {}
     local settings = Core.NormalizeSettings(DoYouNeedItDB.settings or {})
     Addon.characterKey = SafePlayerStorageKey()
@@ -7279,9 +7316,9 @@ eventFrame:RegisterEvent("PLAYER_LOGOUT")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
-eventFrame:RegisterEvent("CHALLENGE_MODE_START")
-eventFrame:RegisterEvent("CHALLENGE_MODE_COMPLETED")
-eventFrame:RegisterEvent("CHALLENGE_MODE_RESET")
+pcall(eventFrame.RegisterEvent, eventFrame, "CHALLENGE_MODE_START")
+pcall(eventFrame.RegisterEvent, eventFrame, "CHALLENGE_MODE_COMPLETED")
+pcall(eventFrame.RegisterEvent, eventFrame, "CHALLENGE_MODE_RESET")
 eventFrame:RegisterEvent("ENCOUNTER_START")
 eventFrame:RegisterEvent("ENCOUNTER_END")
 eventFrame:RegisterEvent("ENCOUNTER_LOOT_RECEIVED")
@@ -7290,6 +7327,7 @@ eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 eventFrame:RegisterEvent("INSPECT_READY")
 
 eventFrame:SetScript("OnEvent", function(_, event, ...)
+    if event ~= "ADDON_LOADED" and not Addon.state then return end
     if event == "ADDON_LOADED" then
         local loadedName = ...
         if loadedName == Addon.name then

@@ -8,6 +8,7 @@ try {
     & .\tests\release_ref.ps1
     & .\tests\package_upload.ps1
     & .\tests\package_paths.ps1
+    & .\tests\forever_package.ps1
     & lua5.1 tests\run.lua
     if ($LASTEXITCODE -ne 0) {
         throw "lua5.1 tests\run.lua failed with exit code $LASTEXITCODE"
@@ -28,7 +29,7 @@ try {
         'runtime_item_regressions.lua', 'runtime_loot_regressions.lua', 'runtime_ui_regressions.lua',
         'runtime_navigation.lua', 'runtime_policy_regressions.lua', 'runtime_filters.lua',
         'runtime_roster_completeness.lua', 'runtime_item_display.lua', 'runtime_font_updates.lua',
-        'runtime_late_order.lua',
+        'runtime_late_order.lua', 'runtime_forever.lua',
         'runtime_selftest.lua', 'runtime_settings_menus.lua', 'runtime_demo.lua', 'window_layers.lua'
     )) {
         & lua5.1 (Join-Path tests $regression)
@@ -43,6 +44,7 @@ try {
         libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua `
         DoYouNeedIt_Core.lua `
         DoYouNeedIt_Fonts.lua `
+        DoYouNeedIt_Forever.lua `
         DoYouNeedIt.lua
     if ($LASTEXITCODE -ne 0) {
         throw "luac5.1 syntax check failed with exit code $LASTEXITCODE"
