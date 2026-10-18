@@ -1,6 +1,6 @@
 local Core = {}
 
-Core.VERSION = "0.7.0"
+Core.VERSION = "1.0.0"
 
 local GLYPH_LATIN = "LATIN"
 local GLYPH_CYR = "CYR"

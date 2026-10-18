@@ -1,15 +1,55 @@
 # Changelog
 
-## 0.7.0 - 18-Oct-2026 — Fonts, languages and Settings
+## 1.0.0 - 18-Oct-2026 — First stable release
 
-- Add a Demo button with 12 Midnight raid and dungeon items, paired-slot comparisons, and one-click return to real loot.
-- Give language and font menus a compact design that stays above Settings.
-- Align Settings controls, group the Auto whisper checkbox with its label, and refresh the buttons and sliders.
-- Restore readable language previews and use native language names.
-- Complete translations for Settings and loot-status labels.
-- Include 46 fonts, show compatible available choices, and save font favorites.
-- Add support and GitHub feedback links beside Settings.
-- Explain skipped or failed demo checks in the self-test report while preserving Settings drafts.
+Do You Need It? leaves beta with a redesigned interface, complete language support, a bundled font collection, a safe loot preview, and more reliable loot history and inspection handling. This release includes every change since 0.6.4; existing settings and saved loot are retained.
+
+### Loot window and comparisons
+
+- Stack paired rings, trinkets, and weapons vertically, giving each equipped item the full comparison-column width and its own tooltip and click target.
+- Adapt row height and the number of visible rows so paired comparisons and larger text stay separate from trade status. Single-item lists keep their compact layout.
+- Replace the old history button and context menu with a flat selector, an opaque encounter list, selected-entry highlighting, and a slim scroll indicator.
+- Keep Current and This Session together in a compact fixed header above saved encounters. Scroll through history without losing those controls.
+- Show boss names separately from the instance, date, time, and drop count. Hover an entry to read its full title.
+- Align the history menu and its text with the selector, keep it within the screen, and open it above the field when space below is limited.
+- Put support and bug-report links beside the addon title, leaving Settings and Close together on the right. The links show their destination before opening a copyable address.
+- Replace the separate Back button with a return arrow in the same header position as Settings. Refresh Close with a quieter cross and clear hover/press feedback.
+- Remove the Center window button from Appearance. The window still remembers its position, and `/dyni resetpos` remains available.
+- Use Check with looter when the addon cannot confirm an item's transfer eligibility. Likely remains an estimate, not a trade guarantee.
+
+### Settings, fonts and languages
+
+- Redesign Settings with separate Whispers and Appearance sections, aligned fields, consistent buttons, and larger slider hit areas.
+- Group Auto whisper with its clickable label. Automatic whispers remain optional and off by default.
+- Arrange Appearance as Font, Font Size, then Language. Keep labels and help readable without limiting the chosen loot-text size.
+- Add 46 licensed bundled fonts alongside available Blizzard and LibSharedMedia fonts.
+- Filter the font list to available faces that support the selected language. Save favorite fonts and show them first.
+- Preview fonts and languages on hover; dismissing a menu restores the saved choice. Long font names remain available in tooltips.
+- Complete addon-specific translations for all 11 supported locales: English, Russian, German, Spanish (Spain and Latin America), French, Italian, Brazilian Portuguese, Korean, Simplified Chinese, and Traditional Chinese.
+- Display language names in their native spelling. Auto follows the client language, with compatible fallbacks for mixed-script player and item names.
+- Keep menus above their owner window and release their input capture when dismissed, on combat entry, when the window closes, or if opening fails.
+
+### Demo and self-checks
+
+- Add a Demo button with 12 Midnight dungeon and raid item examples, including paired equipment, bonus loot, and different trade states.
+- Exit demo with the same button or `/dyni test`. Demo rows never send whispers, request player inspections, or enter saved loot history.
+- Explain deliberately skipped demo checks in the self-test report, separately from failures, while preserving open Settings and message drafts.
+
+### Reliability and saved data
+
+- Preserve unsaved whisper-message edits through control refreshes, font/language previews, Reset confirmation, and logout. Leaving Settings saves the draft.
+- Keep slider previews separate from saved values and whisper scheduling; commit changes on release or logout.
+- Pause pending automatic whispers during incomplete group-roster updates instead of treating temporarily missing identities as departures. Recheck the recipient and resume safely when the roster is complete.
+- Preserve cancellation after a real departure, Clear, or opting out of automatic whispers.
+- Restore item-quality colors when metadata for saved or uncached links becomes available, including after the display loader has timed out or reached its pending-item limit.
+- Keep the original item variant and tooltip/click target while refreshing only its display color.
+- Retain the newest loot when older uncached item information arrives late and the saved-row limit is already full.
+- Avoid repeatedly reassigning unchanged fonts during ordinary refreshes while still restoring text after an actual font change.
+
+### Screenshots and documentation
+
+- Add five in-game screenshots showing real loot, bonus loot, Settings, font favorites, and the language menu.
+- Update the feature guide and trade-status explanations for the stable release.
 
 ## 0.6.4 - 16-Oct-2026 — Retail 12.1.5
 

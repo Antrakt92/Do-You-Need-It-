@@ -4,13 +4,28 @@ Compare dungeon and raid gear drops with the looter's equipped items, review rec
 
 [Install on CurseForge](https://www.curseforge.com/wow/addons/do-you-need-it) · [Download the latest ZIP](https://github.com/Antrakt92/Do-You-Need-It-/releases/latest) · [Report a problem](https://github.com/Antrakt92/Do-You-Need-It-/issues)
 
-For World of Warcraft Retail / Midnight 12.1.5.
+**1.0 is the first stable release.** Existing settings and loot history carry forward. For World of Warcraft Retail / Midnight 12.1.5.
+
+![Real raid loot and equipped-item comparisons](https://raw.githubusercontent.com/Antrakt92/Do-You-Need-It-/v1.0.0/screenshots/loot-comparison.png)
+
+<details>
+<summary>More in-game screenshots: bonus loot, Settings, fonts and languages</summary>
+
+![Bonus loot and transfer-status labels](https://raw.githubusercontent.com/Antrakt92/Do-You-Need-It-/v1.0.0/screenshots/bonus-loot.png)
+
+![Whisper and appearance settings](https://raw.githubusercontent.com/Antrakt92/Do-You-Need-It-/v1.0.0/screenshots/settings.png)
+
+![Font choices and favorites](https://raw.githubusercontent.com/Antrakt92/Do-You-Need-It-/v1.0.0/screenshots/font-picker.png)
+
+![Language menu with native names](https://raw.githubusercontent.com/Antrakt92/Do-You-Need-It-/v1.0.0/screenshots/language-picker.png)
+
+</details>
 
 ## Install
 
 Install through CurseForge, or extract the `DoYouNeedIt-<version>.zip` release asset into `World of Warcraft/_retail_/Interface/AddOns/`. The resulting folder must be named `DoYouNeedIt` and contain `DoYouNeedIt.toc` directly inside it.
 
-Run `/reload`, then `/dyni` to open the window. `/dyni status` should report `build=0.7.0`. Click **Demo** to preview 12 Midnight raid and dungeon items, then **Exit demo** to return to your loot. Examples cannot send whispers and are not saved to your history.
+Run `/reload`, then `/dyni` to open the window. `/dyni status` should report `build=1.0.0`. Click **Demo** to preview 12 Midnight raid and dungeon items, then **Exit demo** to return to your loot. Examples cannot send whispers and are not saved to your history.
 
 ## Loot and comparison
 
