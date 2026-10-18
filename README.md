@@ -2,15 +2,14 @@
 
 Compare dungeon and raid gear drops with the looter's equipped items, review recent loot, and use **Ask** to send a whisper. Automatic whispers are optional and off by default.
 
-[Install on CurseForge](https://www.curseforge.com/wow/addons/do-you-need-it) · [Download the latest ZIP](https://github.com/Antrakt92/Do-You-Need-It-/releases/latest) · [Report a problem](https://github.com/Antrakt92/Do-You-Need-It-/issues)
+[CurseForge](https://www.curseforge.com/wow/addons/do-you-need-it) · [GitHub Releases](https://github.com/Antrakt92/Do-You-Need-It-/releases/latest) · [Report a problem](https://github.com/Antrakt92/Do-You-Need-It-/issues)
 
 **1.0 is the first stable release.** Existing settings and loot history carry forward. For World of Warcraft Retail / Midnight 12.1.5.
 
-**WoW Forever beta has a separate build.** Use the
-[`forever-v1.1.0` beta release](https://github.com/Antrakt92/Do-You-Need-It-/releases/tag/forever-v1.1.0)
-and its `DoYouNeedIt-1.1.0-Forever-beta.zip` archive for Forever 1.60.1
-(Interface 16001). Retail and Forever update independently; the latest stable
-Retail release does not select the Forever file. The screenshots below show Retail.
+**WoW Forever beta has a separate build:**
+[Forever release](https://github.com/Antrakt92/Do-You-Need-It-/releases/tag/forever-v1.1.0)
+for Forever 1.60.1 (Interface 16001). Retail and Forever update independently.
+The screenshots below show Retail.
 
 ![Real raid loot and equipped-item comparisons](https://raw.githubusercontent.com/Antrakt92/Do-You-Need-It-/v1.0.0/screenshots/loot-comparison.png)
 
@@ -42,19 +41,18 @@ window size as the loot view. Drag the lower-right corner to resize the window;
 columns and the number of visible loot rows adapt, and your size is saved across
 reloads. Switching between Settings and loot keeps the same dimensions.
 
-## Install
+## Try the window
 
-Install through CurseForge, or extract the `DoYouNeedIt-<version>.zip` release asset into `World of Warcraft/_retail_/Interface/AddOns/`. The resulting folder must be named `DoYouNeedIt` and contain `DoYouNeedIt.toc` directly inside it.
+Type `/dyni` to open the window. Click **Demo** to preview sample gear, then
+**Exit demo** to return to your loot. Demo rows send no whispers and are not
+saved to history.
 
-Run `/reload`, then `/dyni` to open the window. `/dyni status` should report `build=1.1.0`. Click **Demo** to preview 12 Midnight raid and dungeon items, then **Exit demo** to return to your loot. Examples cannot send whispers and are not saved to your history.
+For troubleshooting, `/dyni status` shows the build; the current Retail build
+reports `build=1.1.0`.
 
-### Forever beta installation
+### Forever beta
 
-Extract the explicitly labelled Forever beta ZIP into the beta client's
-`_classic_beta_/Interface/AddOns/`, with `DoYouNeedIt/DoYouNeedIt.toc` directly
-inside. Use the CurseForge file labelled **Forever Beta**, not its Retail file.
-The addon list and `/dyni status` identify the Forever build. It uses
-the same `/dyni` commands, Settings, fonts, history and opt-in whispers.
+Forever uses the same `/dyni` commands, Settings, fonts, history and opt-in whispers.
 
 Forever comparisons include the separate ranged/relic slot. Player usability
 comes from the beta client, including learned proficiencies and level restrictions;
