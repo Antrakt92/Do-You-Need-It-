@@ -2414,6 +2414,7 @@ function Addon.MergeSavedRowsBeforeLive(savedRows, liveRows, limit)
     local seen = {}
     Addon.AppendUniqueRows(merged, seen, savedRows)
     Addon.AppendUniqueRows(merged, seen, liveRows)
+    Core.OrderRowsChronologically(merged)
     limit = math.max(1, math.floor(tonumber(limit) or 50))
     while #merged > limit do
         table.remove(merged, 1)
@@ -3147,11 +3148,12 @@ local function ScheduleAutoWhisper(row)
     end)
 end
 
-function Addon.AddRowToListOnce(list, row)
+function Addon.AddRowToListOnce(list, row, chronological)
     if type(list) ~= "table" or type(row) ~= "table" or IsRowInList(list, row) then
         return false
     end
-    list[#list + 1] = row
+    if chronological then Core.InsertRowChronologically(list, row)
+    else list[#list + 1] = row end
     return true
 end
 
@@ -3160,7 +3162,7 @@ function Addon.SyncRowAskability(row, askable)
     local state = Addon.state
     local function sync(allRows, rows, limit)
         if row.askable and IsRowInList(allRows, row) then
-            Addon.AddRowToListOnce(rows, row)
+            Addon.AddRowToListOnce(rows, row, true)
             while type(limit) == "number" and #rows > limit do table.remove(rows, 1) end
         elseif not row.askable then
             Addon.RemoveRowFromList(rows, row)

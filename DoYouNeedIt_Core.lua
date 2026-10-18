@@ -617,7 +617,12 @@ local function asNumber(value, fallback)
 end
 
 local function isFiniteNumber(value)
-    return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
+    if type(value) ~= "number" then return false end
+    if type(_G.issecretvalue) == "function" then
+        local ok, secret = pcall(_G.issecretvalue, value)
+        if not ok or secret then return false end
+    end
+    return value == value and value ~= math.huge and value ~= -math.huge
 end
 
 local function clamp(number, minimum, maximum)
@@ -747,6 +752,47 @@ local function copyList(list)
         copy[index] = list[index]
     end
     return copy
+end
+
+local function rowTimestamp(row)
+    if type(row) ~= "table" then return nil end
+    local stamp = row.timestamp
+    if type(stamp) ~= "number" then return nil end
+    -- Zero is the legacy saved-row placeholder for an unavailable timestamp.
+    return isFiniteNumber(stamp) and stamp > 0 and stamp or nil
+end
+
+function Core.InsertRowChronologically(rows, row)
+    if type(rows) ~= "table" or type(row) ~= "table" then return false end
+    local stamp = rowTimestamp(row)
+    local position = #rows + 1
+    if stamp then
+        local lastKnown
+        for index = #rows, 1, -1 do
+            lastKnown = rowTimestamp(rows[index])
+            if lastKnown then break end
+        end
+        if not lastKnown or lastKnown <= stamp then
+            rows[position] = row
+            return true
+        end
+        for index = 1, #rows do
+            local existing = rowTimestamp(rows[index])
+            if existing and existing > stamp then position = index; break end
+        end
+    end
+    -- Equal and unknown timestamps retain arrival order; no comparator can
+    -- accidentally make missing timestamps violate sort transitivity.
+    table.insert(rows, position, row)
+    return true
+end
+
+function Core.OrderRowsChronologically(rows)
+    if type(rows) ~= "table" then return rows end
+    local ordered = {}
+    for index = 1, #rows do Core.InsertRowChronologically(ordered, rows[index]) end
+    for index = 1, #rows do rows[index] = ordered[index] end
+    return rows
 end
 
 local function pruneListStart(list, limit)
@@ -880,7 +926,7 @@ local function snapshotRowForSave(row)
         saved.id = ""
     end
     if type(saved.timestamp) ~= "number" then
-        if type(row) == "table" and row.timestamp == nil then
+        if type(row) == "table" and type(row.timestamp) == "nil" then
             saved.timestamp = 0
         end
     end
@@ -906,7 +952,7 @@ local function snapshotRowsForSave(rows, limit)
     if type(rows) == "table" then
         for index = 1, #rows do
             if type(rows[index]) == "table" then
-                saved[#saved + 1] = snapshotRowForSave(rows[index])
+                Core.InsertRowChronologically(saved, snapshotRowForSave(rows[index]))
             end
         end
     end
@@ -2127,14 +2173,14 @@ function Core.AddVisibleRow(state, row, askable)
 
     state.allRows = state.allRows or {}
     state.sessionAllRows = state.sessionAllRows or {}
-    state.allRows[#state.allRows + 1] = saved
-    state.sessionAllRows[#state.sessionAllRows + 1] = saved
+    Core.InsertRowChronologically(state.allRows, saved)
+    Core.InsertRowChronologically(state.sessionAllRows, saved)
     local limit = state.settings and state.settings.maxSessionRows or DEFAULTS.maxSessionRows
     pruneListStart(state.sessionAllRows, limit)
 
     if saved.askable then
-        state.currentRows[#state.currentRows + 1] = saved
-        state.sessionRows[#state.sessionRows + 1] = saved
+        Core.InsertRowChronologically(state.currentRows, saved)
+        Core.InsertRowChronologically(state.sessionRows, saved)
     end
     pruneListStart(state.sessionRows, limit)
     return saved
@@ -2211,11 +2257,12 @@ local function rowMergeKey(row)
     end
     local id = type(row.id) == "string" and row.id or ""
     local itemID = safeTonumber(row.itemID) or Core.ExtractItemID(row.itemLink)
+    local timestamp = isFiniteNumber(row.timestamp) and row.timestamp or nil
     -- Identity is id+looter+itemID+timestamp; the full link only upgrades
     -- variants below, never tells rows apart.
     return id .. "\031" .. tostring(row.looter or "") .. "\031"
         .. tostring(itemID or "") .. "\031"
-        .. tostring(row.timestamp or "")
+        .. tostring(timestamp or "")
 end
 
 function Core.UpgradeRowLinkToDetailed(stored, incoming)
@@ -2268,7 +2315,7 @@ appendUniqueRows = function(target, rows, preferIncoming)
             Core.UpgradeRowLinkToDetailed(target[seen[key]], row)
         end
     end
-    return target
+    return Core.OrderRowsChronologically(target)
 end
 
 matchingRecentHistoryGroup = function(group, meta)
@@ -2333,7 +2380,7 @@ function Core.CompleteCurrentGroup(state, groupMeta)
         if instanceName ~= groupMeta.instanceName or encounterName ~= groupMeta.encounterName then
             needsPartition = true
         end
-        local stamp = asNumber(row.timestamp, nil)
+        local stamp = rowTimestamp(row)
         if stamp then
             part.meta.startedAt = math.min(part.meta.startedAt or stamp, stamp)
             part.meta.endedAt = math.max(part.meta.endedAt or stamp, stamp)
@@ -2367,8 +2414,8 @@ function Core.CompleteCurrentGroup(state, groupMeta)
     end
     local dropCount = #state.allRows > 0 and #state.allRows or #state.currentRows
     local rowLimit = state.settings and state.settings.maxSessionRows or DEFAULTS.maxSessionRows
-    local rows = copyList(state.currentRows)
-    local allRows = copyList(state.allRows)
+    local rows = Core.OrderRowsChronologically(copyList(state.currentRows))
+    local allRows = Core.OrderRowsChronologically(copyList(state.allRows))
     pruneListStart(rows, rowLimit)
     pruneListStart(allRows, rowLimit)
 
