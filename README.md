@@ -7,8 +7,8 @@ Compare dungeon and raid gear drops with the looter's equipped items, review rec
 **1.0 is the first stable release.** Existing settings and loot history carry forward. For World of Warcraft Retail / Midnight 12.1.5.
 
 **WoW Forever beta has a separate build.** Use the
-[`forever-v1.0.0` beta release](https://github.com/Antrakt92/Do-You-Need-It-/releases/tag/forever-v1.0.0)
-and its `DoYouNeedIt-1.0.0-Forever-beta.zip` archive for Forever 1.60.1
+[`forever-v1.0.1` beta release](https://github.com/Antrakt92/Do-You-Need-It-/releases/tag/forever-v1.0.1)
+and its `DoYouNeedIt-1.0.1-Forever-beta.zip` archive for Forever 1.60.1
 (Interface 16001). Retail and Forever update independently; the latest stable
 Retail release does not select the Forever file. The screenshots below show Retail.
 

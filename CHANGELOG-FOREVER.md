@@ -1,5 +1,22 @@
 # Do You Need It? — Forever Beta
 
+## 1.0.1 - 18-Oct-2026 — Resolved demo items
+
+- Fixes Demo rows remaining labelled `Item #…` when the beta client cannot
+  resolve an old example item. Unavailable examples are now omitted.
+- Uses complete item hyperlinks returned by the client, preserving localized
+  names, quality colors and the correct tooltip target.
+- Uses loaded character equipment as additional beta examples. Demo can contain
+  fewer than twelve items when the catalogue is incomplete.
+- Builds paired comparisons only from resolved items; a missing second ring or
+  trinket no longer creates a placeholder link.
+- Refreshes the preview when item data arrives, with a bounded loading state and
+  localized guidance when no examples are available. Late callbacks cannot reopen
+  a dismissed demo.
+- Item names and tooltips were confirmed in the Forever client after reload.
+  Real group loot, inspection timing, combat and whisper delivery remain beta
+  coverage. Automatic whispers remain off by default.
+
 ## 1.0.0 - 18-Oct-2026 — First Forever beta
 
 ### Loot and equipment
