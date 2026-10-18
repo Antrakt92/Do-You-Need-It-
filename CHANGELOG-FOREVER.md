@@ -36,7 +36,9 @@
   remains on its independent stable channel.
 - Install only in the Forever beta client's AddOns directory. Other Classic
   branches and Retail are not targets of this package.
+- Client self-check confirms startup after reload, command registration, saved
+  settings, window geometry and demo rendering on Interface 16001.
 - Offline regressions and archive checks cover both flavors. Native group loot,
-  inspection, combat, font rendering and reload acceptance remain beta checks.
+  inspection timing, combat, font rendering and whisper delivery remain beta checks.
 - Another player's final trade eligibility is not exposed to the addon. Ask the
   looter to confirm; beta client changes may affect API availability and behavior.

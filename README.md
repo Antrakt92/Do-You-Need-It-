@@ -50,8 +50,10 @@ resolved from the client, and do not describe a beta dungeon's loot table.
 Forever does not use Retail's personal-loot item-level transfer estimate.
 BoP items remain **Check with looter** unless a trade timer is detected; BoE,
 unbound and bind-on-use items retain the binding-based **Likely** estimate.
-This initial beta still needs native group-loot, inspection, combat and reload
-coverage. Other Classic branches are not supported by this package. See the
+Startup after reload, command registration, saved settings, window geometry and
+demo rendering passed the client self-check on Interface 16001. Real group loot,
+inspection timing, combat and whisper delivery still need beta coverage.
+Other Classic branches are not supported by this package. See the
 [Forever changelog](CHANGELOG-FOREVER.md) for its separate release history.
 
 ## Loot and comparison
