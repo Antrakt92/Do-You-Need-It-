@@ -1,7 +1,11 @@
 # Do You Need It? — Forever Beta
 
-## 1.0.1 - 18-Oct-2026 — Resolved demo items
+## 1.0.1 - 18-Oct-2026 — Fonts and demo fixes
 
+- Restores the full compatible bundled and SharedMedia font list when the
+  client applies a font without returning `true`. Font previews and selection
+  verify the applied face, size and style; unavailable faces remain excluded.
+- Uses the shared “Do You Need It?” window title without a client suffix.
 - Fixes Demo rows remaining labelled `Item #…` when the beta client cannot
   resolve an old example item. Unavailable examples are now omitted.
 - Uses complete item hyperlinks returned by the client, preserving localized

@@ -280,6 +280,9 @@ function FrameMethods:SetFont(path, size, flags)
     self.font = path
     self.fontSize = size
     self.fontFlags = flags
+    if self.harness.options.fontSetReturn then
+        return self.harness.options.fontSetReturn(self, path, size, flags)
+    end
     return true
 end
 

@@ -486,21 +486,16 @@ function Addon.FontAvailable(path)
     Addon.availableFontPaths = Addon.availableFontPaths or {}
     if Addon.availableFontPaths[key] then return true end
     Addon.fontProbe = Addon.fontProbe or UIParent:CreateFontString(nil, "OVERLAY")
-    local probe = Addon.fontProbe
-    probe:Hide()
-    if type(_G.CreateFont) == "function" and type(probe.SetFontObject) == "function" then
-        Addon.fontActivator = Addon.fontActivator or _G.CreateFont("DoYouNeedItFontActivator")
-        if Addon.fontActivator then
-            pcall(probe.SetFontObject, probe, Addon.fontActivator)
-            pcall(Addon.fontActivator.SetFont, Addon.fontActivator, path, 12, "")
-        end
-    end
-    local ok, applied = pcall(probe.SetFont, probe, path, 12, "")
-    if not ok or applied ~= true then return false end
-    local actual = SafeCall(probe.GetFont, probe)
-    local valid = Core.SameFontPath(actual, path)
+    Addon.fontProbe:Hide()
+    local valid = Addon.ApplyRegionFont(Addon.fontProbe, path, 12, "")
     if valid then Addon.availableFontPaths[key] = true end
     return valid
+end
+
+function Addon.RegionFontMatches(region, path, size, flags)
+    local actual, actualSize, actualFlags = SafeCall(region.GetFont, region)
+    return Core.SameFontPath(actual, path) and CleanNumber(actualSize) == size
+        and (CleanString(actualFlags) or "") == (flags or "")
 end
 
 function Addon.ApplyRegionFont(region, path, size, flags)
@@ -520,15 +515,25 @@ function Addon.ApplyRegionFont(region, path, size, flags)
             region._dyniOwnedFont = _G.CreateFont("DoYouNeedItOwnedFont" .. Addon.ownedFontSequence)
         end
         if region._dyniOwnedFont then
-            pcall(region.SetFontObject, region, region._dyniOwnedFont)
+            -- SetFont has client-dependent pseudo-returns. Configure the owned
+            -- object before attaching it, then verify the effective face.
             pcall(region._dyniOwnedFont.SetFont, region._dyniOwnedFont, path, size, flags or "")
+            pcall(region.SetFontObject, region, region._dyniOwnedFont)
         end
     end
-    local ok, applied = pcall(region.SetFont, region, path, size, flags or "")
-    local actual = SafeCall(region.GetFont, region)
-    if ok and applied == true and Core.SameFontPath(actual, path) then
+    local ok = pcall(region.SetFont, region, path, size, flags or "")
+    if ok and Addon.RegionFontMatches(region, path, size, flags) then
         SafeCall(region.SetText, region, oldText)
         return true
+    end
+    -- A direct FontString attempt can reject an otherwise configured object.
+    -- Reattach it to discard that failed child override before falling back.
+    if region._dyniOwnedFont then
+        pcall(region.SetFontObject, region, region._dyniOwnedFont)
+        if Addon.RegionFontMatches(region, path, size, flags) then
+            SafeCall(region.SetText, region, oldText)
+            return true
+        end
     end
     if oldObject then SafeCall(region.SetFontObject, region, oldObject) end
     if oldPath then SafeCall(region.SetFont, region, oldPath, oldSize or size, oldFlags or "") end
