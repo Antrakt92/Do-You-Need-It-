@@ -1,15 +1,48 @@
-# Do You Need It?
+<p align="center">
+  <img src="media/icon.png" alt="Do You Need It? logo" width="112" height="112">
+</p>
+
+<h1 align="center">Do You Need It?</h1>
+
+<p align="center">
+  See the drop. Compare the gear. Ask the looter.
+</p>
+
+<p align="center">
+  <a href="https://github.com/Antrakt92/Do-You-Need-It-/releases/latest"><strong>Download for Retail</strong></a>
+  · <a href="https://www.curseforge.com/wow/addons/do-you-need-it"><strong>CurseForge</strong></a>
+  · <a href="https://github.com/Antrakt92/Do-You-Need-It-/releases/tag/forever-v1.1.0"><strong>Forever beta</strong></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Antrakt92/Do-You-Need-It-/releases"><img src="https://img.shields.io/github/v/release/Antrakt92/Do-You-Need-It-?label=release&amp;color=22c55e" alt="Latest stable release"></a>
+  <img src="https://img.shields.io/badge/WoW-Midnight-8b5cf6" alt="WoW: Midnight">
+  <img src="https://img.shields.io/badge/WoW-Forever%20beta-3b82f6" alt="WoW: Forever beta">
+  <img src="https://img.shields.io/badge/Auto%20whisper-off%20by%20default-64748b" alt="Auto whisper: off by default">
+</p>
 
 Compare dungeon and raid gear drops with the looter's equipped items, review recent loot, and use **Ask** to send a whisper. Automatic whispers are optional and off by default.
 
-[CurseForge](https://www.curseforge.com/wow/addons/do-you-need-it) · [GitHub Releases](https://github.com/Antrakt92/Do-You-Need-It-/releases/latest) · [Report a problem](https://github.com/Antrakt92/Do-You-Need-It-/issues)
-
-**1.0 is the first stable release.** Existing settings and loot history carry forward. For World of Warcraft Retail / Midnight 12.1.5.
+For **World of Warcraft Retail / Midnight 12.1.5** and the separate
+**WoW Forever beta** build. Existing settings and loot history carry forward.
 
 **WoW Forever beta has a separate build:**
 [Forever release](https://github.com/Antrakt92/Do-You-Need-It-/releases/tag/forever-v1.1.0)
 for Forever 1.60.1 (Interface 16001). Retail and Forever update independently.
 The screenshots below show Retail.
+
+<p align="center">
+  <a href="#installation">Install</a>
+  · <a href="#try-the-window">Try it</a>
+  · <a href="#loot-and-comparison">Loot &amp; trade</a>
+  · <a href="#whispers-and-settings">Settings</a>
+  · <a href="#commands">Commands</a>
+  · <a href="#help-and-development">Help</a>
+</p>
+
+| Compare | Browse | Ask |
+|---|---|---|
+| See group drops beside the looter's equipped items. | Review recent loot and saved encounters, with your quality filters. | Whisper manually, or choose optional automatic whispers. |
 
 ![Real raid loot and equipped-item comparisons](https://raw.githubusercontent.com/Antrakt92/Do-You-Need-It-/v1.0.0/screenshots/loot-comparison.png)
 
@@ -26,20 +59,18 @@ The screenshots below show Retail.
 
 </details>
 
-## Quality filter
+## Installation
 
-Open Settings to choose which item qualities appear using the checkboxes on
-the right. Each checkbox is independent: you can keep green
-and purple gear while hiding blue gear. The same selection applies to current
-loot, session history, saved encounters and Demo, and is saved across reloads.
-Green and higher qualities are shown by default; gray and white can be enabled.
-Hidden gear remains in retained history and reappears when enabled. Hidden
-qualities never open the window or start automatic whispers; showing an old row
-again does not send a delayed whisper. Non-equipment loot remains excluded.
-The filter is shared by Retail and Forever. Settings uses the same compact
-window size as the loot view. Drag the lower-right corner to resize the window;
-columns and the number of visible loot rows adapt, and your size is saved across
-reloads. Switching between Settings and loot keeps the same dimensions.
+Install through [CurseForge](https://www.curseforge.com/wow/addons/do-you-need-it)
+or download the packaged addon ZIP for your client from GitHub Releases.
+Extract the `DoYouNeedIt` folder into your client's `Interface/AddOns` folder,
+then restart WoW or reload the interface. Use the addon archive under **Assets**,
+rather than GitHub's automatic source-code ZIP.
+
+| Client | Download | Release history |
+|---|---|---|
+| Retail: Midnight | [Latest Retail release](https://github.com/Antrakt92/Do-You-Need-It-/releases/latest) | [Retail changelog](CHANGELOG.md) |
+| WoW Forever beta | [Forever beta release](https://github.com/Antrakt92/Do-You-Need-It-/releases/tag/forever-v1.1.0) | [Forever changelog](CHANGELOG-FOREVER.md) |
 
 ## Try the window
 
@@ -91,6 +122,21 @@ Other Classic branches are not supported by this package. See the
 
 WoW does not expose another player's final personal-loot eligibility. **Likely** is an estimate; the looter must confirm. Inspection also depends on range, combat state, throttling, and item data availability. Old saved records are retained even when they are filtered out of the window.
 
+## Quality filter
+
+Open Settings to choose which item qualities appear using the checkboxes on
+the right. Each checkbox is independent: you can keep green
+and purple gear while hiding blue gear. The same selection applies to current
+loot, session history, saved encounters and Demo, and is saved across reloads.
+Green and higher qualities are shown by default; gray and white can be enabled.
+Hidden gear remains in retained history and reappears when enabled. Hidden
+qualities never open the window or start automatic whispers; showing an old row
+again does not send a delayed whisper. Non-equipment loot remains excluded.
+The filter is shared by Retail and Forever. Settings uses the same compact
+window size as the loot view. Drag the lower-right corner to resize the window;
+columns and the number of visible loot rows adapt, and your size is saved across
+reloads. Switching between Settings and loot keeps the same dimensions.
+
 ## Whispers and settings
 
 Open the gear button or `/dyni settings` to change whispers, language, font, and font size. The gear becomes a return arrow in Settings; click it to return to loot. The window remembers its position, closes with Escape, and can be centered with `/dyni resetpos`.
@@ -122,7 +168,6 @@ The heart and feedback buttons in the title bar open copyable links to support t
 <details>
 <summary>Diagnostics and advanced commands</summary>
 
-
 | Command | Action |
 |---|---|
 | `/dyni test` | Toggle the same 12-item preview as the Demo button. Trade and equipment states are illustrative. |
@@ -142,8 +187,12 @@ For a loot problem, enable `/dyni debug on` before the drop, then collect `/dyni
 See [CONTRIBUTING.md](https://github.com/Antrakt92/Do-You-Need-It-/blob/main/CONTRIBUTING.md) for development checks and packaging.
 
 ## More by Antrakt
-- [StatsPro](https://www.curseforge.com/wow/addons/statspro) — customizable stats and gear HUD
-- [ApplicantScout](https://www.curseforge.com/wow/addons/applicantscout-lfg-overlay) — LFG & Party overlay with WCL and RaiderIO context
+
+| Addon | What it does |
+|---|---|
+| [StatsPro](https://github.com/Antrakt92/StatsPro) | Character stats and gear HUD for Retail and Forever beta. |
+| [Dungeon Pro](https://github.com/Antrakt92/DungeonPro) | Dungeon quest preparation and navigation for Forever beta. |
+| [ApplicantScout](https://github.com/Antrakt92/ApplicantScout-Addon) | Warcraft Logs and RaiderIO for applicants and groups; Windows companion required. |
 
 ## License
 

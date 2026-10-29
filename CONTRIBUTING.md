@@ -1,5 +1,7 @@
 # Contributing
 
+[Overview](README.md) · [Source layout](#source-layout) · [Checks](#checks) · [Packaging](#packaging)
+
 Report bugs and suggest changes in [GitHub Issues](https://github.com/Antrakt92/Do-You-Need-It-/issues). For bugs, include the addon version, WoW client version and language, reproduction steps, expected result, and the exact error. Screenshots help with layout problems. Redact player names and other personal details before posting diagnostics.
 
 Keep pull requests focused on one change. Explain its effect on players and how you checked it. Add a regression test for a behavior fix. Keep earlier changelog entries and preserve third-party notices.
