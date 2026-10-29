@@ -5,7 +5,7 @@
 <h1 align="center">Do You Need It?</h1>
 
 <p align="center">
-  See the drop. Compare the gear. Ask the looter.
+  Group loot comparisons, history and optional whispers.
 </p>
 
 <p align="center">
@@ -23,13 +23,9 @@
 
 Compare dungeon and raid gear drops with the looter's equipped items, review recent loot, and use **Ask** to send a whisper. Automatic whispers are optional and off by default.
 
-For **World of Warcraft Retail / Midnight 12.1.5** and the separate
-**WoW Forever beta** build. Existing settings and loot history carry forward.
-
-**WoW Forever beta has a separate build:**
-[Forever release](https://github.com/Antrakt92/Do-You-Need-It-/releases/tag/forever-v1.1.0)
-for Forever 1.60.1 (Interface 16001). Retail and Forever update independently.
-The screenshots below show Retail.
+For **Retail / Midnight 12.1.5** and the separate **Forever 1.60.1 beta** build
+(Interface 16001). Retail and Forever update independently. Existing settings
+and loot history carry forward. The screenshots below show Retail.
 
 <p align="center">
   <a href="#installation">Install</a>
