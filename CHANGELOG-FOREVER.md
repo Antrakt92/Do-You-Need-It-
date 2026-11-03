@@ -1,5 +1,12 @@
 # Do You Need It? — Forever Beta
 
+## Unreleased
+
+- Move the additional font collection into optional Antrakt Fonts, shared with other compatible addons. Keep a compact multilingual baseline and preserve font choices and favorites when the collection is absent.
+- Explain the transition once after updating and show package guidance in Font settings.
+- Thanks to [chenrylee](https://github.com/chenrylee) for suggesting a separate font package ([StatsPro #10](https://github.com/Antrakt92/StatsPro/issues/10)).
+
+
 ## 1.1.0 - 18-Oct-2026 — Settings layout refinement
 
 - Refines compact Settings: Auto whisper and Delay sit side by side, Appearance fields clear the heading, and the quality column moves right without increasing window height.

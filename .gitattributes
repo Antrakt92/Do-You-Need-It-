@@ -9,3 +9,9 @@ fonts/*.ttf binary
 fonts/*.otf binary
 # Preserve the upstream license texts and their original whitespace.
 fonts/licenses/*.txt text eol=lf whitespace=-blank-at-eol,-blank-at-eof
+
+# Shared assets retain the producer's exact reviewed bytes.
+AntraktFontCatalog.lua -text
+AntraktFontNotice.lua -text
+fonts/NOTICE.txt -text
+fonts/licenses/*.txt -text

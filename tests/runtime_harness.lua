@@ -29,6 +29,9 @@ end
 local FrameMethods = {}
 FrameMethods.__index = FrameMethods
 
+function FrameMethods:EnableKeyboard(enabled) self.keyboardEnabled = enabled end
+function FrameMethods:SetPropagateKeyboardInput(enabled) self.propagateKeyboard = enabled end
+
 function FrameMethods:GetName()
     return self.name
 end
@@ -278,6 +281,8 @@ function FrameMethods:HighlightText()
 end
 
 function FrameMethods:SetFont(path, size, flags)
+    if self.harness.options.legacyFontAssets == false and path:find("Interface\\AddOns\\DoYouNeedIt\\fonts\\", 1, true) and not path:find("AntraktUISans.ttf", 1, true) then return false end
+    if path:find("Interface\\AddOns\\AntraktFonts\\", 1, true) and not self.harness.env.AntraktFonts then return false end
     if self.harness.options.fontColdAssets and path:find("AddOns", 1, true) then
         self.harness.loadedFontAssets = self.harness.loadedFontAssets or {}
         if self.frameType == "Font" then
@@ -745,13 +750,18 @@ function Harness:loadAddon()
         foreverChunk()
     end
 
+    local namespace = {}
+    for _, file in ipairs({"AntraktFontCatalog.lua", "AntraktFontNotice.lua"}) do
+        local shared = assert(loadfile(file)); setfenv(shared, self.env); shared("DoYouNeedIt", namespace)
+    end
     local fontsChunk = assert(loadfile("DoYouNeedIt_Fonts.lua"))
     setfenv(fontsChunk, self.env)
-    fontsChunk()
+    fontsChunk("DoYouNeedIt", namespace)
+    local packUI = assert(loadfile("DoYouNeedIt_FontPackUI.lua")); setfenv(packUI, self.env); packUI("DoYouNeedIt", namespace)
 
     local runtimeChunk = assert(loadfile("DoYouNeedIt.lua"))
     setfenv(runtimeChunk, self.env)
-    runtimeChunk("DoYouNeedIt")
+    runtimeChunk("DoYouNeedIt", namespace)
 
     self:fire("ADDON_LOADED", "DoYouNeedIt")
 end
@@ -821,6 +831,7 @@ function Harness.new(options)
     setmetatable(env, { __index = _G })
     env._G = env
     env.DoYouNeedItDB = options and options.db or {}
+    env.AntraktFonts = options and options.fontProvider or nil
     env.SlashCmdList = {}
     env.UISpecialFrames = {}
     env.STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"

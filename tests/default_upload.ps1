@@ -13,7 +13,7 @@ try {
     $fixtureRoot = Join-Path $caseRoot 'DoYouNeedIt'
     $fixtureScripts = Join-Path $fixtureRoot 'scripts'
     [void][System.IO.Directory]::CreateDirectory($fixtureScripts)
-    foreach ($name in @('package.ps1', 'check-package.ps1', 'upload-curseforge.ps1')) {
+    foreach ($name in @('package.ps1', 'check-package.ps1', 'upload-curseforge.ps1', 'baseline-files.json')) {
         Copy-Item -LiteralPath (Join-Path $repoRoot "scripts/$name") -Destination (Join-Path $fixtureScripts $name)
     }
     $fixtureToc = Get-Content -LiteralPath (Join-Path $fixtureRoot 'DoYouNeedIt.toc') -Raw

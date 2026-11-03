@@ -143,7 +143,7 @@ Use `{item}` in a custom message, for example: `Hey, do you need {item}?` If the
 
 Language defaults to **Auto**, following your client locale. Settings and loot-status labels are translated into English, Russian, German, Spanish (Spain/Latin America), French, Italian, Brazilian Portuguese, Korean, and Simplified/Traditional Chinese. Language names use their native spelling.
 
-The addon includes 46 fonts alongside available LibSharedMedia and Blizzard fonts. The picker shows available faces compatible with your selected language; star your favorites to keep them first. Font and language hover previews restore the saved choice when dismissed. Menus open beside their fields and stay above the window.
+The addon includes a compact multilingual baseline alongside available Blizzard and LibSharedMedia fonts. The optional Antrakt Fonts addon supplies the full 46-face collection for this and other compatible addons; install the build for your client. Existing choices and favorites remain saved while a readable fallback is used when the collection is absent. Font settings explain the package state, and existing users receive a one-time explanation after updating. The picker shows available faces compatible with your selected language; star your favorites to keep them first. Font and language hover previews restore the saved choice when dismissed. Menus open beside their fields and stay above the window.
 
 The heart and feedback buttons in the title bar open copyable links to support the addon or report a problem on GitHub.
 

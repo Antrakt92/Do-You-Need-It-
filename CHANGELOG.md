@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Move the additional font collection into optional Antrakt Fonts, shared with other compatible addons. Keep a compact multilingual baseline and preserve font choices and favorites when the collection is absent.
+- Explain the transition once after updating and show package guidance in Font settings.
+- Thanks to [chenrylee](https://github.com/chenrylee) for suggesting a separate font package ([StatsPro #10](https://github.com/Antrakt92/StatsPro/issues/10)).
+
+
 ## 1.1.0 - 18-Oct-2026 — Compact Settings and quality filters
 
 - Aligns Auto whisper and Delay side by side, adds clear spacing below section headings and above the bottom border, and gives Settings fields more width without enlarging the window.

@@ -28,7 +28,7 @@ try {
     foreach ($regression in @(
         'runtime_item_regressions.lua', 'runtime_loot_regressions.lua', 'runtime_ui_regressions.lua',
         'runtime_navigation.lua', 'runtime_policy_regressions.lua', 'runtime_filters.lua', 'runtime_quality_filters.lua',
-        'runtime_roster_completeness.lua', 'runtime_item_display.lua', 'runtime_font_updates.lua',
+        'runtime_shared_fonts.lua', 'runtime_roster_completeness.lua', 'runtime_item_display.lua', 'runtime_font_updates.lua',
         'runtime_late_order.lua', 'runtime_forever.lua', 'runtime_forever_demo.lua',
         'runtime_selftest.lua', 'runtime_settings_menus.lua', 'runtime_demo.lua', 'window_layers.lua'
     )) {
@@ -43,6 +43,9 @@ try {
         libs\CallbackHandler-1.0\CallbackHandler-1.0.lua `
         libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua `
         DoYouNeedIt_Core.lua `
+        AntraktFontCatalog.lua `
+        AntraktFontNotice.lua `
+        DoYouNeedIt_FontPackUI.lua `
         DoYouNeedIt_Fonts.lua `
         DoYouNeedIt_Forever.lua `
         DoYouNeedIt.lua
@@ -273,8 +276,11 @@ try {
                 "DoYouNeedIt/DoYouNeedIt_Core.lua",
                 "DoYouNeedIt/DoYouNeedIt_Fonts.lua",
                 "DoYouNeedIt/AntraktWindowLayers.lua",
-                "DoYouNeedIt/fonts/manifest.json",
-                "DoYouNeedIt/fonts/NOTICE.md",
+                "DoYouNeedIt/AntraktFontCatalog.lua",
+                "DoYouNeedIt/AntraktFontNotice.lua",
+                "DoYouNeedIt/DoYouNeedIt_FontPackUI.lua",
+                "DoYouNeedIt/fonts/AntraktUISans.ttf",
+                "DoYouNeedIt/fonts/NOTICE.txt",
                 "DoYouNeedIt/DoYouNeedIt.lua",
                 "DoYouNeedIt/libs/LibStub/LibStub.lua",
                 "DoYouNeedIt/libs/CallbackHandler-1.0/CallbackHandler-1.0.lua",
@@ -291,6 +297,10 @@ try {
                 if ($entries -notcontains $entry) {
                     throw "package is missing $entry"
                 }
+            }
+            if (@($entries | Where-Object { $_ -match '\.(ttf|otf)$' }).Count -ne 1 -or
+                $entries -notcontains 'DoYouNeedIt/fonts/AntraktUISans.ttf') {
+                throw 'Core package must contain exactly the embedded baseline font'
             }
             foreach ($entry in $entries) {
                 if ($entry -notmatch '^DoYouNeedIt/') {
@@ -330,7 +340,8 @@ try {
 
     # The definition lines above are the only allowed occurrence of these
     # markers in this file; the rest of this file is scanned as well.
-    $files = git ls-files |
+    $files = git ls-files --cached --others --exclude-standard |
+        Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
         ForEach-Object { Get-Item -LiteralPath $_ }
 
     foreach ($pattern in $forbidden) {

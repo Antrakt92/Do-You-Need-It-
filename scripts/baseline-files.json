@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "files": {
+    "fonts/AntraktUISans.ttf": "37190dfd4749516601d23e846f7cbc20243d5791da2b1fda6b3b6a301e94a4d4",
+    "fonts/NOTICE.txt": "1fba12d03d7cef0fa57fae644c391d9f7d3e534f7d7a3ccab27f87e981aa7749",
+    "fonts/licenses/Apache-2.0.txt": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "fonts/licenses/Droid-NOTICE.txt": "38751245389e1e23f73e6f5384b5cbe7fa972cc4410c5adc9c04b082a0b9561a",
+    "fonts/licenses/Droid-README.txt": "c8b88077052fed912b3f724c0ed230c501cf4e18833af7ca44338d3cd0b093e2",
+    "fonts/licenses/NotoSans-OFL.txt": "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb"
+  }
+}

@@ -434,8 +434,8 @@ local function testRussianClientSettingsUseGlyphCapableFont()
     h:loadAddon()
     h:slash("settings")
     local settings = h.env.DoYouNeedItSettingsFrame
-    assertTruthy(h.env.DoYouNeedItCore.FontSupportsLocale(h.env.DoYouNeedItDB.settings.font, "ruRU", "ruRU"),
-        "Russian client repairs a Latin-only saved font")
+    assertEqual(h.env.DoYouNeedItDB.settings.font, "Fonts\\FRIZQT__.TTF",
+        "Russian adaptation preserves original preference")
     assertEqual(settings.title:GetText(), "Настройки", "Russian client localizes the settings title")
     for _, control in ipairs({
         settings.title,
@@ -657,9 +657,10 @@ local function testAutoSwitchRestoresReregisteredFont()
     local second = Harness.new({ lsmFonts = baseFonts, db = first.env.DoYouNeedItDB })
     second:loadAddon()
     second:slash("delay 11")
-    assertEqual(second.env.DoYouNeedItDB.settings.font, "Fonts\\FRIZQT__.TTF", "unregistered font falls back instead of painting blind")
-    assertEqual(second.env.DoYouNeedItDB.settings.fontBeforeAutoSwitch, elvishPath,
-        "pre-fallback font is remembered even when it is already unavailable")
+    assertEqual(second.env.DoYouNeedItDB.settings.font, elvishPath, "missing media retains saved preference")
+    assertEqual(second.env.DoYouNeedItFrame.title:GetFont(), second.env.DoYouNeedItCore.FontPack.baselinePath, "missing media paints readable baseline")
+    assertEqual(second.env.DoYouNeedItDB.settings.fontBeforeAutoSwitch, nil,
+        "missing media needs no persistent automatic fallback rewrite")
 
     local third = Harness.new({ lsmFonts = withElvish, db = second.env.DoYouNeedItDB })
     third:loadAddon()
@@ -952,7 +953,8 @@ local function testBrokenFontFallsBackToCompatible()
     h:slash("delay 11")
     local rows = h:visibleRows()
     assertTruthy(#rows > 0, "precondition: loot rows exist for the font check")
-    assertEqual(rows[1].drop.font, "Fonts\\FRIZQT__.TTF", "unregistered font falls back instead of painting blind")
+    assertEqual(rows[1].drop.font, h.env.DoYouNeedItCore.FontPack.baselinePath, "unregistered font paints readable baseline")
+    assertEqual(h.env.DoYouNeedItDB.settings.font, gonePath, "render fallback preserves user preference")
 end
 
 local function testBareItemLinksRecoverQualityWithoutChangingPayload()

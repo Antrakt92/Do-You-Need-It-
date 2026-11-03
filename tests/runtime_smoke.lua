@@ -1900,11 +1900,11 @@ local function testMissingSavedFontPathRepairsToAvailableFont()
     })
     h:loadAddon()
 
-    assertEqual(h.env.DoYouNeedItDB.settings.font, "Fonts\\FRIZQT__.TTF", "load repairs a saved font path that is no longer available")
-    assertEqual(h.env.DoYouNeedItFrame.title.font, "Fonts\\FRIZQT__.TTF", "main window uses the repaired font")
+    assertEqual(h.env.DoYouNeedItDB.settings.font, staleFontPath, "load preserves unavailable font preference")
+    assertEqual(h.env.DoYouNeedItFrame.title.font, h.env.DoYouNeedItCore.FontPack.baselinePath, "main window uses readable temporary baseline")
 
     h:slash("settings")
-    assertEqual(h.env.DoYouNeedItFontDropdown.Text:GetText(), "Friz Quadrata TT", "font caption names the repaired font")
+    assertEqual(h.env.DoYouNeedItFontDropdown.Text:GetText(), "Gone.ttf", "font caption retains preferred face identity")
 end
 
 local function testForcedCjkLocalesUseLocaleSpecificBlizzardFontsOnWesternClients()
@@ -1926,8 +1926,8 @@ local function testForcedCjkLocalesUseLocaleSpecificBlizzardFontsOnWesternClient
         })
         h:loadAddon()
 
-        assertTruthy(h.env.DoYouNeedItCore.FontSupportsLocale(h.env.DoYouNeedItDB.settings.font, case.locale, "enUS"),
-            case.locale .. " load switches to a locale-capable font")
+        assertEqual(h.env.DoYouNeedItDB.settings.font, "Fonts\\FRIZQT__.TTF",
+            case.locale .. " automatic language adaptation preserves preferred font")
         assertTruthy(h.env.DoYouNeedItCore.FontSupportsLocale(h.env.DoYouNeedItFrame.title:GetFont(), case.locale, "enUS"),
             case.locale .. " main title uses a locale-capable font")
     end

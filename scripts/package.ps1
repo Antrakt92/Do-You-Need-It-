@@ -129,18 +129,15 @@ try {
     Copy-PackageFile "LICENSES/LibSharedMedia-3.0-LGPL-2.1.txt"
     Copy-PackageFile "media/font-star-outline.tga"
     Copy-PackageFile "media/font-star-filled.tga"
-    Copy-PackageFile "fonts/manifest.json"
-    Copy-PackageFile "fonts/NOTICE.md"
-    $fontManifest = Get-Content -LiteralPath (Join-Path $repoRoot 'fonts/manifest.json') -Raw | ConvertFrom-Json
-    if ($fontManifest.schemaVersion -ne 1 -or @($fontManifest.fonts).Count -ne 46) {
-        throw 'Invalid bundled font manifest'
+    $baselineFiles = Get-Content -LiteralPath (Join-Path $repoRoot 'scripts/baseline-files.json') -Raw | ConvertFrom-Json
+    if ($baselineFiles.schemaVersion -ne 1 -or @($baselineFiles.files.PSObject.Properties).Count -ne 6) {
+        throw 'Invalid embedded baseline inventory'
     }
-    foreach ($fontEntry in $fontManifest.fonts) {
-        Copy-PackageFile $fontEntry.path
-        if ((Get-FileHash -LiteralPath (Join-Path $repoRoot $fontEntry.path) -Algorithm SHA256).Hash -cne $fontEntry.sha256) {
-            throw "Bundled font hash mismatch: $($fontEntry.path)"
+    foreach ($entry in $baselineFiles.files.PSObject.Properties) {
+        Copy-PackageFile $entry.Name
+        if ((Get-FileHash -LiteralPath (Join-Path $repoRoot $entry.Name) -Algorithm SHA256).Hash.ToLowerInvariant() -cne $entry.Value) {
+            throw "Baseline hash mismatch: $($entry.Name)"
         }
-        Copy-PackageFile $fontEntry.licenseFile
     }
 
     if (Test-Path -LiteralPath $zipPath) {

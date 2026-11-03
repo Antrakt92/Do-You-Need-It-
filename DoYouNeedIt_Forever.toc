@@ -15,6 +15,7 @@
 ## Author: Antrakt92
 ## Version: 1.1.0
 ## IconTexture: Interface\AddOns\DoYouNeedIt\media\icon.png
+## OptionalDeps: AntraktFonts
 ## SavedVariables: DoYouNeedItDB DoYouNeedItSelfTest
 ## X-Curse-Project-ID: 1595368
 ## X-DoYouNeedIt-Flavor: forever
@@ -26,5 +27,8 @@ libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
 AntraktWindowLayers.lua
 DoYouNeedIt_Core.lua
 DoYouNeedIt_Forever.lua
+AntraktFontCatalog.lua
+AntraktFontNotice.lua
 DoYouNeedIt_Fonts.lua
+DoYouNeedIt_FontPackUI.lua
 DoYouNeedIt.lua

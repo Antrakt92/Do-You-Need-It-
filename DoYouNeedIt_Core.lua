@@ -9,7 +9,7 @@ local GLYPH_HANGUL = "HANGUL"
 local GLYPH_HANS = "HANS"
 local GLYPH_HANT = "HANT"
 
-local DEFAULT_FONT = "Fonts\\FRIZQT__.TTF"
+local DEFAULT_FONT = "Interface\\AddOns\\DoYouNeedIt\\fonts\\AntraktUISans.ttf"
 local DEFAULT_WHISPER_TEMPLATE = "Hey, do you need {item}?"
 local MAX_WHISPER_TEMPLATE_LENGTH = 160
 local MAX_CHAT_VISIBLE_BYTES = 255
@@ -69,7 +69,6 @@ local LOCALE_GLYPH_REQ = {
 local FONT_GLYPH_SUPPORT = {}
 local bundledFonts = {}
 local bundledByPath = {}
-local bundledByFile = {}
 local function addFontGlyphSupport(path, glyphs)
     FONT_GLYPH_SUPPORT[(path:gsub("/", "\\"):lower())] = glyphs
 end
@@ -1417,10 +1416,8 @@ end
 function Core.SetBundledFonts(fonts)
     bundledFonts = type(fonts) == "table" and fonts or {}
     bundledByPath = {}
-    bundledByFile = {}
     for _, font in ipairs(bundledFonts) do
         bundledByPath[Core.FontPathKey(font.path)] = font
-        bundledByFile[font.file:lower()] = font
     end
 end
 
@@ -1431,7 +1428,7 @@ end
 function Core.FontSupportsLocale(path, locale)
     local key = Core.FontPathKey(path)
     if not key then return false end
-    local font = bundledByPath[key] or bundledByFile[(key:match("[^\\]+$") or key)]
+    local font = bundledByPath[key] or (Core.FontPack and Core.FontPack.Coverage(path))
     if font and font.region and (locale == "zhCN" or locale == "zhTW") and font.region ~= locale then
         return false
     end
@@ -1456,7 +1453,7 @@ function Core.FontSupports(fontPath, glyph, clientLocale)
     end
 
     local file = key:match("[^\\]+$") or key
-    local bundled = bundledByPath[key] or bundledByFile[file]
+    local bundled = bundledByPath[key] or (Core.FontPack and Core.FontPack.Coverage(fontPath))
     if bundled then
         if glyph == GLYPH_LATIN then
             if bundled.latinLocales and clientLocale then return bundled.latinLocales[clientLocale] == true end

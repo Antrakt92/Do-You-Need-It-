@@ -1,67 +1,120 @@
--- Unchanged static fonts; upstream licenses and provenance are in fonts/.
+local _, namespace = ...
 local Core = _G.DoYouNeedItCore
-local fonts = {
-    { name = "DejaVu Sans", file = "DejaVuSans.ttf", cyrillic = true },
-    { name = "DejaVu Serif", file = "DejaVuSerif.ttf", cyrillic = true },
-    { name = "Gentium", file = "Gentium-Regular.ttf", cyrillic = true },
-    { name = "Hack", file = "Hack-Regular.ttf", cyrillic = true },
-    { name = "Liberation Sans", file = "LiberationSans-Regular.ttf", cyrillic = true },
-    { name = "Liberation Serif", file = "LiberationSerif-Regular.ttf", cyrillic = true },
-    { name = "TeX Gyre Adventor", file = "texgyreadventor-regular.otf", cyrillic = false },
-    { name = "TeX Gyre Adventor Bold", file = "texgyreadventor-bold.otf", cyrillic = false },
-    { name = "Noto Sans", file = "NotoSans-Regular.ttf", cyrillic = true },
-    { name = "Roboto Condensed", file = "RobotoCondensed-Regular.ttf", cyrillic = true },
-    { name = "Oswald", file = "Oswald-Regular.ttf", cyrillic = true },
-    { name = "PT Sans", file = "PT_Sans-Web-Regular.ttf", cyrillic = true },
-    { name = "PT Sans Bold", file = "PT_Sans-Web-Bold.ttf", cyrillic = true },
-    { name = "PT Sans Narrow", file = "PT_Sans-Narrow-Web-Regular.ttf", cyrillic = true },
-    { name = "PT Sans Narrow Bold", file = "PT_Sans-Narrow-Web-Bold.ttf", cyrillic = true },
-    { name = "PT Serif", file = "PT_Serif-Web-Regular.ttf", cyrillic = true },
-    { name = "PT Serif Bold", file = "PT_Serif-Web-Bold.ttf", cyrillic = true },
-    { name = "Fira Sans", file = "FiraSans-Regular.ttf", cyrillic = true },
-    { name = "Fira Sans Bold", file = "FiraSans-Bold.ttf", cyrillic = true },
-    { name = "Fira Sans Condensed", file = "FiraSansCondensed-Regular.ttf", cyrillic = true },
-    { name = "Fira Sans Condensed Bold", file = "FiraSansCondensed-Bold.ttf", cyrillic = true },
-    { name = "PT Mono", file = "PTM55FT.ttf", cyrillic = true },
-    { name = "Audiowide", file = "Audiowide-Regular.ttf", cyrillic = false },
-    { name = "Black Ops One", file = "BlackOpsOne-Regular.ttf", cyrillic = false },
-    { name = "Bangers", file = "Bangers-Regular.ttf", cyrillic = false },
-    { name = "Special Elite", file = "SpecialElite-Regular.ttf", cyrillic = false },
-    { name = "Russo One", file = "RussoOne-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
-    { name = "Ruslan Display", file = "RuslanDisplay-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
-    { name = "Rubik Mono One", file = "RubikMonoOne-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
-    { name = "Marmelad", file = "Marmelad-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
-    { name = "Philosopher", file = "Philosopher-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
-    { name = "Lobster", file = "Lobster-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
-    { name = "Bad Script", file = "BadScript-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
-    { name = "Neucha", file = "Neucha.ttf", latin = false, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false, latinLocales = { enUS = true, deDE = true, esES = true, esMX = true, frFR = true } },
-    { name = "Old Standard TT", file = "OldStandard-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
-    { name = "Press Start 2P", file = "PressStart2P-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
-    { name = "Kosugi Maru", file = "KosugiMaru-Regular.ttf", latin = false, cyrillic = true, hans = false, hant = false, hangul = false, japanese = true, latinLocales = { enUS = true } },
-    { name = "Sawarabi Mincho", file = "SawarabiMincho-Regular.ttf", latin = true, cyrillic = false, hans = false, hant = false, hangul = false, japanese = true },
-    { name = "Do Hyeon", file = "DoHyeon-Regular.ttf", latin = false, cyrillic = false, hans = false, hant = false, hangul = true, japanese = false, latinLocales = { enUS = true } },
-    { name = "Nanum Pen Script", file = "NanumPenScript-Regular.ttf", latin = false, cyrillic = false, hans = false, hant = false, hangul = true, japanese = false, latinLocales = { enUS = true } },
-    { name = "Ma Shan Zheng", file = "MaShanZheng-Regular.ttf", latin = false, cyrillic = false, hans = true, hant = false, hangul = false, japanese = false, latinLocales = { enUS = true } },
-    { name = "ZCOOL XiaoWei", file = "ZCOOLXiaoWei-Regular.ttf", latin = false, cyrillic = false, hans = true, hant = false, hangul = false, japanese = false, latinLocales = { enUS = true } },
-    { name = "Source Han Sans CN", file = "SourceHanSansCN-Regular.otf", latin = true, cyrillic = true, hans = true, hant = true, hangul = false, japanese = true, region = "zhCN" },
-    { name = "Source Han Sans TW", file = "SourceHanSansTW-Regular.otf", latin = true, cyrillic = true, hans = false, hant = true, hangul = false, japanese = true, region = "zhTW" },
-    { name = "Source Han Serif CN", file = "SourceHanSerifCN-Regular.otf", latin = true, cyrillic = true, hans = true, hant = true, hangul = false, japanese = true, region = "zhCN" },
-    { name = "Source Han Serif TW", file = "SourceHanSerifTW-Regular.otf", latin = true, cyrillic = true, hans = false, hant = true, hangul = false, japanese = true, region = "zhTW" },
-}
-
-
-for _, font in ipairs(fonts) do
-    font.path = "Interface\\AddOns\\DoYouNeedIt\\fonts\\" .. font.file
+local snapshot = assert(namespace and namespace.AntraktFontCatalog, "Missing font catalog")
+local pack = { snapshot = snapshot, baselinePath = "Interface\\AddOns\\DoYouNeedIt\\fonts\\AntraktUISans.ttf", generation = 0 }
+Core.FontPack = pack
+local byPath, byID = {}, {}
+local function key(path) return Core.FontPathKey(path) end
+local function copy(row)
+    local result = {}
+    for field, value in pairs(row) do result[field] = value end
+    return result
 end
-Core.SetBundledFonts(fonts)
-local media = LibStub and LibStub("LibSharedMedia-3.0", true)
-if media and type(media.Register) == "function" then
-    for _, font in ipairs(fonts) do
-        local mask = font.latin ~= false and (media.LOCALE_BIT_western or 0) or 0
-        if font.cyrillic then mask = mask + (media.LOCALE_BIT_ruRU or 0) end
-        if font.hans then mask = mask + (media.LOCALE_BIT_zhCN or 0) end
-        if font.hant then mask = mask + (media.LOCALE_BIT_zhTW or 0) end
-        if font.hangul then mask = mask + (media.LOCALE_BIT_koKR or 0) end
-        media:Register(media.MediaType.FONT, font.name, font.path, mask)
+for _, row in ipairs(snapshot.fonts) do
+    byID[row.id] = row
+    byPath[key(row.path)] = row.id
+    for _, alias in ipairs(row.aliases) do byPath[key(alias)] = row.id end
+end
+byPath[key(pack.baselinePath)] = snapshot.baseline.id
+function pack.Identity(path) return byPath[key(path)] or key(path) end
+function pack.Coverage(path)
+    local id = byPath[key(path)]
+    return id == snapshot.baseline.id and snapshot.baseline or (pack.currentByID and pack.currentByID[id]) or byID[id]
+end
+function pack.Preferred(settings) return settings.fontBeforeAutoSwitch or settings.font end
+function pack.Message(locale, id)
+    return (snapshot.messages[locale] or snapshot.messages.enUS)[id] or snapshot.messages.enUS[id] or ""
+end
+function pack.Invalidate()
+    pack.synced = false
+    pack.generation = pack.generation + 1
+end
+function pack.Validate(catalog)
+    if type(catalog) ~= "table" or catalog.formatMajor ~= 1
+        or type(catalog.catalogRevision) ~= "string" or #catalog.catalogRevision < 1 or #catalog.catalogRevision > 128
+        or type(catalog.fonts) ~= "table" or #catalog.fonts < 1 or #catalog.fonts > 256 then return nil end
+    local ids, paths, rows = {}, {}, {}
+    for index, row in ipairs(catalog.fonts) do
+        if type(row) ~= "table" or type(row.id) ~= "string" or not row.id:match("^[a-z0-9%-]+$") or #row.id > 96
+            or type(row.name) ~= "string" or #row.name < 1 or #row.name > 128
+            or type(row.file) ~= "string" or #row.file > 160 or not row.file:match("^[A-Za-z0-9_.%-]+%.[to][tt]f$")
+            or row.path ~= "Interface\\AddOns\\AntraktFonts\\fonts\\" .. row.file
+            or type(row.sha256) ~= "string" or #row.sha256 ~= 64 or row.sha256:find("[^a-fA-F0-9]")
+            or ids[row.id] or paths[key(row.path)] then return nil end
+        for _, flag in ipairs({ "latin", "cyrillic", "hans", "hant", "hangul", "japanese" }) do
+            if type(row[flag]) ~= "boolean" then return nil end
+        end
+        if row.region ~= nil and row.region ~= "zhCN" and row.region ~= "zhTW" then return nil end
+        if row.latinLocales ~= nil then
+            if type(row.latinLocales) ~= "table" then return nil end
+            local count = 0
+            for locale, supported in pairs(row.latinLocales) do
+                count = count + 1
+                if count > 11 then return nil end
+                if not snapshot.messages[locale] or type(supported) ~= "boolean" then return nil end
+            end
+        end
+        ids[row.id], paths[key(row.path)] = true, true
+        rows[index] = copy(row)
     end
+    local count = 0
+    for index in pairs(catalog.fonts) do
+        count = count + 1
+        if count > 256 then return nil end
+        if type(index) ~= "number" or index < 1 or index > #rows or index % 1 ~= 0 then return nil end
+    end
+    return rows
 end
+function pack.Sync()
+    local provider = rawget(_G, "AntraktFonts")
+    if pack.synced and provider == pack.provider then return end
+    pack.provider, pack.synced = provider, true
+    pack.status = "provider-unavailable"
+    local rows
+    if type(provider) == "table" and type(provider.GetCatalog) == "function" then
+        local ok, catalog = pcall(provider.GetCatalog)
+        local valid, result = pcall(pack.Validate, ok and catalog or nil)
+        if valid and result then rows = result; pack.status = "ready" else pack.status = "provider-incompatible" end
+    elseif provider ~= nil then pack.status = "provider-incompatible" end
+    pack.rows = {}
+    pack.currentByID = {}
+    local baseline = copy(snapshot.baseline)
+    baseline.path = pack.baselinePath
+    pack.rows[1], pack.currentByID[baseline.id] = baseline, baseline
+    for _, source in ipairs(rows or snapshot.fonts) do
+        local row = copy(source)
+        if not rows then row.path = "Interface\\AddOns\\DoYouNeedIt\\fonts\\" .. row.file end
+        pack.rows[#pack.rows + 1], pack.currentByID[row.id] = row, row
+        byPath[key(row.path)] = row.id
+    end
+    Core.SetBundledFonts(pack.rows)
+    pack.generation = pack.generation + 1
+end
+function pack.Resolve(path)
+    pack.Sync()
+    local original = byID[byPath[key(path)]]
+    if pack.status == "provider-unavailable" and original and type(path) == "string"
+        and not path:find("AntraktFonts", 1, true)
+        and path:match("[^\\/]+$"):lower() == original.file:lower() then return path end
+    local row = pack.currentByID[pack.Identity(path)]
+    return row and row.path or path
+end
+function pack.Name(path)
+    local id = pack.Identity(path)
+    local row = byID[id] or pack.currentByID[id]
+    return row and row.name or (type(path) == "string" and path:match("[^\\/]+$")) or snapshot.baseline.name
+end
+function pack.IsFavorite(favorites, path)
+    local id = pack.Identity(path)
+    for saved, enabled in pairs(favorites or {}) do
+        if enabled == true and pack.Identity(saved) == id then return true end
+    end
+    return false
+end
+function pack.ToggleFavorite(favorites, path)
+    local id, selected = pack.Identity(path), pack.IsFavorite(favorites, path)
+    if selected then
+        for saved in pairs(favorites) do if pack.Identity(saved) == id then favorites[saved] = nil end end
+    else favorites[key(path)] = true end
+end
+pack.Sync()

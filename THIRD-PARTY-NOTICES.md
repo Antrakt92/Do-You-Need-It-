@@ -1,10 +1,19 @@
 # Third-Party Notices
 
-## Bundled fonts
+## Embedded multilingual baseline
 
-The 46 unchanged font files in `fonts/` retain their upstream licenses.
-See [font sources and licenses](fonts/NOTICE.md) and `fonts/manifest.json`
-for pinned provenance, file hashes, and the included license texts.
+`fonts/AntraktUISans.ttf` is Antrakt UI Sans, a renamed modified font combining
+Noto Sans and complementary Droid Sans Fallback Legacy glyphs. It is distributed
+under OFL-1.1 with the original Apache-2.0 notices and terms retained. See
+[the modification notice](fonts/NOTICE.txt) and all four texts under
+`fonts/licenses/`. It is separate from this addon's source-code license.
+
+Pinned original Noto Sans source: https://github.com/notofonts/noto-fonts/tree/ffebf8c1ee449e544955a7e813c54f9b73848eac
+
+Pinned original Droid source: https://android.googlesource.com/platform/frameworks/base/+/1aed5ea2dcf7cb0bf35635f378b2326461ba0df0/data/fonts/
+
+The optional Antrakt Fonts addon supplies the separate 46-face decorative
+collection; those binaries are not included in this package.
 
 Do You Need It? bundles these runtime libraries so release packages use the same reviewed
 source present in the source tree. The bundled Lua files retain their existing

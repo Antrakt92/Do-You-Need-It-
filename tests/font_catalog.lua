@@ -1,22 +1,22 @@
 dofile("DoYouNeedIt_Core.lua")
-dofile("DoYouNeedIt_Fonts.lua")
+local namespace = {}
+assert(loadfile("AntraktFontCatalog.lua"))("DoYouNeedIt", namespace)
+assert(loadfile("DoYouNeedIt_Fonts.lua"))("DoYouNeedIt", namespace)
 local Core = DoYouNeedItCore
 local checks = 0
 local function check(value, message)
     checks = checks + 1
     assert(value, message)
 end
-local fonts = Core.GetBundledFonts()
-check(#fonts == 46, "all bundled families are exposed without a media addon")
+local fonts = Core.FontPack.snapshot.fonts
+check(#fonts == 46, "shared collection metadata retains all existing families")
 local seen = {}
 local counts = {}
 for _, font in ipairs(fonts) do
     local key = Core.FontPathKey(font.path)
     check(not seen[key], "catalog paths are unique")
     seen[key] = true
-    local file = assert(io.open("fonts/" .. font.file, "rb"))
-    check(#file:read("*a") > 10000, "asset exists")
-    file:close()
+    check(#font.sha256 == 64, "shared face keeps pinned hash")
     check(Core.FontSupports(font.path, "CYR", "ruRU") == font.cyrillic, "Cyrillic comes from verified catalog")
     for _, locale in ipairs({"enUS", "deDE", "esES", "esMX", "frFR", "itIT", "ptBR", "ruRU", "koKR", "zhCN", "zhTW"}) do
         if Core.FontSupportsLocale(font.path, locale) then counts[locale] = (counts[locale] or 0) + 1 end
@@ -28,7 +28,8 @@ end
 check(not Core.FontSupportsLocale("Interface/AddOns/Test/SourceHanSansCN-Regular.otf", "koKR"), "CN font does not claim Korean support")
 check(not Core.FontSupportsLocale("Interface/AddOns/Test/SourceHanSansTW-Regular.otf", "zhCN"), "TW region is excluded from Simplified picker")
 check(not Core.FontSupportsLocale("Interface/AddOns/Test/Neucha.ttf", "ptBR"), "incomplete Portuguese accents exclude Neucha")
-check(Core.FontSupportsLocale("Interface/AddOns/Test/Neucha.ttf", "ruRU"), "Neucha remains available in Russian")
+check(Core.FontSupportsLocale("Interface/AddOns/DoYouNeedIt/fonts/Neucha.ttf", "ruRU"), "known Neucha remains available in Russian")
+check(not Core.FontSupportsLocale("Interface/AddOns/Test/Neucha.ttf", "ruRU"), "an unrelated same filename does not inherit verified coverage")
 check(not Core.FontSupportsLocale("Interface/AddOns/Media/Unknown.ttf", "ptBR"), "unknown fonts do not promise accented translations")
 check(Core.FontSupportsLocale("Interface/AddOns/Media/Unknown.ttf", "enUS"), "unknown media retains basic Latin availability")
 check(not Core.FontSupportsText("Fonts/ARIALN.TTF", "Игрок 物品", "enUS"), "mixed-script text requires every script")

@@ -406,6 +406,7 @@ local function RegisterButtonFont(button, size, flags, stable, maxSize)
 end
 
 local function BuildFontsList(locale)
+    Core.FontPack.Sync()
     locale = Core.ResolveActiveLocale(locale or ActiveLocale(), ClientLocale())
     -- Paint-pass cache (Addon fields, not new locals): every repaint asks
     -- for the list several times, so reuse it within one RefreshRows pass
@@ -413,7 +414,7 @@ local function BuildFontsList(locale)
     -- version key: a changed font set still rebuilds instead of going stale.
     local pass = Addon.fontListPass or 0
     local cache = Addon.fontListCache
-    if cache and cache.pass == pass and cache.locale == locale and type(cache.fonts) == "table" then
+    if cache and cache.pass == pass and cache.locale == locale and cache.generation == Core.FontPack.generation and type(cache.fonts) == "table" then
         return cache.fonts
     end
     local names
@@ -427,7 +428,7 @@ local function BuildFontsList(locale)
         end
     end
     local namesKey = table.concat(parts, "\001")
-    if cache and cache.locale == locale and cache.namesKey == namesKey and type(cache.fonts) == "table" then
+    if cache and cache.locale == locale and cache.namesKey == namesKey and cache.generation == Core.FontPack.generation and type(cache.fonts) == "table" then
         cache.pass = pass
         return cache.fonts
     end
@@ -438,7 +439,7 @@ local function BuildFontsList(locale)
         if type(name) ~= "string" or name == "" or type(path) ~= "string" or path == "" then
             return
         end
-        local key = Core.FontPathKey(path)
+        local key = Core.FontPack.Identity(path)
         if key and not seen[key] then
             seen[key] = true
             fonts[#fonts + 1] = {
@@ -475,7 +476,7 @@ local function BuildFontsList(locale)
             end
         end
     end
-    Addon.fontListCache = { pass = pass, locale = locale, namesKey = namesKey, fonts = fonts }
+    Addon.fontListCache = { generation = Core.FontPack.generation, pass = pass, locale = locale, namesKey = namesKey, fonts = fonts }
     return fonts
 end
 
@@ -621,7 +622,7 @@ local function FindFontName(path)
             return fonts[index].name
         end
     end
-    return "Friz Quadrata TT"
+    return Core.FontPack.Name(path)
 end
 
 -- Saved font paths can go stale mid-session (shared-media set replaced by
@@ -629,9 +630,11 @@ end
 -- Resolve once per paint pass so a broken path never reaches SetFont.
 function Addon.ValidatedDisplayFont()
     local settings = Addon.state and Addon.state.settings or Core.NormalizeSettings({})
-    local font = Addon.previewFont or settings.font or Core.GetDefaultFont()
+    local font = Core.FontPack.Resolve(Addon.previewFont or Core.FontPack.Preferred(settings) or Core.GetDefaultFont())
     local active = ActiveLocale()
     local fonts = BuildFontsList(active)
+    if Core.FontPack.Identity(font) ~= Core.FontPathKey(font) and Core.FontSupportsLocale(font, active)
+        and Addon.FontAvailable(font) then return font end
     if not FindAvailableFontPath(font, fonts) or not Core.FontSupportsLocale(font, active) or not Addon.FontAvailable(font) then
         font = Addon.LocaleFont(font, active) or Core.GetDefaultFont()
     end
@@ -685,45 +688,8 @@ ApplyCurrentFont = function()
 end
 
 MaybeAutoSwitchFont = function()
-    if not Addon.state or not Addon.state.settings then
-        return false
-    end
-
-    local settings = Addon.state.settings
-    local active = Core.ResolveActiveLocale(settings.forceLocale, ClientLocale())
-    local fonts = BuildFontsList(active)
-    local changed = false
-    local previousFont = FindAvailableFontPath(settings.fontBeforeAutoSwitch, fonts)
-    if previousFont and Core.FontSupportsLocale(previousFont, active) and Addon.FontAvailable(previousFont) then
-        settings.font = previousFont
-        settings.fontBeforeAutoSwitch = nil
-        return true
-    elseif settings.fontBeforeAutoSwitch and not previousFont then
-        settings.fontBeforeAutoSwitch = nil
-        changed = true
-    end
-
-    local currentFont = FindAvailableFontPath(settings.font, fonts)
-    if currentFont and Core.FontSupportsLocale(currentFont, active) and Addon.FontAvailable(currentFont) then
-        if not Core.SameFontPath(currentFont, settings.font) then
-            settings.font = currentFont
-            return true
-        end
-        return changed
-    end
-
-    local fallback = Addon.LocaleFont(settings.font, active)
-    if fallback and not Core.SameFontPath(fallback, settings.font) then
-        -- Remember the pre-fallback path even when it is already gone
-        -- (shared-media set replaced mid-session): otherwise the original
-        -- can never be restored on re-registration.
-        if not settings.fontBeforeAutoSwitch then
-            settings.fontBeforeAutoSwitch = settings.font
-        end
-        settings.font = fallback
-        return true
-    end
-    return changed
+    -- Automatic adaptation is resolved while painting, never saved as preference.
+    return false
 end
 
 local function ExtractItemLink(message)
@@ -5489,6 +5455,7 @@ local function RefreshFontWarning()
     local active = ActiveLocale()
     local requiredGlyph = Core.GetLocaleGlyphRequirement(active)
     local font = Addon.previewFont or Addon.state.settings.font
+    if Core.FontPack.RefreshMarker then Core.FontPack.RefreshMarker(Addon, active) end
     if Core.FontSupportsLocale(font, active) then
         Addon.fontWarning:SetText("")
     else
@@ -5647,7 +5614,7 @@ RefreshSettingsControls = function()
         SetDropdownTextSafe(Addon.languageDropdown, CurrentLanguageLabel())
     end
     if Addon.fontDropdown then
-        SetDropdownTextSafe(Addon.fontDropdown, FindFontName(Addon.ValidatedDisplayFont()))
+        SetDropdownTextSafe(Addon.fontDropdown, FindFontName(Core.FontPack.Preferred(settings)))
     end
     RefreshFontWarning()
 end
@@ -5706,6 +5673,11 @@ local function SetFontPath(path)
     if type(path) ~= "string" or path == "" then
         return
     end
+    if CleanBoolean(SafeCall(InCombatLockdown)) ~= false then return false end
+    path = Core.FontPack.Resolve(path)
+    if not Core.FontSupportsLocale(path, ActiveLocale()) or not Addon.FontAvailable(path) then return false end
+    if Addon.frame and not Addon.ApplyRegionFont(Addon.frame.title, path,
+        Core.ResolveFontSize(16, Addon.state.settings.fontSize), "") then return false end
     Addon.previewFont = nil
     Addon.state.settings.font = path
     Addon.state.settings.fontBeforeAutoSwitch = nil
@@ -5877,11 +5849,11 @@ function Addon.PopulateFontPicker()
     end
     local favorites = Addon.state.settings.fontFavorites or {}
     table.sort(fonts, function(a, b)
-        local af, bf = favorites[Core.FontPathKey(a.path)] == true, favorites[Core.FontPathKey(b.path)] == true
+        local af, bf = Core.FontPack.IsFavorite(favorites, a.path), Core.FontPack.IsFavorite(favorites, b.path)
         if af ~= bf then return af end
         return a.name < b.name
     end)
-    local currentPath = Addon.state and Addon.state.settings and Addon.state.settings.font
+    local currentPath = Addon.state and Addon.state.settings and Core.FontPack.Preferred(Addon.state.settings)
     local rows = math.ceil(#fonts / cols)
     local currentRow
     Addon.fontPickerMaxScroll = math.max(0, rows * buttonHeight - visibleRows * buttonHeight)
@@ -5927,7 +5899,7 @@ function Addon.PopulateFontPicker()
                 button.bg:SetColorTexture(0.8, 0.65, 0.2, 0.2)
                 button.text:SetTextColor(1, 0.87, 0.45, 1)
                 local saved = Addon.state.settings.fontFavorites or {}
-                Addon.ShowTextTooltip(self, L(saved[Core.FontPathKey(button.fontPath)] and "Remove favorite" or "Add favorite") .. "\n" .. button.fontName)
+                Addon.ShowTextTooltip(self, L(Core.FontPack.IsFavorite(saved, button.fontPath) and "Remove favorite" or "Add favorite") .. "\n" .. button.fontName)
             end)
             button.star:SetScript("OnLeave", function()
                 HideItemTooltip()
@@ -5935,10 +5907,10 @@ function Addon.PopulateFontPicker()
                 button.text:SetTextColor(0.8, 0.87, 0.94, 1)
             end)
             button.star:SetScript("OnClick", function()
+                if CleanBoolean(SafeCall(InCombatLockdown)) ~= false then return end
                 local settings = Addon.state.settings
                 settings.fontFavorites = settings.fontFavorites or {}
-                local key = Core.FontPathKey(button.fontPath)
-                settings.fontFavorites[key] = not settings.fontFavorites[key] or nil
+                Core.FontPack.ToggleFavorite(settings.fontFavorites, button.fontPath)
                 SaveDB()
                 Addon.fontPickerHoverGen = (Addon.fontPickerHoverGen or 0) + 1
                 CancelFontPreview()
@@ -5987,9 +5959,9 @@ function Addon.PopulateFontPicker()
         button.fontName = font.name
         button.fontPath = font.path
         button.text:SetText(font.name)
-        button.selected = Core.SameFontPath(font.path, currentPath)
-        button.star.icon:SetTexture("Interface\\AddOns\\DoYouNeedIt\\media\\font-star-" .. (favorites[Core.FontPathKey(font.path)] and "filled" or "outline"))
-        if Core.SameFontPath(font.path, currentPath) then
+        button.selected = Core.FontPack.Identity(font.path) == Core.FontPack.Identity(currentPath)
+        button.star.icon:SetTexture("Interface\\AddOns\\DoYouNeedIt\\media\\font-star-" .. (Core.FontPack.IsFavorite(favorites, font.path) and "filled" or "outline"))
+        if Core.FontPack.Identity(font.path) == Core.FontPack.Identity(currentPath) then
             button.bg:SetColorTexture(0.12, 0.22, 0.28, 0.9)
             currentRow = row
         else
@@ -7452,6 +7424,7 @@ local function Initialize()
         Print("Forever Beta requires the WoW Forever beta client (Interface 16001).")
         return
     end
+    local existingFontInstall = type(DoYouNeedItDB) == "table" and next(DoYouNeedItDB) ~= nil
     DoYouNeedItDB = DoYouNeedItDB or {}
     local settings = Core.NormalizeSettings(DoYouNeedItDB.settings or {})
     Addon.characterKey = SafePlayerStorageKey()
@@ -7515,8 +7488,10 @@ local function Initialize()
     end
     Addon.currentInstanceName = SafeInstanceName()
     BuildRoster()
+    Addon.FontAvailable(Core.GetDefaultFont())
     CreateUI()
     ApplyCurrentFont()
+    Core.FontPack.InstallUI(Addon, existingFontInstall, ApplyCurrentFont, RefreshSettingsControls)
 
     SLASH_DOYOUNEEDIT1 = "/dyni"
     SlashCmdList.DOYOUNEEDIT = HandleSlash
