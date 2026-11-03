@@ -513,13 +513,36 @@ function Addon.FontAvailable(path)
     return valid
 end
 
+function Addon.FontFlagKey(flags)
+    if IsSecret(flags) then return nil end
+    if flags == nil then return 0 end
+    if type(flags) == "string" and flags == "" then return 0 end
+    flags = CleanString(flags)
+    if not flags or #flags > 128 then return nil end
+    flags = flags:match("^%s*(.-)%s*$")
+    if flags == "" then return 0 end
+    local seen, key = {}, 0
+    for token in (flags .. ","):gmatch("(.-),") do
+        token = token:match("^%s*(.-)%s*$")
+        if seen[token] or (token ~= "OUTLINE" and token ~= "THICKOUTLINE" and token ~= "MONOCHROME") then
+            return nil
+        end
+        seen[token] = true
+    end
+    -- The client may report the implied thin-outline bit alongside thick.
+    if seen.THICKOUTLINE then key = 3 elseif seen.OUTLINE then key = 1 end
+    if seen.MONOCHROME then key = key + 4 end
+    return key
+end
+
 function Addon.RegionFontMatches(region, path, size, flags)
     local actual, actualSize, actualFlags = SafeCall(region.GetFont, region)
     actualSize, size = CleanNumber(actualSize), CleanNumber(size)
     if not actualSize or not size then return false end
     -- Font metrics can round-trip through client floats with tiny differences.
+    local actualKey, requestedKey = Addon.FontFlagKey(actualFlags), Addon.FontFlagKey(flags)
     return Core.SameFontPath(actual, path) and math.abs(actualSize - size) <= 0.01
-        and (CleanString(actualFlags) or "") == (flags or "")
+        and actualKey ~= nil and requestedKey ~= nil and actualKey == requestedKey
 end
 
 function Addon.ApplyRegionFont(region, path, size, flags)

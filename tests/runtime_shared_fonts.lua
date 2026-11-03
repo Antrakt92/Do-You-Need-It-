@@ -235,4 +235,41 @@ for _, flavor in ipairs({ "retail", "forever" }) do
     queued.env.DoYouNeedItFrame.settingsButton:FireScript("OnClick")
     check(queued.env.DoYouNeedItFontPackNotice and queued.env.DoYouNeedItFontPackNotice:IsVisible(), "closing Settings resumes pending notice without polling")
 end
+for _, flavor in ipairs({ "retail", "forever" }) do
+    local h, pack = client(flavor)
+    local addon
+    for index = 1, 30 do
+        local name, value = debug.getupvalue(h.env.SlashCmdList.DOYOUNEEDIT, index)
+        if name == "Addon" then addon = value end
+    end
+    assert(addon)
+    local region = h.env.UIParent:CreateFontString(nil, "OVERLAY")
+    local actualFlags = "OUTLINE, THICKOUTLINE"
+    local originalGetFont = region.GetFont
+    region.GetFont = function(self)
+        local path, size = originalGetFont(self)
+        return path, size, actualFlags
+    end
+    check(addon.ApplyRegionFont(region, pack.baselinePath, 14, "THICKOUTLINE"),
+        "native thick outline readback accepts implied OUTLINE: " .. flavor)
+    for _, case in ipairs({
+        {" THICKOUTLINE , OUTLINE ", "THICKOUTLINE", true},
+        {"MONOCHROME, THICKOUTLINE, OUTLINE", "THICKOUTLINE, MONOCHROME", true},
+        {"OUTLINE, MONOCHROME", " MONOCHROME , OUTLINE ", true},
+        {"", nil, true}, {"OUTLINE", "THICKOUTLINE", false},
+        {"THICKOUTLINE", "OUTLINE", false},
+        {"THICKOUTLINE, MONOCHROME", "THICKOUTLINE", false},
+        {"OUTLINE, UNKNOWN", "OUTLINE", false},
+        {"OUTLINE,,THICKOUTLINE", "THICKOUTLINE", false},
+        {"OUTLINE,", "OUTLINE", false}, {"OUTLINE OUTLINE", "OUTLINE", false},
+        {"OUTLINE,OUTLINE", "OUTLINE", false},
+        {"OUTLINE", "UNKNOWN", false},
+    }) do
+        actualFlags = case[1]
+        check(addon.RegionFontMatches(region, pack.baselinePath, 14, case[2]) == case[3],
+            "font flag semantics reject missing, extra or malformed effects: " .. case[1])
+    end
+    actualFlags = h:secretValue("font flags")
+    check(not addon.RegionFontMatches(region, pack.baselinePath, 14, ""), "secret flags cannot prove successful application")
+end
 print("Shared font runtime: " .. checks .. " checks passed")
