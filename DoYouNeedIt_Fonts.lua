@@ -101,7 +101,7 @@ function pack.Resolve(path)
 end
 function pack.Name(path)
     local id = pack.Identity(path)
-    local row = byID[id] or pack.currentByID[id]
+    local row = pack.currentByID[id] or byID[id]
     return row and row.name or (type(path) == "string" and path:match("[^\\/]+$")) or snapshot.baseline.name
 end
 function pack.IsFavorite(favorites, path)

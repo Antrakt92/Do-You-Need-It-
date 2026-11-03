@@ -272,4 +272,16 @@ for _, flavor in ipairs({ "retail", "forever" }) do
     actualFlags = h:secretValue("font flags")
     check(not addon.RegionFontMatches(region, pack.baselinePath, 14, ""), "secret flags cannot prove successful application")
 end
+for _, flavor in ipairs({ "retail", "forever" }) do
+    local updated = {}
+    for index, row in ipairs(snapshot.fonts) do updated[index] = row end
+    updated[1] = {}
+    for key, value in pairs(snapshot.fonts[1]) do updated[1][key] = value end
+    updated[1].name = "Updated Provider Face"
+    local _, pack = client(flavor, {fontProvider={GetCatalog=function()
+        return {formatMajor=1,catalogRevision="independent-name-update",fonts=updated}
+    end}})
+    check(pack.Name(updated[1].path) == updated[1].name, "current provider name wins for canonical path")
+    check(pack.Name(updated[1].aliases[1]) == updated[1].name, "current provider name wins for saved legacy alias")
+end
 print("Shared font runtime: " .. checks .. " checks passed")
