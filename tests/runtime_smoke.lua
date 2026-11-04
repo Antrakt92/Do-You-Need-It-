@@ -1974,18 +1974,20 @@ local function testCustomFontPickerGridPreviewAndCommit()
     brokenButton:FireScript("OnEnter")
 
     assertEqual(h.env.DoYouNeedItFrame.title.font, brokenFontPath, "font hover previews on the main window")
-    assertEqual(settingsFrame.title.font == brokenFontPath, false, "font hover does not apply preview font to settings title")
-    assertEqual(h.env.DoYouNeedItLanguageDropdown.Text.font == brokenFontPath, false, "font hover does not apply preview font to language caption")
-    assertEqual(h.env.DoYouNeedItFontDropdown.Text.font == brokenFontPath, false, "font hover does not apply preview font to font caption")
+    assertEqual(settingsFrame.title.font, brokenFontPath, "font hover previews on Settings title")
+    assertEqual(h.env.DoYouNeedItLanguageDropdown.Text.font, brokenFontPath, "font hover previews on language caption")
+    assertEqual(h.env.DoYouNeedItFontDropdown.Text.font, brokenFontPath, "font hover previews on font caption")
     assertTruthy(h.env.DoYouNeedItLanguageDropdown.Text:GetText() ~= "", "language caption survives font hover")
     assertTruthy(h.env.DoYouNeedItFontDropdown.Text:GetText() ~= "", "font caption survives font hover")
 
     brokenButton:FireScript("OnLeave")
     h:runTimers(0, 10)
     assertEqual(h.env.DoYouNeedItFrame.title.font == brokenFontPath, false, "leaving a font option restores the committed font")
+    assertEqual(settingsFrame.title.font == brokenFontPath, false, "leaving restores readable Settings typography")
 
     brokenButton:FireScript("OnClick")
     assertEqual(h.env.DoYouNeedItDB.settings.font, brokenFontPath, "clicking a font option saves the font")
+    assertEqual(settingsFrame.title.font == brokenFontPath, false, "selection does not persist preview typography to Settings")
     assertEqual(picker:IsShown(), false, "clicking a font option closes the custom picker")
     assertEqual(h.env.DoYouNeedItFontDropdown.Text:GetText(), "Broken Font", "font caption updates after choosing a font")
 end

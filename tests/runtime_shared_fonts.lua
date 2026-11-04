@@ -324,4 +324,67 @@ for _, flavor in ipairs({ "retail", "forever" }) do
     check(pack.Name(updated[1].path) == updated[1].name, "current provider name wins for canonical path")
     check(pack.Name(updated[1].aliases[1]) == updated[1].name, "current provider name wins for saved legacy alias")
 end
+for _, flavor in ipairs({"retail", "forever"}) do
+    local calls = 0
+    local provider = {GetCatalog=function()
+        calls = calls + 1
+        return {formatMajor=1,catalogRevision="settings-preview",fonts=snapshot.fonts}
+    end}
+    local baseline = "Interface\\AddOns\\DoYouNeedIt\\fonts\\AntraktUISans.ttf"
+    local h = client(flavor, {fontProvider=provider,db={settings={font=baseline,forceLocale="enUS"}}})
+    h:slash("settings")
+    local settings = h.env.DoYouNeedItSettingsFrame
+    local regions = {settings.title,settings.whisperLabel,settings.autoCheckLabel,settings.delayLabel,
+        settings.languageLabel,settings.fontLabel,settings.fontSizeLabel,settings.qualityHeading,
+        settings.qualityButtons[1].text,settings.whisperResetButton:GetFontString(),
+        settings.languageDropdown.Text,settings.fontDropdown.Text,settings.whisperEditBox}
+    local saved = {}
+    for index, region in ipairs(regions) do saved[index]={region:GetFont()} end
+    h.env.DoYouNeedItFontDropdown:FireScript("OnClick", "LeftButton")
+    local row
+    for _, candidate in ipairs(h.env.DoYouNeedItFontPickerContent.children) do
+        if candidate.fontPath and candidate.fontPath:find("DejaVuSans.ttf",1,true) then row=candidate end
+    end
+    assert(row,"preview face is available")
+    local catalogFace = row.text:GetFont()
+    local resetText = settings.whisperResetButton:GetFontString()
+    resetText.GetStringWidth = function(self) return self:GetFont()==row.fontPath and 200 or 20 end
+    local function assertFont(path, context)
+        for _, region in ipairs(regions) do
+            check(region:GetFont()==path,context .. ": " .. tostring(region:GetText()))
+        end
+    end
+    row:FireScript("OnEnter")
+    assertFont(row.fontPath,"hover previews every owned Settings text group")
+    check(row.text:GetFont()==catalogFace,"catalogue labels remain independent of hovered face")
+    check(settings.whisperResetButton:GetWidth()==100,"hover reflows wide label metrics within Settings bounds")
+    check(h.env.DoYouNeedItDB.settings.font==baseline,"hover leaves saved font untouched")
+    row:FireScript("OnLeave"); h:runTimers()
+    for index,region in ipairs(regions) do
+        local path,size,flags=region:GetFont()
+        check(path==saved[index][1] and size==saved[index][2] and flags==saved[index][3],"leaving restores exact font style")
+    end
+    check(settings.whisperResetButton:GetWidth()==60,"leaving restores compact label layout")
+    row:FireScript("OnEnter")
+    h.env.DoYouNeedItFontPicker:Hide()
+    assertFont(baseline,"picker cancellation restores saved face")
+    h.env.DoYouNeedItFontDropdown:FireScript("OnClick","LeftButton")
+    row:FireScript("OnEnter"); row:FireScript("OnClick","LeftButton")
+    assertFont(baseline,"explicit selection restores normal Settings typography")
+    check(h.env.DoYouNeedItFrame.title:GetFont()==row.fontPath,"explicit selection still updates loot typography")
+    check(h.env.DoYouNeedItDB.settings.font==row.fontPath,"only explicit click persists face")
+    local selected=row.fontPath
+    h.env.DoYouNeedItLanguageDropdown:FireScript("OnClick","LeftButton")
+    local chinese
+    for _,button in ipairs(h.env.DoYouNeedItLanguagePicker.buttons) do if button.value=="zhTW" then chinese=button end end
+    assert(chinese)
+    chinese:FireScript("OnEnter")
+    for _,region in ipairs(regions) do
+        check(h.env.DoYouNeedItCore.FontSupportsLocale(region:GetFont(),"zhTW","enUS"),"foreign language preview keeps Settings readable")
+    end
+    check(h.env.DoYouNeedItDB.settings.font==selected and h.env.DoYouNeedItDB.settings.forceLocale=="enUS","language hover preserves chosen preferences")
+    h.env.DoYouNeedItLanguagePicker:Hide()
+    assertFont(baseline,"language cancellation restores normal Settings typography")
+    check(calls==1,"hover and restore never clone provider catalogue per text region")
+end
 print("Shared font runtime: " .. checks .. " checks passed")

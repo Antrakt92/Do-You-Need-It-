@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preview hovered fonts across Settings text, then restore the readable menu typography when the preview ends.
+
 - Move the additional font collection into optional Antrakt Fonts, shared with other compatible addons. Keep a compact multilingual baseline and preserve font choices and favorites when the collection is absent.
 - Explain the transition once after updating when Antrakt Fonts is missing or incompatible. Keep package guidance in Font settings; a compatible installed package needs no automatic notice.
 - Thanks to [chenrylee](https://github.com/chenrylee) for suggesting a separate font package ([StatsPro #10](https://github.com/Antrakt92/StatsPro/issues/10)).

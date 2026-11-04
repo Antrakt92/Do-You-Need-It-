@@ -371,7 +371,7 @@ local function SafeSelfLootLooterName()
     return L("You")
 end
 
-local function RegisterFontString(fontString, size, flags, stable, dynamic, maxSize)
+local function RegisterFontString(fontString, size, flags, stable, dynamic, maxSize, fixedFont)
     if not fontString then
         return
     end
@@ -382,6 +382,7 @@ local function RegisterFontString(fontString, size, flags, stable, dynamic, maxS
         stable = stable == true,
         dynamic = dynamic == true,
         maxSize = maxSize,
+        fixedFont = fixedFont,
     }
     if ApplyCurrentFont then
         ApplyCurrentFont()
@@ -622,6 +623,9 @@ function Addon.FontForText(path, text, locale)
 end
 
 local function StableSettingsFont()
+    -- Preview the hovered face throughout Settings without changing its normal
+    -- readable typography after the preview ends or a loot face is selected.
+    if Addon.previewFont then return Addon.ValidatedDisplayFont() end
     return Addon.LocaleFont(Core.GetDefaultFont(), ActiveLocale()) or Core.GetDefaultFont()
 end
 
@@ -680,7 +684,7 @@ ApplyCurrentFont = function()
             local font = previewFont
             if entry.stable then
                 stableFont = stableFont or StableSettingsFont()
-                font = stableFont
+                font = entry.fixedFont or stableFont
             end
             if entry.dynamic then
                 local text = type(entry.fontString.GetText) == "function" and SafeCall(entry.fontString.GetText, entry.fontString) or nil
@@ -5527,7 +5531,9 @@ function Addon.LayoutSettings()
     frame.delayLabel:SetWidth(left - 208)
     frame.delayValue:SetWidth(28)
     local _, resetCharacters = L("Reset"):gsub("[^\128-\191]", "")
-    frame.whisperResetButton:SetSize(math.min(100, math.max(60, resetCharacters * 6.5 + 20)), 24)
+    local resetText = frame.whisperResetButton:GetFontString()
+    local resetWidth = resetText and CleanNumber(SafeCall(resetText.GetStringWidth, resetText))
+    frame.whisperResetButton:SetSize(math.min(100, math.max(60, (resetWidth or resetCharacters * 6.5) + 20)), 24)
     frame.whisperEditBox:SetSize(left - 32 - frame.whisperResetButton:GetWidth(), 24)
     frame.whisperHelp:SetWidth(left - 24)
     frame.fontDropdown:SetSize(left - controlX - 12, 24)
@@ -5901,7 +5907,8 @@ function Addon.PopulateFontPicker()
             end
 
             button.text = button:CreateFontString(nil, "OVERLAY")
-            RegisterFontString(button.text, 12, nil, true, nil, 12)
+            -- Catalogue labels stay readable independently of the hovered face.
+            RegisterFontString(button.text, 12, nil, true, nil, 12, Core.GetDefaultFont())
             button.text:SetPoint("LEFT", 6, 0)
             button.text:SetPoint("RIGHT", -28, 0)
             button.text:SetJustifyH("LEFT")
