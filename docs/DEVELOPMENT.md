@@ -6,8 +6,11 @@ Run commands from the repository root.
 
 ## Source layout
 
-- `DoYouNeedIt_Core.lua`: loot rules, settings, history, and data normalization.
-- `DoYouNeedIt_Fonts.lua` and `fonts/`: bundled font catalog, original assets, provenance and licenses.
+- `DoYouNeedIt_Core.lua`: loot rules, settings, history, data normalization and localized default whispers.
+- `DoYouNeedIt_Fonts.lua`: optional shared-font discovery, cached metadata and saved-path resolution.
+- `AntraktFontCatalog.lua` and `AntraktFontNotice.lua`: synchronized consumer metadata and notice coordination from [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts). Keep these exports synchronized with that project.
+- `DoYouNeedIt_FontPackUI.lua`: font-package guidance and the consumer-owned information window.
+- `fonts/`: the embedded multilingual baseline and its required modification notice and license texts. The additional font collection belongs to the separate provider package.
 - `DoYouNeedIt.lua`: game events, inspection, whispers, and the loot/settings windows.
 - `DoYouNeedIt.toc`: client compatibility, version, and file loading order.
 - `DoYouNeedIt_Forever.lua` and `DoYouNeedIt_Forever.toc`: Forever beta adapter and independent metadata.
@@ -30,7 +33,9 @@ For Forever, run `scripts/package.ps1 -Flavor Forever` and
 `scripts/upload-curseforge.ps1 -Flavor Forever -DryRun`. Its ZIP is
 `DoYouNeedIt-<version>-Forever-beta.zip`; the Forever TOC and
 `CHANGELOG-FOREVER.md` become the archive's canonical TOC and changelog.
-Retail packages exclude the Forever adapter. The full check covers both flavors.
+Retail packages exclude the Forever adapter. Both packages keep the local baseline, synchronized metadata and notices; neither includes the additional font collection. The full check covers both flavors.
+
+Font changes need absent, disabled, not-yet-loaded and compatible-loaded package cases, preserved selections/favorites, hover cancellation and a native check of the information button and window. Whisper changes need default and custom messages, Reset, language previews and a real Ask or opt-in automatic send; Demo never sends whispers.
 
 ## Maintainer publication
 

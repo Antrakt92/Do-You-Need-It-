@@ -12,8 +12,9 @@ Pinned original Noto Sans source: https://github.com/notofonts/noto-fonts/tree/f
 
 Pinned original Droid source: https://android.googlesource.com/platform/frameworks/base/+/1aed5ea2dcf7cb0bf35635f378b2326461ba0df0/data/fonts/
 
-The optional Antrakt Fonts addon supplies the separate 46-face decorative
-collection; those binaries are not included in this package.
+The optional [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts) addon
+provides the separate additional collection; those binaries are not included
+in this package.
 
 Do You Need It? bundles these runtime libraries so release packages use the same reviewed
 source present in the source tree. The bundled Lua files retain their existing

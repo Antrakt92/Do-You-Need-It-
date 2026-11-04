@@ -25,7 +25,7 @@ Compare dungeon and raid gear drops with the looter's equipped items, review rec
 
 For **Retail / Midnight 12.1.5** and the separate **Forever 1.60.1 beta** build
 (Interface 16001). Retail and Forever update independently. Existing settings
-and loot history carry forward. The screenshots below show Retail.
+and loot history carry forward. The screenshots below show the released Retail interface.
 
 <p align="center">
   <a href="#installation">Install</a>
@@ -139,13 +139,21 @@ Open the gear button or `/dyni settings` to change whispers, language, font, and
 
 Auto-whisper is **off by default**. If enabled, it waits 10 seconds by default; the delay can be set from 3 to 30 seconds. A pending whisper is cancelled when you ask manually, clear the current rows, disable auto-whisper, or the looter leaves the group.
 
-The standard whisper follows the selected addon language. Custom messages stay as written; Reset restores the standard message for the current language. Hovering a language previews the text without changing outgoing messages.
+> **Upcoming update:** Localized standard whispers and the shared font package described below are being prepared for the next release. The download links above still point to the current released builds.
+
+The standard whisper will follow the selected addon language. Custom messages stay as written; Reset restores the standard message for the current language. Hovering a language previews the text without changing outgoing messages.
 
 Use `{item}` in a custom message, for example: `Hey, do you need {item}?` If the completed message is too long or contains invalid characters, the row explains the problem. Edit the message and use Ask again.
 
 Language defaults to **Auto**, following your client locale. Settings and loot-status labels are translated into English, Russian, German, Spanish (Spain/Latin America), French, Italian, Brazilian Portuguese, Korean, and Simplified/Traditional Chinese. Language names use their native spelling.
 
-The addon includes a compact multilingual baseline alongside available Blizzard and LibSharedMedia fonts. The optional Antrakt Fonts addon supplies the full 46-face collection for this and other compatible addons; install the build for your client. Existing choices and favorites remain saved while a readable fallback is used when the collection is absent. Font settings explain the package state, and existing users receive a one-time explanation after updating when Antrakt Fonts is absent, disabled or unavailable. A compatible loaded package needs no automatic notice. If the package is installed but disabled, clicking Enable in the information window enables it for the current character and reloads the UI. The picker shows available faces compatible with your selected language; star your favorites to keep them first. Font and language hover previews restore the saved choice when dismissed. Menus open beside their fields and stay above the window.
+The upcoming update keeps a compact multilingual baseline in DoYouNeedIt and moves the additional collection to optional [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts). One installation serves compatible addons in the same client, and the font package updates independently, so routine DoYouNeedIt updates no longer download the whole collection again. Choose its Retail or Forever build when available. Blizzard and LibSharedMedia fonts remain available.
+
+Your selected face and favorites stay saved when a font is unavailable; a readable fallback is used temporarily. Font settings distinguish a missing, disabled or not-yet-loaded package. Existing users receive one transition notice when attention is needed; a compatible loaded package stays quiet. If the package is installed but disabled, **Enable Antrakt Fonts** enables it for the current character and reloads the UI in one click.
+
+The picker shows available faces compatible with your selected language; star favorites to keep them first. Hovering a font temporarily previews it across Settings text. Leaving the preview restores the readable menu typography, and selecting a face keeps it for the loot window. Language previews also restore the saved choice when dismissed.
+
+Thanks to [chenrylee](https://github.com/chenrylee) for [suggesting a separate font package](https://github.com/Antrakt92/StatsPro/issues/10).
 
 The heart and feedback buttons in the title bar open copyable links to support the addon or report a problem on GitHub.
 

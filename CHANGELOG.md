@@ -2,18 +2,12 @@
 
 ## Unreleased
 
-- Translate the standard whisper into the selected addon language while preserving custom messages. Reset restores the localized default.
-- Keep the shared-font information button readable and spaced inside Settings, and open its window above Settings.
-- Enable an installed Antrakt Fonts package for the current character and reload the UI with one click in its information window.
-
-- Distinguish missing, disabled and not-yet-loaded Antrakt Fonts in Font settings and the transition notice.
-
-- Preview hovered fonts across Settings text, then restore the readable menu typography when the preview ends.
-
-- Move the additional font collection into optional Antrakt Fonts, shared with other compatible addons. Keep a compact multilingual baseline and preserve font choices and favorites when the collection is absent.
-- Explain the transition once after updating when Antrakt Fonts is missing or incompatible. Keep package guidance in Font settings; a compatible installed package needs no automatic notice.
+- Move the additional font collection to optional [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts), shared with compatible addons. Keep a compact multilingual baseline and preserve selected fonts and favorites when the collection is unavailable.
+- Explain missing, disabled or not-yet-loaded fonts in Settings. Show the transition notice once when attention is needed; a compatible loaded package needs no automatic notice. Enable an installed disabled package and reload the UI with one click.
+- Preview hovered fonts across Settings text, then restore the readable menu typography when the preview ends. Keep the information button inside Settings and its window above the menu.
+- Translate the standard whisper into the selected addon language while preserving custom messages. Reset restores the localized default; hovering a language does not change outgoing messages until selected.
+- Update the original-code license to 1.4: authors choose a positive CurseForge reward share for covered substantial reuse instead of a fixed minimum.
 - Thanks to [chenrylee](https://github.com/chenrylee) for suggesting a separate font package ([StatsPro #10](https://github.com/Antrakt92/StatsPro/issues/10)).
-
 
 ## 1.1.0 - 18-Oct-2026 — Compact Settings and quality filters
 
