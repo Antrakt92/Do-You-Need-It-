@@ -81,9 +81,49 @@ for _, flavor in ipairs({ "retail", "forever" }) do
     check(#pending.sentMessages == 0 and #fresh.sentMessages == 0, "font notices never send whispers")
     local ready, readyPack = client(flavor, { fontProvider = provider, db = { settings = { font = old } } })
     ready:fire("PLAYER_ENTERING_WORLD")
-    check(ready.env.DoYouNeedItFontPackNotice.body:GetText() == readyPack.Message("enUS", "ready") .. "\n\n" .. readyPack.Message("enUS", "linkUnavailable"), "existing users receive information even with ready provider")
-    ready.env.DoYouNeedItFontPackNotice.cross:FireScript("OnClick")
-    check(ready.env.DoYouNeedItDB.fontPackNotice == "acknowledged", "close cross acknowledges")
+    check(not ready.env.DoYouNeedItFontPackNotice, "ready provider suppresses automatic existing-user notice")
+    check(ready.env.DoYouNeedItDB.fontPackNotice == "satisfied", "ready provider durably resolves pending campaign without acknowledgement")
+    local removed = client(flavor, { db = ready.env.DoYouNeedItDB })
+    removed:fire("PLAYER_ENTERING_WORLD")
+    check(not removed.env.DoYouNeedItFontPackNotice and removed.env.DoYouNeedItDB.fontPackNotice == "satisfied", "provider removal after reload never revives resolved campaign")
+    removed:slash("settings")
+    for _, child in ipairs(removed.env.DoYouNeedItSettingsFrame.children) do
+        if child.GetText and child:GetText() == "i" then child:FireScript("OnClick") end
+    end
+    check(removed.env.DoYouNeedItFontPackNotice:IsVisible(), "satisfied account retains explicit information")
+    removed.env.DoYouNeedItFontPackNotice.close:FireScript("OnClick")
+    check(removed.env.DoYouNeedItDB.fontPackNotice == "acknowledged", "manual satisfied confirmation may acknowledge")
+    local late = client(flavor, { db = { settings = { font = old } } })
+    late:fire("PLAYER_ENTERING_WORLD")
+    local lateNotice = late.env.DoYouNeedItFontPackNotice
+    late.env.AntraktFonts = provider; late:fire("ADDON_LOADED", "AntraktFonts")
+    check(not lateNotice:IsShown() and late.env.DoYouNeedItDB.fontPackNotice == "satisfied", "late ready package dismisses automatic notice without acknowledgement")
+    local peerShown, peerAcknowledged = false, false
+    local common = late.env.AntraktFontNoticeCoordinator
+    common:Register("PendingPeer", { canShow = function() return true end,
+        show = function() peerShown = true; return true end,
+        dismiss = function() peerShown = false end,
+        acknowledge = function() peerAcknowledged = true; return true end })
+    common:RequestShow()
+    check(peerShown and not peerAcknowledged, "satisfied owner never suppresses another pending consumer")
+    for _, state in ipairs({"fresh", "acknowledged"}) do
+        local stable = client(flavor, {fontProvider=provider, db={fontPackNotice=state,settings={font=old}}})
+        stable:fire("PLAYER_ENTERING_WORLD")
+        check(stable.env.DoYouNeedItDB.fontPackNotice == state and not stable.env.DoYouNeedItFontPackNotice,
+            "ready provider preserves existing campaign state: " .. state)
+    end
+    local safeReady = client(flavor, {fontProvider=provider,db={settings={font=old}}})
+    safeReady.env.InCombatLockdown = function() return true end
+    safeReady:fire("PLAYER_ENTERING_WORLD")
+    check(safeReady.env.DoYouNeedItDB.fontPackNotice == nil and not safeReady.env.DoYouNeedItFontPackNotice,
+        "ready resolution waits for safe lifecycle without opening a popup")
+    safeReady.env.InCombatLockdown = function() return false end
+    safeReady:fire("PLAYER_REGEN_ENABLED")
+    check(safeReady.env.DoYouNeedItDB.fontPackNotice == "satisfied", "safe regen persists ready resolution")
+    local incompatible, badPack = client(flavor,{fontProvider={GetCatalog=function()return{formatMajor=2}end},db={settings={font=old}}})
+    incompatible:fire("PLAYER_ENTERING_WORLD")
+    check(incompatible.env.DoYouNeedItFontPackNotice.body:GetText():find(badPack.Message("enUS","incompatible"),1,true),
+        "incompatible provider uses translated compatibility guidance")
     local inCombat = true
     local deferred = client(flavor, { db = { settings = { font = old } } })
     deferred.env.InCombatLockdown = function() return inCombat end

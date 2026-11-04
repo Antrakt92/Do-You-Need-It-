@@ -66,7 +66,8 @@ function pack.InstallUI(addon, existing, apply, refresh)
         local frame = addon.fontPackNotice
         frame.confirm, frame.suspend = confirm, suspend
         frame.title:SetText(text("title"))
-        frame.body:SetText(text(pack.status == "ready" and "ready" or "missing"))
+        frame.body:SetText(text(pack.status == "ready" and "ready"
+            or pack.status == "provider-incompatible" and "incompatible" or "missing"))
         if not addon.ApplyRegionFont(frame.title, pack.baselinePath, 15, "")
             or not addon.ApplyRegionFont(frame.body, pack.baselinePath, 12, "") then return false end
         frame.close:SetText(text("gotIt")); frame.copy:SetText(text("copyLink"))
@@ -82,13 +83,23 @@ function pack.InstallUI(addon, existing, apply, refresh)
         if type(frame.IsVisible) == "function" then return frame:IsVisible() == true end
         return frame:IsShown() == true
     end
+    local registeredState, registeredStatus, registered = nil, nil, false
     pack.registerNotice = function()
         local state = DoYouNeedItDB.fontPackNotice
-        if state ~= "fresh" and state ~= "acknowledged" then state = nil end
+        if state ~= "fresh" and state ~= "acknowledged" and state ~= "satisfied" then state = nil end
+        if state == nil and pack.status == "ready" and addon.fontPackWorldReady and outOfCombat() then
+            DoYouNeedItDB.fontPackNotice = "satisfied"
+            state = "satisfied"
+        end
+        -- Readiness resolves this owner's campaign; it is not a shared user acknowledgement.
+        if state == "satisfied" or (state == nil and pack.status == "ready") then state = "fresh" end
+        if registered and registeredState == state and registeredStatus == pack.status then return end
+        registered, registeredState, registeredStatus = true, state, pack.status
         coordinator:Register("DoYouNeedIt", {
             state = state,
             canShow = function()
                 return addon.fontPackWorldReady == true and outOfCombat()
+                    and (manualRequest or pack.status ~= "ready")
                     and not (not manualRequest and addon.settingsFrame and addon.settingsFrame:IsShown()
                         and addon.contentMode == "settings")
                     and not (addon.linkFrame and addon.linkFrame:IsShown())
@@ -145,7 +156,7 @@ function pack.InstallUI(addon, existing, apply, refresh)
         if event == "ADDON_LOADED" and name ~= "AntraktFonts" then return end
         if event == "ADDON_LOADED" then pack.Invalidate(); addon.availableFontPaths = nil; addon.fontListCache = nil end
         if event == "PLAYER_ENTERING_WORLD" then addon.fontPackWorldReady = true end
-        if outOfCombat() then apply(); refresh(); coordinator:RequestShow() end
+        if outOfCombat() then apply(); refresh(); pack.registerNotice(); coordinator:RequestShow() end
     end)
     if addon.frame and addon.frame.HookScript then
         addon.frame:HookScript("OnHide", function() if addon.fontPackWorldReady and outOfCombat() then coordinator:RequestShow() end end)
@@ -158,7 +169,7 @@ function pack.InstallUI(addon, existing, apply, refresh)
             C_Timer.After(0, function()
                 addon.fontPackRefreshPending = nil
                 pack.Invalidate(); addon.availableFontPaths = nil; addon.fontListCache = nil
-                if outOfCombat() then apply(); refresh() end
+                if outOfCombat() then apply(); refresh(); pack.registerNotice() end
             end)
         end)
     end
