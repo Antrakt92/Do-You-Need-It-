@@ -155,7 +155,6 @@ function pack.Resolve(path)
     local original = byID[byPath[key(path)]]
     if (pack.status == "provider-unavailable" or pack.status == "provider-disabled" or pack.status == "provider-not-loaded")
         and original and type(path) == "string"
-        and not path:find("AntraktFonts", 1, true)
         and path:match("[^\\/]+$"):lower() == original.file:lower() then return path end
     local row = pack.currentByID[pack.Identity(path)]
     return row and row.path or path

@@ -531,4 +531,37 @@ for _,flavor in ipairs({"retail","forever"})do
             "stale rendered download callback cannot open or acknowledge after installed-state transition")
     end
 end
+for _,flavor in ipairs({"retail","forever"})do
+    for _,state in ipairs({"provider-disabled","provider-not-loaded","provider-unavailable"})do
+        for _,available in ipairs({true,false})do
+            local preferred="Interface\\AddOns\\AntraktFonts\\fonts\\DejaVuSans.ttf"
+            local h,pack=client(flavor,{sharedFontAssets=true,db={fontPackNotice="acknowledged",settings={font=preferred}},
+                fontSetResult=function(_,path)return path~=preferred or available end})
+            h.env.C_AddOns={DoesAddOnExist=function()return state~="provider-unavailable"end,
+                GetAddOnEnableState=function()return state=="provider-disabled" and 0 or 2 end,
+                IsAddOnLoaded=function()return false,false end}
+            h:fire("PLAYER_ENTERING_WORLD");h:slash("settings")
+            check(pack.status==state,"physical availability never changes package guidance state")
+            check(pack.Resolve(preferred)==preferred,"known exact canonical filename keeps its physical path")
+            check(h.env.DoYouNeedItFrame.title:GetFont()==(available and preferred or pack.baselinePath),
+                "actual canonical readback alone authorizes selected face: "..state)
+            check(h.env.DoYouNeedItDB.settings.font==preferred,"canonical preference survives every package/file state")
+            check(h.env.DoYouNeedItFontDropdown.Text:GetText()=="DejaVu Sans","caption retains the selected face name")
+            local marker
+            for _,child in ipairs(h.env.DoYouNeedItSettingsFrame.children)do if child.GetText and child:GetText()=="i"then marker=child end end
+            marker:FireScript("OnEnter")
+            local hint=h.env.GameTooltip:GetText()
+            local base=pack.Message("enUS",state=="provider-disabled" and "disabled" or state=="provider-not-loaded" and "notLoaded" or "settingsMissing")
+            check(hint:find(base,1,true),"package state remains the leading guidance")
+            check((hint:find(string.format(pack.Message("enUS","selectedMissing"),"DejaVu Sans"),1,true)~=nil)==not available,
+                "only a genuinely failed physical face receives missing-font detail")
+            local retired="Interface\\AddOns\\StatsPro\\fonts\\FiraMono-Regular.ttf"
+            check(pack.Resolve(retired)~=retired and pack.Identity(retired)=="hack","retired alias still resolves its retained replacement")
+        end
+    end
+    local unknown="Interface\\AddOns\\AntraktFonts\\fonts\\UnknownFace.ttf"
+    local h,pack=client(flavor,{sharedFontAssets=true,db={settings={font=unknown}}})
+    h:fire("PLAYER_ENTERING_WORLD")
+    check(h.env.DoYouNeedItFrame.title:GetFont()==pack.baselinePath,"unregistered unknown canonical filename never inherits owned-font approval")
+end
 print("Shared font runtime: " .. checks .. " checks passed")

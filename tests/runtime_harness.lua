@@ -282,7 +282,8 @@ end
 
 function FrameMethods:SetFont(path, size, flags)
     if self.harness.options.legacyFontAssets == false and path:find("Interface\\AddOns\\DoYouNeedIt\\fonts\\", 1, true) and not path:find("AntraktUISans.ttf", 1, true) then return false end
-    if path:find("Interface\\AddOns\\AntraktFonts\\", 1, true) and not self.harness.env.AntraktFonts then return false end
+    if path:find("Interface\\AddOns\\AntraktFonts\\", 1, true) and not self.harness.env.AntraktFonts
+        and self.harness.options.sharedFontAssets ~= true then return false end
     if self.harness.options.fontColdAssets and path:find("AddOns", 1, true) then
         self.harness.loadedFontAssets = self.harness.loadedFontAssets or {}
         if self.frameType == "Font" then
