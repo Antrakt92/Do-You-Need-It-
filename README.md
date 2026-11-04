@@ -75,7 +75,7 @@ Type `/dyni` to open the window. Click **Demo** to preview sample gear, then
 saved to history.
 
 For troubleshooting, `/dyni status` shows the build; the current Retail build
-reports `build=1.1.0`.
+reports `build=1.2.0`.
 
 ### Forever beta
 
