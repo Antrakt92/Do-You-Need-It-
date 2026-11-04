@@ -5016,7 +5016,8 @@ function Addon.StyleCloseButton(button)
     hover:Hide()
     local text = button:CreateFontString(nil, "OVERLAY")
     text:SetPoint("CENTER", 0, 1)
-    text:SetFont(Core.GetDefaultFont(), 18, "")
+    -- Cold addon fonts can reject direct SetFont; use the verified FontObject path.
+    Addon.ApplyRegionFont(text, Core.GetDefaultFont(), 18, "")
     text:SetText("×")
     local function refresh()
         if button.closeHovered then hover:Show() else hover:Hide() end

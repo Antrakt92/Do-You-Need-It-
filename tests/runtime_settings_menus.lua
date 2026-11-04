@@ -368,4 +368,42 @@ do
     released(h)
 end
 
+for _, flavor in ipairs({"retail", "forever"}) do
+    local rejected = 0
+    local h = Harness.new({flavor = flavor, fontSetResult = function(region, path, size)
+        if region.frameType == "FontString" and size == 18
+            and path:find("AntraktUISans.ttf", 1, true) then
+            rejected = rejected + 1
+            return false
+        end
+        return true
+    end})
+    if flavor == "forever" then
+        h.env.GetBuildInfo = function() return "1.60.1", "70755", "", 16001 end
+        h.env.WOW_PROJECT_ID = 18
+    end
+    h:loadAddon(); h:slash("settings")
+    local main = h.env.DoYouNeedItFrame
+    local function renderedCross(button)
+        local path, size = button.closeText:GetFont()
+        check(path == h.env.DoYouNeedItCore.GetDefaultFont() and size == 18,
+            flavor .. " close has an effective font after direct font rejection")
+        check(button.closeText:GetText() == "×", flavor .. " close retains its cross")
+    end
+    check(rejected > 0, flavor .. " reproduces rejected direct close-font application")
+    renderedCross(main.close)
+    main.close:FireScript("OnEnter")
+    main.close:FireScript("OnMouseDown")
+    renderedCross(main.close)
+    main.close:FireScript("OnLeave")
+    click(h.env.DoYouNeedItSupportButton)
+    renderedCross(h.env.DoYouNeedItDeveloperLink.close)
+    click(h.env.DoYouNeedItDeveloperLink.close)
+    check(not h.env.DoYouNeedItDeveloperLink:IsShown(), flavor .. " styled close still dismisses its dialog")
+    -- The harness does not execute Blizzard's inherited UIPanelCloseButton click.
+    main:Hide()
+    h:slash("settings")
+    renderedCross(main.close)
+end
+
 print("Settings popup regressions: PASS (" .. count .. " assertions)")
