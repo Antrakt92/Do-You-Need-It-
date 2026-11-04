@@ -1,17 +1,8 @@
 ## Interface: 16001
 ## Title: Do You Need It? — Forever Beta
+## Category: Antrakt92
+## Group: DoYouNeedIt
 ## Notes: Group gear drops, equipment comparisons and whispers for WoW Forever beta.
-## Category: Loot
-## Category-deDE: Beute
-## Category-esES: Botín
-## Category-esMX: Botín
-## Category-frFR: Butin
-## Category-itIT: Bottino
-## Category-koKR: 전리품
-## Category-ptBR: Saque
-## Category-ruRU: Добыча
-## Category-zhCN: 战利品
-## Category-zhTW: 戰利品
 ## Author: Antrakt92
 ## Version: 1.1.0
 ## IconTexture: Interface\AddOns\DoYouNeedIt\media\icon.png

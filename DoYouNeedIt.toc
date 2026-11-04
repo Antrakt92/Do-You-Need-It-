@@ -1,17 +1,8 @@
 ## Interface: 120105
 ## Title: Do You Need It?
+## Category: Antrakt92
+## Group: DoYouNeedIt
 ## Notes: Shows likely-tradeable gear drops and helps ask group members if they need them.
-## Category: Loot
-## Category-deDE: Beute
-## Category-esES: Botín
-## Category-esMX: Botín
-## Category-frFR: Butin
-## Category-itIT: Bottino
-## Category-koKR: 전리품
-## Category-ptBR: Saque
-## Category-ruRU: Добыча
-## Category-zhCN: 战利品
-## Category-zhTW: 戰利品
 ## Author: Antrakt92
 ## Version: 1.1.0
 ## IconTexture: Interface\AddOns\DoYouNeedIt\media\icon.png
