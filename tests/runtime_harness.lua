@@ -345,14 +345,21 @@ function FrameMethods:SetBackdropColor(...)
 end
 
 function FrameMethods:SetNormalTexture(texture)
+    if self.retainedNativeTextures and texture=="" then return end
     self.normalTexture = texture
 end
 
+function FrameMethods:GetNormalTexture() return self.normalTextureFrame end
+function FrameMethods:GetPushedTexture() return self.pushedTextureFrame end
+function FrameMethods:GetDisabledTexture() return self.disabledTextureFrame end
+
 function FrameMethods:SetPushedTexture(texture)
+    if self.retainedNativeTextures and texture=="" then return end
     self.pushedTexture = texture
 end
 
 function FrameMethods:SetHighlightTexture(texture, blendMode)
+    if self.retainedNativeTextures and texture=="" then return end
     self.highlightTexture = texture
     self.highlightBlendMode = blendMode
     if not self.highlightTextureFrame then
@@ -532,6 +539,15 @@ function Harness:newFrame(frameType, name, parent, template)
     self.frames[#self.frames + 1] = frame
     if name then
         self.env[name] = frame
+    end
+
+    if template=="UIPanelCloseButton" and self.options.retainNativeCloseTextures then
+        frame.retainedNativeTextures=true
+        for _,field in ipairs({"normalTextureFrame","pushedTextureFrame","highlightTextureFrame","disabledTextureFrame"})do
+            local texture=self:newFrame("Texture",nil,frame)
+            texture.atlas,texture.alpha="retained-native-close-art",1
+            frame[field]=texture
+        end
     end
 
     if template == "UIDropDownMenuTemplate" and name then

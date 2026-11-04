@@ -62,6 +62,62 @@ service.Attach(a, menu, 80); service.Attach(a, catcher, 79)
 menu:Show()
 check(menu:GetFrameLevel() - a:GetFrameLevel() == 80, "reused dialog can rejoin its original window")
 
+do
+    local isolated=Harness.new()
+    local chunk=assert(loadfile(paths[1]));setfenv(chunk,isolated.env);chunk()
+    local layers=isolated.env.AntraktWindowLayers
+    local root=isolated:newFrame("Frame",nil,isolated.env.UIParent);root:SetFrameLevel(330);root:Show()
+    local close=isolated:newFrame("Button",nil,root);close:SetFrameLevel(100);close:Show()
+    local nested=isolated:newFrame("Button",nil,close);nested:SetFrameLevel(50);nested:Show()
+    local valid=isolated:newFrame("Button",nil,root);valid:SetFrameLevel(365);valid:Show()
+    check(root:GetFrameLevel()==330 and close:GetFrameLevel()==100,"fixture reproduces native visible child below its opaque parent")
+    layers.Register(root);layers.Focus(root)
+    check(close:GetFrameLevel()>root:GetFrameLevel(),"focus repairs a descendant hidden below its parent background")
+    check(nested:GetFrameLevel()>close:GetFrameLevel(),"focus repairs invalid descendants recursively")
+    check(valid:GetFrameLevel()-root:GetFrameLevel()==35,"repair preserves existing valid positive child offsets")
+    local blocker=isolated:newFrame("Frame",nil,isolated.env.UIParent);blocker:Show()
+    layers.Attach(root,blocker,-1)
+    for _=1,500 do layers.Focus(root)end
+    check(close:GetFrameLevel()>root:GetFrameLevel() and nested:GetFrameLevel()>close:GetFrameLevel(),"repeated focus keeps repaired controls above their actual parents")
+    check(root:GetFrameLevel()-blocker:GetFrameLevel()==1,"UIParent-owned attached blocker retains its intentional negative offset")
+    check(valid:GetFrameLevel()-root:GetFrameLevel()==35 and valid:GetFrameLevel()<1000,"repaired ordering remains compact without growing valid offsets")
+    local extraParent=isolated:newFrame("Frame",nil,isolated.env.UIParent);extraParent:Show()
+    local extraChild=isolated:newFrame("Button",nil,extraParent);extraChild:Show()
+    local extraNested=isolated:newFrame("Button",nil,extraChild);extraNested:Show()
+    -- Registration order must not override the actual native parent hierarchy.
+    layers.Attach(root,extraChild,-40)
+    layers.Attach(root,extraParent,80)
+    extraParent:SetFrameLevel(root:GetFrameLevel()+80)
+    extraChild:SetFrameLevel(root:GetFrameLevel()-40)
+    extraNested:SetFrameLevel(root:GetFrameLevel()-60)
+    layers.Focus(root)
+    check(extraChild:GetFrameLevel()>extraParent:GetFrameLevel(),"reverse attached extras still place actual children above their parent")
+    check(extraNested:GetFrameLevel()>extraChild:GetFrameLevel(),"reverse attached extras repair nested descendants")
+    check(extraParent:GetFrameLevel()-root:GetFrameLevel()==80,"reverse extras preserve the valid popup offset")
+    for _=1,500 do layers.Focus(root)end
+    check(extraChild:GetFrameLevel()>extraParent:GetFrameLevel() and extraNested:GetFrameLevel()>extraChild:GetFrameLevel(),"parent-first application preserves repaired extras across repeated focus")
+    check(root:GetFrameLevel()-blocker:GetFrameLevel()==1,"reverse extras retain a separate UIParent blocker below the root")
+    check(extraNested:GetFrameLevel()<1000,"reverse extras remain bounded after repeated focus")
+end
+for _,flavor in ipairs({"retail","forever"})do
+    local native=Harness.new({flavor=flavor})
+    if flavor=="forever"then
+        native.env.GetBuildInfo=function()return "1.60.1","70755","",16001 end
+        native.env.WOW_PROJECT_ID=18
+    end
+    native:loadAddon();native:slash("settings")
+    local main=native.env.DoYouNeedItFrame
+    main:SetFrameLevel(330);main.close:SetFrameLevel(100)
+    native.env.AntraktWindowLayers.Focus(main)
+    check(main.close:GetFrameLevel()>main:GetFrameLevel(),flavor.." real main close escapes parent background after native ordering corruption")
+    check(main.strata=="DIALOG" and (main.close.strata==nil or main.close.strata=="DIALOG"),"repair keeps the normal dialog stratum")
+    check(main.close.closeText==nil and #main.close.closeLines==2,"repair preserves font-independent close geometry")
+    for _,line in ipairs(main.close.closeLines)do
+        local color=line.colorTexture
+        check(color[1]==0.62 and color[2]==0.71 and color[3]==0.79 and color[4]==1,"repair retains the restrained opaque gray close strokes")
+    end
+end
+
 h:loadAddon(); h:slash("settings")
 local main = env.DoYouNeedItFrame
 local foreign = frame()

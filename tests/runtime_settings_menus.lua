@@ -5,6 +5,12 @@ local function check(value, label)
     assert(value, label)
 end
 local function renderedCross(button, color)
+    if button.retainedNativeTextures then
+        for _,method in ipairs({"GetNormalTexture","GetPushedTexture","GetHighlightTexture","GetDisabledTexture"})do
+            local art=button[method](button)
+            check(art and art.atlas=="retained-native-close-art" and art.alpha==0,"all retained native button states stay transparent beneath the gray cross")
+        end
+    end
     check(button.closeText==nil and button.closeLines and #button.closeLines==2,"close uses two font-independent visual strokes")
     for index,line in ipairs(button.closeLines)do
         local start,finish=line.startPoint,line.endPoint
@@ -385,7 +391,7 @@ end
 for _, flavor in ipairs({"retail", "forever"}) do
     for _,locale in ipairs({"enUS","deDE","esES","esMX","frFR","itIT","ptBR","ruRU","koKR","zhCN","zhTW"})do
         local attempts=0
-        local h=Harness.new({flavor=flavor,db={settings={forceLocale=locale}},fontSetResult=function(region,_,size)
+        local h=Harness.new({flavor=flavor,retainNativeCloseTextures=true,db={settings={forceLocale=locale}},fontSetResult=function(region,_,size)
             if size==18 and (region.frameType=="FontString" or region.frameType=="Font")then attempts=attempts+1;return false end
             return true
         end})

@@ -5009,6 +5009,11 @@ function Addon.StyleCloseButton(button)
     button:SetNormalTexture("")
     button:SetPushedTexture("")
     button:SetHighlightTexture("")
+    -- Suppress inherited atlas states even if an empty asset retains their image.
+    for _, getter in ipairs({"GetNormalTexture", "GetPushedTexture", "GetHighlightTexture", "GetDisabledTexture"}) do
+        local texture = SafeCall(button[getter], button)
+        if texture then texture:SetAlpha(0) end
+    end
     button:SetSize(24, 24)
     local hover = button:CreateTexture(nil, "BACKGROUND")
     hover:SetAllPoints(button)
