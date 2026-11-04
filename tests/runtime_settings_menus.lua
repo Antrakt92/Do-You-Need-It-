@@ -4,6 +4,20 @@ local function check(value, label)
     count = count + 1
     assert(value, label)
 end
+local function renderedCross(button, color)
+    check(button.closeText==nil and button.closeLines and #button.closeLines==2,"close uses two font-independent visual strokes")
+    for index,line in ipairs(button.closeLines)do
+        local start,finish=line.startPoint,line.endPoint
+        check(line.frameType=="Line" and line.parent==button and line.drawLayer=="OVERLAY" and line.thickness==1.5,
+            "close stroke has visible overlay geometry")
+        check(start[1]=="CENTER" and finish[1]=="CENTER" and start[2]==button and finish[2]==button,
+            "close strokes anchor to their own click target")
+        check(start[3]==-4 and finish[3]==4 and start[4]==(index==1 and -3 or 5)
+            and finish[4]==(index==1 and 5 or -3),"two nonzero diagonals form a centered cross")
+        for component=1,4 do check(line.colorTexture[component]==color[component],"close stroke color remains opaque and state appropriate")end
+        check(line:IsShown(),"close stroke remains shown independently of font state")
+    end
+end
 local function click(button)
     button:FireScript("OnMouseDown", "LeftButton")
     button:FireScript("OnMouseUp", "LeftButton")
@@ -105,7 +119,7 @@ do
         check(point[4] == pair[3] and point[5] == 0, "header controls keep compact aligned gaps")
         check(pair[1]:GetWidth() == 24 and pair[1]:GetHeight() == 24, "header controls retain convenient click targets")
     end
-    check(main.close.closeText:GetText() == "×", "close uses the restrained cross glyph")
+    renderedCross(main.close,{0.62,0.71,0.79,1})
     check(not main.close.closeHover:IsShown(), "close hover starts hidden")
     main.close:FireScript("OnEnter")
     check(main.close.closeHover:IsShown(), "close hover is visible on entry")
@@ -369,41 +383,39 @@ do
 end
 
 for _, flavor in ipairs({"retail", "forever"}) do
-    local rejected = 0
-    local h = Harness.new({flavor = flavor, fontSetResult = function(region, path, size)
-        if region.frameType == "FontString" and size == 18
-            and path:find("AntraktUISans.ttf", 1, true) then
-            rejected = rejected + 1
-            return false
+    for _,locale in ipairs({"enUS","deDE","esES","esMX","frFR","itIT","ptBR","ruRU","koKR","zhCN","zhTW"})do
+        local attempts=0
+        local h=Harness.new({flavor=flavor,db={settings={forceLocale=locale}},fontSetResult=function(region,_,size)
+            if size==18 and (region.frameType=="FontString" or region.frameType=="Font")then attempts=attempts+1;return false end
+            return true
+        end})
+        if flavor=="forever"then
+            h.env.GetBuildInfo=function()return "1.60.1","70755","",16001 end
+            h.env.WOW_PROJECT_ID=18
         end
-        return true
-    end})
-    if flavor == "forever" then
-        h.env.GetBuildInfo = function() return "1.60.1", "70755", "", 16001 end
-        h.env.WOW_PROJECT_ID = 18
+        h:loadAddon();h:slash("settings")
+        local main=h.env.DoYouNeedItFrame
+        local before=attempts
+        renderedCross(main.close,{0.62,0.71,0.79,1})
+        main.close:FireScript("OnEnter");renderedCross(main.close,{1,0.3,0.3,1})
+        main.close:FireScript("OnMouseDown");renderedCross(main.close,{0.95,0.97,1,1})
+        main.close:FireScript("OnMouseUp");renderedCross(main.close,{1,0.3,0.3,1})
+        main.close:FireScript("OnLeave");renderedCross(main.close,{0.62,0.71,0.79,1})
+        click(h.env.DoYouNeedItSupportButton)
+        renderedCross(h.env.DoYouNeedItDeveloperLink.close,{0.62,0.71,0.79,1})
+        click(h.env.DoYouNeedItDeveloperLink.close)
+        check(not h.env.DoYouNeedItDeveloperLink:IsShown(),"font-independent close still dismisses its dialog")
+        local marker
+        for _,child in ipairs(h.env.DoYouNeedItSettingsFrame.children)do if child.GetText and child:GetText()=="i"then marker=child end end
+        h:fire("PLAYER_ENTERING_WORLD");marker:FireScript("OnClick")
+        renderedCross(h.env.DoYouNeedItFontPackNotice.cross,{0.62,0.71,0.79,1})
+        click(h.env.DoYouNeedItFontPackNotice.cross)
+        check(not h.env.DoYouNeedItFontPackNotice:IsShown(),"font-independent information close still dismisses and confirms")
+        -- The harness does not execute Blizzard's inherited UIPanelCloseButton click.
+        main:Hide();h:slash("settings")
+        renderedCross(main.close,{0.62,0.71,0.79,1})
+        check(attempts==before,"close interactions do not attempt font activation")
     end
-    h:loadAddon(); h:slash("settings")
-    local main = h.env.DoYouNeedItFrame
-    local function renderedCross(button)
-        local path, size = button.closeText:GetFont()
-        check(path == h.env.DoYouNeedItCore.GetDefaultFont() and size == 18,
-            flavor .. " close has an effective font after direct font rejection")
-        check(button.closeText:GetText() == "×", flavor .. " close retains its cross")
-    end
-    check(rejected > 0, flavor .. " reproduces rejected direct close-font application")
-    renderedCross(main.close)
-    main.close:FireScript("OnEnter")
-    main.close:FireScript("OnMouseDown")
-    renderedCross(main.close)
-    main.close:FireScript("OnLeave")
-    click(h.env.DoYouNeedItSupportButton)
-    renderedCross(h.env.DoYouNeedItDeveloperLink.close)
-    click(h.env.DoYouNeedItDeveloperLink.close)
-    check(not h.env.DoYouNeedItDeveloperLink:IsShown(), flavor .. " styled close still dismisses its dialog")
-    -- The harness does not execute Blizzard's inherited UIPanelCloseButton click.
-    main:Hide()
-    h:slash("settings")
-    renderedCross(main.close)
 end
 
 print("Settings popup regressions: PASS (" .. count .. " assertions)")

@@ -5014,18 +5014,24 @@ function Addon.StyleCloseButton(button)
     hover:SetAllPoints(button)
     hover:SetColorTexture(1, 0.3, 0.3, 0.14)
     hover:Hide()
-    local text = button:CreateFontString(nil, "OVERLAY")
-    text:SetPoint("CENTER", 0, 1)
-    -- Cold addon fonts can reject direct SetFont; use the verified FontObject path.
-    Addon.ApplyRegionFont(text, Core.GetDefaultFont(), 18, "")
-    text:SetText("×")
+    -- Window controls must remain visible even when a font fails to load.
+    local first = button:CreateLine(nil, "OVERLAY")
+    first:SetThickness(1.5)
+    first:SetStartPoint("CENTER", button, -4, -3)
+    first:SetEndPoint("CENTER", button, 4, 5)
+    local second = button:CreateLine(nil, "OVERLAY")
+    second:SetThickness(1.5)
+    second:SetStartPoint("CENTER", button, -4, 5)
+    second:SetEndPoint("CENTER", button, 4, -3)
     local function refresh()
         if button.closeHovered then hover:Show() else hover:Hide() end
-        if button.closePressed then text:SetTextColor(0.95, 0.97, 1, 1)
-        elseif button.closeHovered then text:SetTextColor(1, 0.3, 0.3, 1)
-        else text:SetTextColor(0.62, 0.71, 0.79, 1) end
+        local r, g, b = 0.62, 0.71, 0.79
+        if button.closePressed then r, g, b = 0.95, 0.97, 1
+        elseif button.closeHovered then r, g, b = 1, 0.3, 0.3 end
+        first:SetColorTexture(r, g, b, 1)
+        second:SetColorTexture(r, g, b, 1)
     end
-    button.closeText, button.closeHover = text, hover
+    button.closeLines, button.closeHover = {first, second}, hover
     button:SetScript("OnEnter", function() button.closeHovered = true; refresh() end)
     button:SetScript("OnLeave", function()
         button.closeHovered, button.closePressed = false, false

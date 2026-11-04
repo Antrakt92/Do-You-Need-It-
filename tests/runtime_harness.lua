@@ -47,7 +47,7 @@ end
 function FrameMethods:GetChildren()
     local result = {}
     for _, child in ipairs(self.children or {}) do
-        if child.frameType ~= "FontString" and child.frameType ~= "Texture" then result[#result + 1] = child end
+        if child.frameType ~= "FontString" and child.frameType ~= "Texture" and child.frameType ~= "Line" then result[#result + 1] = child end
     end
     return unpack(result)
 end
@@ -120,7 +120,7 @@ function FrameMethods:SetFrameLevel(level)
     local delta = level - self:GetFrameLevel()
     self.frameLevel = level
     for _, child in ipairs(self.children or {}) do
-        if child.frameType ~= "FontString" and child.frameType ~= "Texture" then
+        if child.frameType ~= "FontString" and child.frameType ~= "Texture" and child.frameType ~= "Line" then
             child:SetFrameLevel(child:GetFrameLevel() + delta)
         end
     end
@@ -465,6 +465,16 @@ end
 function FrameMethods:CreateTexture(name)
     return self.harness:newFrame("Texture", name, self)
 end
+
+function FrameMethods:CreateLine(name, layer, template)
+    local line = self.harness:newFrame("Line", name, self, template)
+    line.drawLayer, line.shown = layer, true
+    return line
+end
+
+function FrameMethods:SetThickness(value) self.thickness = value end
+function FrameMethods:SetStartPoint(...) self.startPoint = {...} end
+function FrameMethods:SetEndPoint(...) self.endPoint = {...} end
 
 function FrameMethods:SetWordWrap(enabled)
     self.wordWrap = enabled == true
