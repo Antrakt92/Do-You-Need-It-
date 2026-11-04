@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Move the additional font collection to optional [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts), shared with compatible addons. Keep a compact multilingual baseline and preserve selected fonts and favorites when the collection is unavailable.
-- Explain missing, disabled or not-yet-loaded fonts in Settings. Show the transition notice once when attention is needed; a compatible loaded package needs no automatic notice. Enable an installed disabled package and reload the UI with one click.
+- Explain missing, disabled or not-yet-loaded fonts in Settings. Explain the font-package move once to existing users, including when the package is already ready; new installations skip the automatic notice. Enable an installed disabled package and reload the UI with one click.
 - Preview hovered fonts across Settings text, then restore the readable menu typography when the preview ends. Keep the information button inside Settings and its window above the menu.
 - Translate the standard whisper into the selected addon language while preserving custom messages. Reset restores the localized default; hovering a language does not change outgoing messages until selected.
 - Update the original-code license to 1.4: authors choose a positive CurseForge reward share for covered substantial reuse instead of a fixed minimum.

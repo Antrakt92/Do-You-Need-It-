@@ -38,8 +38,8 @@ function pack.InstallUI(addon, existing, apply, refresh)
         local preferred = pack.Preferred(owner.state.settings)
         local missing = pack.Coverage(preferred) and not owner.FontAvailable(pack.Resolve(preferred))
         if missing then
+            if pack.status == "ready" then message = pack.Message(activeLocale, "assetUnavailable") end
             message = message .. "\n" .. string.format(pack.Message(activeLocale, "selectedMissing"), pack.Name(preferred))
-            if pack.status == "ready" then message = message .. "\n" .. pack.Message(activeLocale, "assetUnavailable") end
         end
         return message, missing
     end
@@ -51,7 +51,7 @@ function pack.InstallUI(addon, existing, apply, refresh)
         if addon.fontPackCopy then addon.fontPackCopy:Hide() end
     end
     local function copyLink()
-        if pack.status == "provider-disabled" or pack.status == "provider-not-loaded" then return false end
+        if pack.status == "ready" or pack.status == "provider-disabled" or pack.status == "provider-not-loaded" then return false end
         local links = pack.snapshot.links
         local url = links.curseforge or links.wago or links.github
         if type(url) ~= "string" or not url:match("^https://") then return false end
@@ -72,7 +72,7 @@ function pack.InstallUI(addon, existing, apply, refresh)
         frame.actionButton:SetShown(frame.action~=nil)
         if frame.action then frame.actionButton:SetText(text(frame.action));frame.actionButton:Enable()
         else frame.actionButton:Disable() end
-        local downloadNeeded=pack.status~="provider-disabled" and pack.status~="provider-not-loaded"
+        local downloadNeeded=pack.status~="ready" and pack.status~="provider-disabled" and pack.status~="provider-not-loaded"
         frame.copy:SetShown(downloadNeeded)
         if not downloadNeeded then frame.copy:Disable()
         elseif not(pack.snapshot.links.curseforge or pack.snapshot.links.wago or pack.snapshot.links.github)then
@@ -145,20 +145,14 @@ function pack.InstallUI(addon, existing, apply, refresh)
     end
     pack.registerNotice = function()
         local state = DoYouNeedItDB.fontPackNotice
-        if state ~= "fresh" and state ~= "acknowledged" and state ~= "satisfied" then state = nil end
-        if state == nil and pack.status == "ready" and addon.fontPackWorldReady and outOfCombat() then
-            DoYouNeedItDB.fontPackNotice = "satisfied"
-            state = "satisfied"
-        end
-        -- Readiness resolves this owner's campaign; it is not a shared user acknowledgement.
-        if state == "satisfied" or (state == nil and pack.status == "ready") then state = "fresh" end
+        -- Legacy satisfied meant provider readiness, not an explicit user acknowledgement.
+        if state ~= "fresh" and state ~= "acknowledged" then state = nil end
         if registered and registeredState == state and registeredStatus == pack.status then return end
         registered, registeredState, registeredStatus = true, state, pack.status
         coordinator:Register("DoYouNeedIt", {
             state = state,
             canShow = function()
                 return addon.fontPackWorldReady == true and outOfCombat()
-                    and (manualRequest or pack.status ~= "ready")
                     and not (not manualRequest and addon.settingsFrame and addon.settingsFrame:IsShown()
                         and addon.contentMode == "settings")
                     and not (addon.linkFrame and addon.linkFrame:IsShown())
@@ -182,12 +176,9 @@ function pack.InstallUI(addon, existing, apply, refresh)
         pack.actionResult=result
         addon.availableFontPaths=nil;addon.fontListCache=nil
         apply();refresh()
-        if pack.status=="ready" then pack.registerNotice();dismiss()
-        else
-            -- Keep this visible presentation's callbacks valid across a state change.
-            registeredStatus=pack.status
-            updateAction(frame)
-        end
+        -- Keep this visible presentation's callbacks valid across a state change.
+        registeredStatus=pack.status
+        updateAction(frame)
     end
     pack.registerNotice()
     pack.RefreshMarker = function(owner, activeLocale)
