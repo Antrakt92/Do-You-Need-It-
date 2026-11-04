@@ -78,6 +78,15 @@ function pack.InstallUI(addon, existing, apply, refresh)
         elseif not(pack.snapshot.links.curseforge or pack.snapshot.links.wago or pack.snapshot.links.github)then
             frame.body:SetText(frame.body:GetText().."\n\n"..text("linkUnavailable"));frame.copy:Disable()
         else frame.copy:Enable()end
+        local ok,height=pcall(function() return frame.body:GetStringHeight() end)
+        if not ok then return end
+        if type(issecretvalue)=="function" then
+            local guarded,secret=pcall(issecretvalue,height)
+            if not guarded or secret~=false then return end
+        end
+        if type(height)~="number" or height~=height or height<=0 or height==math.huge then return end
+        -- Body starts 46px below the top; keep 16px clear of the 26px button row.
+        frame:SetHeight(math.max(210,math.ceil(height)+46+16+26+16))
     end
     local function show(confirm, suspend)
         if not addon.fontPackNotice then
@@ -118,9 +127,9 @@ function pack.InstallUI(addon, existing, apply, refresh)
         local frame = addon.fontPackNotice
         frame.confirm, frame.suspend = confirm, suspend
         frame.title:SetText(text("title"))
-        updateAction(frame)
         if not addon.ApplyRegionFont(frame.title, pack.baselinePath, 15, "")
             or not addon.ApplyRegionFont(frame.body, pack.baselinePath, 12, "") then return false end
+        updateAction(frame)
         frame.close:SetText(text("gotIt")); frame.copy:SetText(text("copyLink"))
         if not addon.ApplyRegionFont(frame.close:GetFontString(), pack.baselinePath, 12, "")
             or not addon.ApplyRegionFont(frame.copy:GetFontString(), pack.baselinePath, 12, "")

@@ -729,4 +729,41 @@ for _,flavor in ipairs({"retail","forever"})do
     h:fire("ADDON_LOADED","AntraktFonts")
     check(not marker:IsShown() and settings.fontDropdown:GetWidth()==before,"loaded provider hides marker without moving its reserved font field")
 end
+for _, flavor in ipairs({ "retail", "forever" }) do
+    for _, locale in ipairs({"enUS","deDE","esES","esMX","frFR","itIT","ptBR","ruRU","koKR","zhCN","zhTW"}) do
+        local h, pack = client(flavor, {db={settings={font="Interface\\AddOns\\DoYouNeedIt\\fonts\\DejaVuSans.ttf",forceLocale=locale}}})
+        local message=pack.Message
+        local long=true
+        pack.Message=function(active,id)
+            if id=="missing" and long then return string.rep(message(active,id).." ",4) end
+            return message(active,id)
+        end
+        h:fire("PLAYER_ENTERING_WORLD")
+        local window=h.env.DoYouNeedItFontPackNotice
+        local measured=0
+        window.body.GetStringHeight=function(self)
+            check(self:GetFont()==pack.baselinePath,"notice measures the applied readable baseline")
+            measured=measured+1
+            return long and 236 or 36
+        end
+        window:Hide();h:fire("PLAYER_ENTERING_WORLD")
+        check(window.body:GetText():find(message(locale,"linkUnavailable"),1,true)
+            and window.body:GetText():find(string.format(message(locale,"selectedMissing"),pack.Name(pack.Preferred({font="Interface\\AddOns\\DoYouNeedIt\\fonts\\DejaVuSans.ttf"}))),1,true),
+            "long notice includes selected-file and unpublished-link guidance")
+        check(measured>0 and window:GetHeight()>=46+236+16+window.close:GetHeight()+16,
+            "wrapped localized notice leaves a clear gap above its bottom buttons: "..flavor..locale)
+        long=false;window:Hide();h:fire("PLAYER_ENTERING_WORLD")
+        check(window:GetHeight()==210,"reused notice shrinks after its body becomes short")
+        if locale=="enUS" then
+            for _,invalid in ipairs({math.huge,-math.huge,0,0/0,"240",h:secretValue("notice height")}) do
+                window.body.GetStringHeight=function()return invalid end
+                window:Hide();h:fire("PLAYER_ENTERING_WORLD")
+                check(window:GetHeight()==210,"invalid or restricted measurements preserve the last clean notice size")
+            end
+            window.body.GetStringHeight=function()error("measurement unavailable")end
+            window:Hide();h:fire("PLAYER_ENTERING_WORLD")
+            check(window:GetHeight()==210,"failed measurement preserves the last clean notice size")
+        end
+    end
+end
 print("Shared font runtime: " .. checks .. " checks passed")
