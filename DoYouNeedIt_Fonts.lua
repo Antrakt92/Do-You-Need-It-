@@ -135,11 +135,12 @@ local function actionContext(status)
 end
 function pack.EnableProvider()
     local guid,save=actionContext("provider-disabled")
-    if not guid then return "blocked" end
+    local reload=clean(rawget(_G,"ReloadUI"),"function")
+    if not guid or not reload then return "blocked" end
     local callback=api("EnableAddOn")
     if not clean(callback,"function") then return "failed" end
     if stateFor(guid)~=0 or not actorSafe(guid) then return "blocked" end
-    pcall(callback,"AntraktFonts",guid)
+    if not pcall(callback,"AntraktFonts",guid) then pack.RefreshMetadata();return "failed" end
     if not enabledFor(guid) or not actorSafe(guid) then
         pack.RefreshMetadata();return "failed"
     end
@@ -147,7 +148,9 @@ function pack.EnableProvider()
     if not actorSafe(guid) then pack.RefreshMetadata();return "blocked" end
     pack.RefreshMetadata();pack.Sync()
     if pack.status=="ready" then return "available" end
-    if pack.status=="provider-not-loaded" and pack.enabledForCurrentCharacter then return "reload-required" end
+    if pack.status=="provider-not-loaded" and enabledFor(guid) and actorSafe(guid) then
+        if pcall(reload) then return "reload-requested" end
+    end
     return "failed"
 end
 function pack.ReloadProvider()

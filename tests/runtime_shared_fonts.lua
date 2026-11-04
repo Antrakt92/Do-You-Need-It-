@@ -566,15 +566,16 @@ for _,flavor in ipairs({"retail","forever"})do
 end
 for _,flavor in ipairs({"retail","forever"})do
     local h,pack=client(flavor)
-    local enabled,saves=0,0
+    local enabled,saves,reloads=0,0,0
+    h.env.ReloadUI=function()reloads=reloads+1 end
     h.env.C_AddOns={DoesAddOnExist=function()return true end,
         GetAddOnEnableState=function()return enabled end,IsAddOnLoaded=function()return false,false end,
         EnableAddOn=function(name,character)
             check(name=="AntraktFonts" and character=="PlayerGUID","enable targets only current character")
             enabled=2
         end,SaveAddOns=function()saves=saves+1 end,IsAddOnLoadOnDemand=function()return false end}
-    check(pack.EnableProvider()=="reload-required" and enabled==2 and saves==1,
-        "explicit enable persists non-load-on-demand package and requests a later explicit reload")
+    check(pack.EnableProvider()=="reload-requested" and enabled==2 and saves==1 and reloads==1,
+        "one explicit enable click saves and reloads the current-character package")
 end
 for _,flavor in ipairs({"retail","forever"})do
     local function actionClient(legacy)
@@ -603,16 +604,13 @@ for _,flavor in ipairs({"retail","forever"})do
         local window=h.env.DoYouNeedItFontPackNotice
         check(window.action=="enable" and window.actionButton:IsVisible(),"disabled information offers explicit Enable")
         window.actionButton:FireScript("OnClick")
-        check(state.enables==1 and state.saves==1 and state.reloads==0,"enable saves only its click and never reloads automatically")
+        check(state.enables==1 and state.saves==1 and state.reloads==1,"one explicit enable click saves and reloads exactly once")
         check(window:IsVisible() and window.action=="reload" and window.actionButton:GetText()==pack.Message("enUS","reload"),"same owned presentation now offers explicit Reload UI")
-        check(window.body:GetText():find(pack.Message("enUS","reloadRequired"),1,true),"verified enabled state explains reload requirement")
         check(h.env.DoYouNeedItDB.fontPackNotice==nil and h.env.DoYouNeedItDB.settings.font=="Fonts\\ARIALN.TTF","enable never acknowledges notice or changes font preference")
         local busy,owner=h.env.AntraktFontNoticeCoordinator:RequestShow()
         check(busy and owner=="DoYouNeedIt","enable state transition retains common modal ownership")
-        window.actionButton:FireScript("OnClick")
-        check(state.saves==2 and state.reloads==1,"only a second explicit click reloads UI")
     end
-    for _,mode in ipairs({"combat","secretCombat","secretGUID","missingGUID","missing","ready","saveMissing","saveInvalid","listVisible","listHiddenParent","listUnknown","enableError","unchanged","saveError","hidden"})do
+    for _,mode in ipairs({"combat","secretCombat","secretGUID","missingGUID","missing","ready","reloadMissing","saveMissing","saveInvalid","listVisible","listHiddenParent","listUnknown","enableError","partialEnableError","unchanged","saveError","hidden"})do
         local h,pack,state,methods=actionClient(false)
         local window=h.env.DoYouNeedItFontPackNotice
         if mode=="combat"then h.env.InCombatLockdown=function()return true end
@@ -621,12 +619,14 @@ for _,flavor in ipairs({"retail","forever"})do
         elseif mode=="missingGUID"then h.env.UnitGUID=function()return nil end
         elseif mode=="missing"then state.exists=false
         elseif mode=="ready"then h.env.AntraktFonts={GetCatalog=function()return{formatMajor=1,catalogRevision="ready-before-click",fonts=snapshot.fonts}end}
+        elseif mode=="reloadMissing"then h.env.ReloadUI=nil
         elseif mode=="saveMissing"then methods.SaveAddOns=nil
         elseif mode=="saveInvalid"then methods.SaveAddOns=123;h.env.SaveAddOns=function()error("no conflicting legacy save")end
         elseif mode=="listVisible"then h.env.AddonList={IsVisible=function()return true end}
         elseif mode=="listHiddenParent"then h.env.AddonList={IsVisible=function()return false end,IsShown=function()return true end}
         elseif mode=="listUnknown"then h.env.AddonList={IsVisible=function()error("unknown visibility")end}
         elseif mode=="enableError"then methods.EnableAddOn=function()state.enables=state.enables+1;error("enable failed")end
+        elseif mode=="partialEnableError"then methods.EnableAddOn=function()state.enables=state.enables+1;state.enabled=2;error("enable partly changed state")end
         elseif mode=="unchanged"then methods.EnableAddOn=function()state.enables=state.enables+1 end
         elseif mode=="saveError"then methods.SaveAddOns=function()state.saves=state.saves+1;error("save failed")end
         elseif mode=="hidden"then window:Hide()end
@@ -634,6 +634,7 @@ for _,flavor in ipairs({"retail","forever"})do
         check(state.reloads==0,"guarded or failed enable never reloads: "..mode)
         if mode=="enableError"or mode=="unchanged"then
             check(state.saves==0 and window.body:GetText():find(pack.Message("enUS","enableFailed"),1,true),"failed enable stays truthful before saving")
+        elseif mode=="partialEnableError"then check(state.enables==1 and state.saves==0 and pack.actionResult=="failed","partial enable error never saves or reloads despite changed readback")
         elseif mode=="saveError"then check(state.enables==1 and state.saves==1 and pack.actionResult=="failed","save failure is contained without success claim")
         else check(state.enables==0 and state.saves==0,"unsafe or stale enable performs no global writes: "..mode)end
     end
@@ -641,6 +642,7 @@ for _,flavor in ipairs({"retail","forever"})do
         local h,pack,state,methods=actionClient(false)
         local window=h.env.DoYouNeedItFontPackNotice
         window.actionButton:FireScript("OnClick")
+        state.reloads=0 -- The mock returned from the completed enable/reload; test a later recovery action.
         local before=state.saves
         if mode=="combat"then h.env.InCombatLockdown=function()return true end
         elseif mode=="missing"then state.exists=false
@@ -671,8 +673,9 @@ for _,flavor in ipairs({"retail","forever"})do
             pack.EnableProvider()
             check(saves==0,"combat discovered during enabled readback blocks SaveAddOns")
         else
-            check(pack.EnableProvider()=="reload-required","setup for fresh reload query guard")
-            armed=false;combat=false
+            pack.EnableProvider()
+            check(reloads==0,"combat discovered during enable final metadata blocks same-click reload")
+            armed=false;combat=false;reloads=0
             pack.ReloadProvider()
             check(reloads==0 and saves==2,"combat discovered in post-save metadata blocks ReloadUI")
         end

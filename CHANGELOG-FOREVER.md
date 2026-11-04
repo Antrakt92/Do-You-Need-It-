@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Enable an installed Antrakt Fonts package for the current character from its information window, then reload the UI with a separate click.
+- Enable an installed Antrakt Fonts package for the current character and reload the UI with one click in its information window.
 
 - Distinguish missing, disabled and not-yet-loaded Antrakt Fonts in Font settings and the transition notice.
 
