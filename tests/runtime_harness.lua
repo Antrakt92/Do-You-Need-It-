@@ -828,6 +828,7 @@ function Harness.new(options)
     }, { __index = Harness })
 
     local env = self.env
+    env.C_AddOns = { DoesAddOnExist = function() return false end }
     setmetatable(env, { __index = _G })
     env._G = env
     env.DoYouNeedItDB = options and options.db or {}

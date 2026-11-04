@@ -29,6 +29,66 @@ function pack.Invalidate()
     pack.synced = false
     pack.generation = pack.generation + 1
 end
+local function clean(value, kind)
+    local ok, result = pcall(function()
+        if type(issecretvalue) == "function" and issecretvalue(value) then return nil end
+        if type(value) == kind then return value end
+    end)
+    if ok then return result end
+end
+local function api(name)
+    local modern = rawget(_G, "C_AddOns")
+    if type(modern) ~= "nil" then
+        if not clean(modern, "table") or getmetatable(modern) ~= nil then return false, true end
+        local method = rawget(modern, name)
+        if type(method) ~= "nil" then return clean(method, "function") or false, true end
+    end
+    local method = rawget(_G, name)
+    if type(method) ~= "nil" then return clean(method, "function") or false, false end
+    return nil, false
+end
+local function query(method, ...)
+    if type(method) ~= "function" then return nil end
+    local ok, a,b,c,d,e,f = pcall(method, ...)
+    if ok then return a,b,c,d,e,f end
+end
+function pack.RefreshMetadata()
+    local existenceAPI = api("DoesAddOnExist")
+    local exists = clean(query(existenceAPI, "AntraktFonts"), "boolean")
+    if existenceAPI == nil then
+        local info = api("GetAddOnInfo")
+        -- Named GetAddOnInfo can echo a missing name; inspect actual indices.
+        local count = clean(query(api("GetNumAddOns")), "number")
+        if count and count >= 0 and count <= 1024 and count % 1 == 0 and info then
+            local complete = true
+            exists = false
+            for index = 1, count do
+                local name = clean(query(info, index), "string")
+                if not name or #name == 0 or #name > 128 or name:find("%c") then complete = false
+                elseif name == "AntraktFonts" then exists = true; break end
+            end
+            if not complete and exists ~= true then exists = nil end
+        end
+    end
+    local _, loaded = query(api("IsAddOnLoaded"), "AntraktFonts")
+    loaded = clean(loaded, "boolean")
+    local status = "provider-not-loaded"
+    if loaded == true then status = "provider-incompatible"
+    elseif exists == false then status = "provider-unavailable"
+    elseif exists == true then
+        local method, modern = api("GetAddOnEnableState")
+        local character = clean(query(rawget(_G, "UnitGUID"), "player"), "string")
+        local enabled
+        if character and #character > 0 and #character <= 128 and not character:find("%c") then
+            if modern then enabled = query(method, "AntraktFonts", character)
+            else enabled = query(method, character, "AntraktFonts") end
+        end
+        if clean(enabled, "number") == 0 then status = "provider-disabled" end
+    end
+    pack.metadataStatus = status
+    if pack.synced and pack.provider == nil then pack.status = status end
+    return status
+end
 function pack.Validate(catalog)
     if type(catalog) ~= "table" or catalog.formatMajor ~= 1
         or type(catalog.catalogRevision) ~= "string" or #catalog.catalogRevision < 1 or #catalog.catalogRevision > 128
@@ -69,7 +129,7 @@ function pack.Sync()
     local provider = rawget(_G, "AntraktFonts")
     if pack.synced and provider == pack.provider then return end
     pack.provider, pack.synced = provider, true
-    pack.status = "provider-unavailable"
+    pack.status = pack.metadataStatus or pack.RefreshMetadata()
     local rows
     if type(provider) == "table" and type(provider.GetCatalog) == "function" then
         local ok, catalog = pcall(provider.GetCatalog)
@@ -93,7 +153,8 @@ end
 function pack.Resolve(path)
     pack.Sync()
     local original = byID[byPath[key(path)]]
-    if pack.status == "provider-unavailable" and original and type(path) == "string"
+    if (pack.status == "provider-unavailable" or pack.status == "provider-disabled" or pack.status == "provider-not-loaded")
+        and original and type(path) == "string"
         and not path:find("AntraktFonts", 1, true)
         and path:match("[^\\/]+$"):lower() == original.file:lower() then return path end
     local row = pack.currentByID[pack.Identity(path)]

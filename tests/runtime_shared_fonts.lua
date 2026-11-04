@@ -387,4 +387,148 @@ for _, flavor in ipairs({"retail", "forever"}) do
     assertFont(baseline,"language cancellation restores normal Settings typography")
     check(calls==1,"hover and restore never clone provider catalogue per text region")
 end
+for _,flavor in ipairs({"retail","forever"}) do
+    local h,pack=client(flavor,{db={settings={font="Fonts\\ARIALN.TTF"}}})
+    h.env.C_AddOns={DoesAddOnExist=function()return true end,
+        GetAddOnEnableState=function(name)check(name=="AntraktFonts","modern enable argument order");return 0 end,
+        IsAddOnLoaded=function()return false,false end}
+    pack.RefreshMetadata();pack.Invalidate();pack.Sync()
+    check(pack.status=="provider-disabled","proved installed but disabled has truthful state")
+end
+for _,flavor in ipairs({"retail","forever"}) do
+    for _,case in ipairs({
+        {"missing",false,0,false,false,"provider-unavailable","missing"},
+        {"disabled",true,0,false,false,"provider-disabled","disabled"},
+        {"enabled not loaded",true,2,false,false,"provider-not-loaded","notLoaded"},
+        {"loading only",true,2,true,false,"provider-not-loaded","notLoaded"},
+        {"ambiguous modern tuple",true,2,true,nil,"provider-not-loaded","notLoaded"},
+        {"secret modern loaded",true,2,true,"secret","provider-not-loaded","notLoaded"},
+        {"malformed modern loaded",true,2,true,"invalid","provider-not-loaded","notLoaded"},
+        {"loaded invalid API",true,2,true,true,"provider-incompatible","incompatible"},
+        {"missing APIs",nil,nil,nil,nil,"provider-not-loaded","notLoaded"},
+        {"existence throws","throw",0,false,false,"provider-not-loaded","notLoaded"},
+        {"secret existence","secret",0,false,false,"provider-not-loaded","notLoaded"},
+        {"unknown character",true,0,false,false,"provider-not-loaded","notLoaded",nil,"noGUID"},
+        {"secret character",true,0,false,false,"provider-not-loaded","notLoaded",nil,"secretGUID"},
+        {"secret enabled",true,"secret",false,false,"provider-not-loaded","notLoaded"},
+        {"legacy disabled",true,0,false,false,"provider-disabled","disabled","legacy"},
+        {"ambiguous legacy tuple",true,2,true,nil,"provider-not-loaded","notLoaded","legacy"},
+        {"legacy missing echo",false,0,false,false,"provider-unavailable","missing","legacy"},
+        {"unproved legacy echo",true,0,false,false,"provider-not-loaded","notLoaded","legacy",nil,"unindexed"},
+    }) do
+        local h,pack=client(flavor,{db={settings={font="Fonts\\ARIALN.TTF"}}})
+        local restricted=h:secretValue("addon metadata")
+        local reads,enables=0,0
+        h.env.UnitGUID=function() return case[9]=="noGUID" and nil or case[9]=="secretGUID" and restricted or "Player-1-123ABC" end
+        if case[9]=="noGUID" then h.env.UnitGUID=function()return nil end end
+        local function enable(a,b)
+            enables=enables+1
+            check((case[8]=="legacy" and a=="Player-1-123ABC" and b=="AntraktFonts")
+                or (case[8]~="legacy" and a=="AntraktFonts" and b=="Player-1-123ABC"),"explicit current-character enable arguments")
+            return case[3]=="secret" and restricted or case[3]
+        end
+        local info=function(index)
+            check(type(index)=="number","existence fallback uses bounded actual indices, never a name echo")
+            return case[2]==false and "OtherAddon" or "AntraktFonts","title","notes",false,""
+        end
+        h.env.C_AddOns=nil
+        if case[8]=="legacy" then
+            h.env.GetAddOnInfo=info;h.env.GetAddOnEnableState=enable
+            h.env.IsAddOnLoaded=function()return case[4],case[5]=="secret" and restricted or case[5] end
+            if case[10]~="unindexed" then h.env.GetNumAddOns=function()return 1 end end
+        elseif case[2]~=nil then
+            h.env.C_AddOns={DoesAddOnExist=function()
+                reads=reads+1
+                if case[2]=="throw" then error("metadata unavailable") end
+                return case[2]=="secret" and restricted or case[2]
+            end,GetAddOnInfo=info,GetAddOnEnableState=enable,IsAddOnLoaded=function()return case[4],case[5]=="secret" and restricted or case[5] end}
+        end
+        h:fire("PLAYER_ENTERING_WORLD")
+        check(pack.status==case[6],"honest provider state: "..case[1].." / "..flavor)
+        if case[2]==false or case[2]=="throw" or case[2]=="secret" or case[9] then check(enables==0,"unknown or missing installation/character never authorizes enable-state inference") end
+        local window=assert(h.env.DoYouNeedItFontPackNotice)
+        local message=pack.Message("enUS",case[7])
+        check(message~="" and window.body:GetText():find(message,1,true),"notice body reports actual package state")
+        if case[6]=="provider-disabled" or case[6]=="provider-not-loaded" then
+            check(not window.copy:IsShown() and not window.copy:IsEnabled(),"installed or uncertain package needs no download action")
+            check(not window.body:GetText():find(pack.Message("enUS","linkUnavailable"),1,true),"no false unavailable-link claim")
+        end
+        window.close:FireScript("OnClick");h:slash("settings")
+        local marker
+        for _,child in ipairs(h.env.DoYouNeedItSettingsFrame.children)do if child.GetText and child:GetText()=="i" then marker=child end end
+        marker:FireScript("OnEnter")
+        local hint=case[7]=="missing" and pack.Message("enUS","settingsMissing") or message
+        check(h.env.GameTooltip:GetText():find(hint,1,true),"marker uses same truthful state before selected-font detail")
+        local before=reads;local generation=pack.generation
+        for _=1,5 do marker:FireScript("OnEnter");h:slash("delay 11") end
+        check(reads==before and pack.generation==generation,"hover/repaint never polls addon installation or invalidates catalogue")
+        check(h.env.DoYouNeedItDB.settings.font=="Fonts\\ARIALN.TTF","metadata guidance leaves preference untouched")
+    end
+end
+for _,flavor in ipairs({"retail","forever"}) do
+    local h,pack=client(flavor,{db={settings={font="Fonts\\ARIALN.TTF"}}})
+    local enabled,reads,calls=0,0,0
+    h.env.C_AddOns={DoesAddOnExist=function()reads=reads+1;return true end,
+        GetAddOnEnableState=function()return enabled end,IsAddOnLoaded=function()return false,false end}
+    h:slash("settings");check(pack.status=="provider-disabled","opening Settings refreshes disabled state")
+    local generation=pack.generation
+    enabled=2;h:slash("settings")
+    check(pack.status=="provider-not-loaded" and pack.generation==generation,"changed enable state refreshes without rebuilding font catalogue")
+    h:fire("PLAYER_ENTERING_WORLD")
+    h.env.AntraktFonts={GetCatalog=function()calls=calls+1;return{formatMajor=1,catalogRevision="loaded-later",fonts=snapshot.fonts}end}
+    h:fire("ADDON_LOADED","AntraktFonts")
+    check(pack.status=="ready" and h.env.DoYouNeedItDB.fontPackNotice=="satisfied","late compatible package resolves campaign quietly")
+    local marker
+    for _,child in ipairs(h.env.DoYouNeedItSettingsFrame.children)do if child.GetText and child:GetText()=="i" then marker=child end end
+    check(not marker:IsShown(),"compatible loaded package removes state marker")
+    for _=1,8 do h:slash("delay 11") end
+    check(calls==1,"late loaded provider catalogue remains cached")
+    local saved="Interface\\AddOns\\StatsPro\\fonts\\DejaVuSans.ttf"
+    local old,legacy=client(flavor,{db={settings={font=saved}}})
+    old.env.C_AddOns={DoesAddOnExist=function()return true end,GetAddOnEnableState=function()return 0 end}
+    old:fire("PLAYER_ENTERING_WORLD")
+    check(legacy.Resolve(saved)==saved and old.env.DoYouNeedItFrame.title:GetFont()==saved,"disabled package preserves usable historical consumer asset")
+    check(not old.env.DoYouNeedItFontPackNotice.body:GetText():find(legacy.Message("enUS","selectedMissing"):gsub("%%s","DejaVu Sans"),1,true),"working legacy face is not falsely missing")
+end
+for _,flavor in ipairs({"retail","forever"})do
+    for _,case in ipairs({{0,"provider-unavailable"},{1,"provider-unavailable"},{1025,"provider-not-loaded"},{0/0,"provider-not-loaded"},{false,"provider-not-loaded"},{1,"provider-not-loaded",true}})do
+        local h,pack=client(flavor)
+        local queries=0
+        h.env.C_AddOns=nil
+        h.env.GetNumAddOns=function()return case[1]end
+        h.env.GetAddOnInfo=function(index)
+            queries=queries+1;check(index==1,"bounded enumeration never queries a name or out-of-range index")
+            if case[3]then return h:secretValue("indexed addon name")end
+            return "OtherAddon"
+        end
+        pack.RefreshMetadata()
+        check(pack.status==case[2],"unproved or malformed inventories stay neutral")
+        check(queries<=1,"oversized and invalid addon counts never enumerate")
+    end
+end
+for _,flavor in ipairs({"retail","forever"})do
+    local h,pack=client(flavor)
+    h.env.DoesAddOnExist=function()return false end
+    h.env.GetNumAddOns=function()return 0 end
+    h.env.GetAddOnInfo=function()error("invalid modern method must also block indexed fallback")end
+    for _,namespace in ipairs({{DoesAddOnExist=123},123,setmetatable({},{}) ,h:secretValue("addon namespace"),{DoesAddOnExist=h:secretValue("addon method")}})do
+        h.env.C_AddOns=namespace
+        pack.RefreshMetadata()
+        check(pack.status=="provider-not-loaded","present invalid modern API never falls back to conflicting legacy evidence")
+    end
+end
+for _,flavor in ipairs({"retail","forever"})do
+    for _,enabled in ipairs({0,2})do
+        local h,pack=client(flavor,{db={settings={font="Fonts\\ARIALN.TTF"}}})
+        pack.snapshot.links.github="https://example.invalid/shared-fonts"
+        h:fire("PLAYER_ENTERING_WORLD")
+        local window=h.env.DoYouNeedItFontPackNotice
+        check(window.copy:IsEnabled(),"real test URL makes stale download action exercisable")
+        h.env.C_AddOns={DoesAddOnExist=function()return true end,GetAddOnEnableState=function()return enabled end}
+        pack.RefreshMetadata()
+        window.copy:FireScript("OnClick")
+        check(not h.env.DoYouNeedItDeveloperLink and h.env.DoYouNeedItDB.fontPackNotice==nil,
+            "stale rendered download callback cannot open or acknowledge after installed-state transition")
+    end
+end
 print("Shared font runtime: " .. checks .. " checks passed")

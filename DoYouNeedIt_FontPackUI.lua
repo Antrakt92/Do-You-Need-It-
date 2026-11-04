@@ -13,6 +13,19 @@ function pack.InstallUI(addon, existing, apply, refresh)
     local manualRequest = false
     local function locale() return Core.ResolveActiveLocale(addon.state.settings.forceLocale, GetLocale()) end
     local function text(id) return pack.Message(locale(), id) end
+    local function guidance(owner, activeLocale, notice)
+        local id = ({["provider-disabled"]="disabled", ["provider-not-loaded"]="notLoaded",
+            ["provider-incompatible"]="incompatible", ready="ready"})[pack.status]
+            or (notice and "missing" or "settingsMissing")
+        local message = pack.Message(activeLocale, id)
+        local preferred = pack.Preferred(owner.state.settings)
+        local missing = pack.Coverage(preferred) and not owner.FontAvailable(pack.Resolve(preferred))
+        if missing then
+            message = message .. "\n" .. string.format(pack.Message(activeLocale, "selectedMissing"), pack.Name(preferred))
+            if pack.status == "ready" then message = message .. "\n" .. pack.Message(activeLocale, "assetUnavailable") end
+        end
+        return message, missing
+    end
     local function dismiss()
         if addon.fontPackNotice then
             addon.fontPackNotice:Hide()
@@ -21,6 +34,7 @@ function pack.InstallUI(addon, existing, apply, refresh)
         if addon.fontPackCopy then addon.fontPackCopy:Hide() end
     end
     local function copyLink()
+        if pack.status == "provider-disabled" or pack.status == "provider-not-loaded" then return false end
         local links = pack.snapshot.links
         local url = links.curseforge or links.wago or links.github
         if type(url) ~= "string" or not url:match("^https://") then return false end
@@ -66,8 +80,7 @@ function pack.InstallUI(addon, existing, apply, refresh)
         local frame = addon.fontPackNotice
         frame.confirm, frame.suspend = confirm, suspend
         frame.title:SetText(text("title"))
-        frame.body:SetText(text(pack.status == "ready" and "ready"
-            or pack.status == "provider-incompatible" and "incompatible" or "missing"))
+        frame.body:SetText(guidance(addon, locale(), true))
         if not addon.ApplyRegionFont(frame.title, pack.baselinePath, 15, "")
             or not addon.ApplyRegionFont(frame.body, pack.baselinePath, 12, "") then return false end
         frame.close:SetText(text("gotIt")); frame.copy:SetText(text("copyLink"))
@@ -76,7 +89,10 @@ function pack.InstallUI(addon, existing, apply, refresh)
         frame.close:SetScript("OnClick", function() confirm(); frame:Hide() end)
         frame.cross:SetScript("OnClick", function() confirm(); frame:Hide() end)
         frame.copy:SetScript("OnClick", function() if copyLink() then confirm(); frame:Hide() end end)
-        if not (pack.snapshot.links.curseforge or pack.snapshot.links.wago or pack.snapshot.links.github) then
+        local downloadNeeded = pack.status ~= "provider-disabled" and pack.status ~= "provider-not-loaded"
+        frame.copy:SetShown(downloadNeeded)
+        if not downloadNeeded then frame.copy:Disable()
+        elseif not (pack.snapshot.links.curseforge or pack.snapshot.links.wago or pack.snapshot.links.github) then
             frame.body:SetText(frame.body:GetText() .. "\n\n" .. text("linkUnavailable")); frame.copy:Disable()
         else frame.copy:Enable() end
         frame:Show()
@@ -128,16 +144,7 @@ function pack.InstallUI(addon, existing, apply, refresh)
             end)
             button:SetScript("OnEnter", function(self)
                 activeLocale = locale()
-                local preferred = pack.Preferred(owner.state.settings)
-                local message = pack.Message(activeLocale, "settingsMissing")
-                if pack.status == "provider-unavailable" then message = message .. "\n" .. pack.Message(activeLocale, "disabled") end
-                if pack.Identity(owner.ValidatedDisplayFont()) ~= pack.Identity(preferred) then
-                    message = string.format(pack.Message(activeLocale, "selectedMissing"), pack.Name(preferred))
-                    if pack.status == "ready" and Core.FontSupportsLocale(preferred, activeLocale) then
-                        message = message .. "\n" .. pack.Message(activeLocale, "assetUnavailable")
-                    end
-                end
-                if pack.status == "provider-incompatible" then message = pack.Message(activeLocale, "incompatible") end
+                local message = guidance(owner, activeLocale, false)
                 owner.ShowTextTooltip(self, message)
             end)
             button:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
@@ -146,8 +153,8 @@ function pack.InstallUI(addon, existing, apply, refresh)
                 if owner.fontPackWorldReady and outOfCombat() then coordinator:RequestShow() end
             end)
         end
-        owner.fontPackMarker:SetShown(pack.status ~= "ready"
-            or pack.Identity(owner.ValidatedDisplayFont()) ~= pack.Identity(pack.Preferred(owner.state.settings)))
+        local _, missing = guidance(owner, activeLocale, false)
+        owner.fontPackMarker:SetShown(pack.status ~= "ready" or missing == true)
     end
     local events = CreateFrame("Frame")
     for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ADDON_LOADED" }) do events:RegisterEvent(event) end
@@ -156,7 +163,7 @@ function pack.InstallUI(addon, existing, apply, refresh)
         if event == "ADDON_LOADED" and name ~= "AntraktFonts" then return end
         if event == "ADDON_LOADED" then pack.Invalidate(); addon.availableFontPaths = nil; addon.fontListCache = nil end
         if event == "PLAYER_ENTERING_WORLD" then addon.fontPackWorldReady = true end
-        if outOfCombat() then apply(); refresh(); pack.registerNotice(); coordinator:RequestShow() end
+        if outOfCombat() then pack.RefreshMetadata(); apply(); refresh(); pack.registerNotice(); coordinator:RequestShow() end
     end)
     if addon.frame and addon.frame.HookScript then
         addon.frame:HookScript("OnHide", function() if addon.fontPackWorldReady and outOfCombat() then coordinator:RequestShow() end end)

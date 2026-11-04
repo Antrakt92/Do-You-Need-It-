@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Distinguish missing, disabled and not-yet-loaded Antrakt Fonts in Font settings and the transition notice.
+
 - Preview hovered fonts across Settings text, then restore the readable menu typography when the preview ends.
 
 - Move the additional font collection into optional Antrakt Fonts, shared with other compatible addons. Keep a compact multilingual baseline and preserve font choices and favorites when the collection is absent.

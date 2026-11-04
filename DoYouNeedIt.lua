@@ -6663,6 +6663,7 @@ CreateSettingsUI = function()
 end
 
 OpenSettings = function()
+    Core.FontPack.RefreshMetadata()
     CreateUI()
     CreateSettingsUI()
     Addon.contentMode = "settings"
@@ -6670,6 +6671,7 @@ OpenSettings = function()
     Addon.settingsFrame:Show()
     RefreshRows()
     RefreshSettingsControls()
+    if Core.FontPack.registerNotice then Core.FontPack.registerNotice() end
     _G.AntraktWindowLayers.Focus(Addon.frame)
 end
 
