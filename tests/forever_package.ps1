@@ -36,6 +36,12 @@ try {
     } finally { $archive.Dispose() }
     $result = & (Join-Path $repoRoot 'scripts/upload-curseforge.ps1') -Flavor Forever -ZipPath $zip -DryRun `
         -GameVersionsJson '[{"id":111,"name":"1.60.1","gameVersionTypeID":517},{"id":222,"name":"1.60.1","gameVersionTypeID":88568}]' | ConvertFrom-Json
+    $relations = @($result.Metadata.relations.projects)
+    Assert-Case ($relations.Count -eq 1 -and $relations[0].slug -ceq 'antrakt-fonts' -and
+        $relations[0].projectID -ceq '1783613' -and $relations[0].type -ceq 'requiredDependency') 'Forever must require the exact Antrakt Fonts project'
+    $override = & (Join-Path $repoRoot 'scripts/upload-curseforge.ps1') -Flavor Forever -ZipPath $zip -ProjectId 123456 -DryRun | ConvertFrom-Json
+    Assert-Case ($override.ProjectId -eq 123456 -and $override.Metadata.relations.projects[0].projectID -ceq '1783613') 'Consumer override must not redirect Forever dependency'
+    Assert-Case ((Get-FileHash $zip -Algorithm SHA256).Hash -ceq $firstHash) 'Upload metadata must not change Forever package bytes'
     Assert-Case ($result.Metadata.releaseType -ceq 'beta') 'Forever upload must be beta'
     Assert-Case ($result.ExpectedGameVersionTypeId -eq 88568) 'Wrong marketplace flavor'
     Assert-Case (@($result.Metadata.gameVersions).Count -eq 1 -and $result.Metadata.gameVersions[0] -eq 222) 'Retail version must never be selected'
