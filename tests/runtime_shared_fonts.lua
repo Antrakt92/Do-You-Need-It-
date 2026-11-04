@@ -564,4 +564,118 @@ for _,flavor in ipairs({"retail","forever"})do
     h:fire("PLAYER_ENTERING_WORLD")
     check(h.env.DoYouNeedItFrame.title:GetFont()==pack.baselinePath,"unregistered unknown canonical filename never inherits owned-font approval")
 end
+for _,flavor in ipairs({"retail","forever"})do
+    local h,pack=client(flavor)
+    local enabled,saves=0,0
+    h.env.C_AddOns={DoesAddOnExist=function()return true end,
+        GetAddOnEnableState=function()return enabled end,IsAddOnLoaded=function()return false,false end,
+        EnableAddOn=function(name,character)
+            check(name=="AntraktFonts" and character=="PlayerGUID","enable targets only current character")
+            enabled=2
+        end,SaveAddOns=function()saves=saves+1 end,IsAddOnLoadOnDemand=function()return false end}
+    check(pack.EnableProvider()=="reload-required" and enabled==2 and saves==1,
+        "explicit enable persists non-load-on-demand package and requests a later explicit reload")
+end
+for _,flavor in ipairs({"retail","forever"})do
+    local function actionClient(legacy)
+        local h,pack=client(flavor,{db={settings={font="Fonts\\ARIALN.TTF"}}})
+        local state={enabled=0,enables=0,saves=0,reloads=0,exists=true}
+        local methods={DoesAddOnExist=function()return state.exists end,IsAddOnLoaded=function()return false,false end,
+            GetAddOnEnableState=function(a,b)
+                check(legacy and a=="PlayerGUID" and b=="AntraktFonts" or not legacy and a=="AntraktFonts" and b=="PlayerGUID","enable-state query is character-scoped")
+                return state.enabled
+            end,
+            EnableAddOn=function(name,guid)
+                check(name=="AntraktFonts" and guid=="PlayerGUID","modern and legacy enable both use name then GUID")
+                state.enables=state.enables+1;state.enabled=2
+            end,SaveAddOns=function(...)
+                check(select("#",...)==0,"save receives no helper return values")
+                state.saves=state.saves+1
+            end,LoadAddOn=function()error("non-load-on-demand provider must never be loaded implicitly")end}
+        if legacy then h.env.C_AddOns=nil;for name,method in pairs(methods)do h.env[name]=method end
+        else h.env.C_AddOns=methods end
+        h.env.ReloadUI=function()state.reloads=state.reloads+1 end
+        h:fire("PLAYER_ENTERING_WORLD")
+        return h,pack,state,methods
+    end
+    for _,legacy in ipairs({false,true})do
+        local h,pack,state=actionClient(legacy)
+        local window=h.env.DoYouNeedItFontPackNotice
+        check(window.action=="enable" and window.actionButton:IsVisible(),"disabled information offers explicit Enable")
+        window.actionButton:FireScript("OnClick")
+        check(state.enables==1 and state.saves==1 and state.reloads==0,"enable saves only its click and never reloads automatically")
+        check(window:IsVisible() and window.action=="reload" and window.actionButton:GetText()==pack.Message("enUS","reload"),"same owned presentation now offers explicit Reload UI")
+        check(window.body:GetText():find(pack.Message("enUS","reloadRequired"),1,true),"verified enabled state explains reload requirement")
+        check(h.env.DoYouNeedItDB.fontPackNotice==nil and h.env.DoYouNeedItDB.settings.font=="Fonts\\ARIALN.TTF","enable never acknowledges notice or changes font preference")
+        local busy,owner=h.env.AntraktFontNoticeCoordinator:RequestShow()
+        check(busy and owner=="DoYouNeedIt","enable state transition retains common modal ownership")
+        window.actionButton:FireScript("OnClick")
+        check(state.saves==2 and state.reloads==1,"only a second explicit click reloads UI")
+    end
+    for _,mode in ipairs({"combat","secretCombat","secretGUID","missingGUID","missing","ready","saveMissing","saveInvalid","listVisible","listHiddenParent","listUnknown","enableError","unchanged","saveError","hidden"})do
+        local h,pack,state,methods=actionClient(false)
+        local window=h.env.DoYouNeedItFontPackNotice
+        if mode=="combat"then h.env.InCombatLockdown=function()return true end
+        elseif mode=="secretCombat"then h.env.InCombatLockdown=function()return h:secretValue("combat")end
+        elseif mode=="secretGUID"then h.env.UnitGUID=function()return h:secretValue("character")end
+        elseif mode=="missingGUID"then h.env.UnitGUID=function()return nil end
+        elseif mode=="missing"then state.exists=false
+        elseif mode=="ready"then h.env.AntraktFonts={GetCatalog=function()return{formatMajor=1,catalogRevision="ready-before-click",fonts=snapshot.fonts}end}
+        elseif mode=="saveMissing"then methods.SaveAddOns=nil
+        elseif mode=="saveInvalid"then methods.SaveAddOns=123;h.env.SaveAddOns=function()error("no conflicting legacy save")end
+        elseif mode=="listVisible"then h.env.AddonList={IsVisible=function()return true end}
+        elseif mode=="listHiddenParent"then h.env.AddonList={IsVisible=function()return false end,IsShown=function()return true end}
+        elseif mode=="listUnknown"then h.env.AddonList={IsVisible=function()error("unknown visibility")end}
+        elseif mode=="enableError"then methods.EnableAddOn=function()state.enables=state.enables+1;error("enable failed")end
+        elseif mode=="unchanged"then methods.EnableAddOn=function()state.enables=state.enables+1 end
+        elseif mode=="saveError"then methods.SaveAddOns=function()state.saves=state.saves+1;error("save failed")end
+        elseif mode=="hidden"then window:Hide()end
+        window.actionButton:FireScript("OnClick")
+        check(state.reloads==0,"guarded or failed enable never reloads: "..mode)
+        if mode=="enableError"or mode=="unchanged"then
+            check(state.saves==0 and window.body:GetText():find(pack.Message("enUS","enableFailed"),1,true),"failed enable stays truthful before saving")
+        elseif mode=="saveError"then check(state.enables==1 and state.saves==1 and pack.actionResult=="failed","save failure is contained without success claim")
+        else check(state.enables==0 and state.saves==0,"unsafe or stale enable performs no global writes: "..mode)end
+    end
+    for _,mode in ipairs({"combat","missing","disabled","ready","saveError","disabledDuringSave","combatDuringSave","hidden"})do
+        local h,pack,state,methods=actionClient(false)
+        local window=h.env.DoYouNeedItFontPackNotice
+        window.actionButton:FireScript("OnClick")
+        local before=state.saves
+        if mode=="combat"then h.env.InCombatLockdown=function()return true end
+        elseif mode=="missing"then state.exists=false
+        elseif mode=="disabled"then state.enabled=0
+        elseif mode=="ready"then h.env.AntraktFonts={GetCatalog=function()return{formatMajor=1,catalogRevision="ready-before-reload",fonts=snapshot.fonts}end}
+        elseif mode=="saveError"then methods.SaveAddOns=function()state.saves=state.saves+1;error("save failed")end
+        elseif mode=="disabledDuringSave"then methods.SaveAddOns=function()state.saves=state.saves+1;state.enabled=0 end
+        elseif mode=="combatDuringSave"then methods.SaveAddOns=function()state.saves=state.saves+1;h.env.InCombatLockdown=function()return true end end
+        elseif mode=="hidden"then window:Hide()end
+        window.actionButton:FireScript("OnClick")
+        check(state.reloads==0,"stale, hidden, combat or save-failed reload is blocked: "..mode)
+        check(state.saves==before+((mode=="saveError" or mode=="disabledDuringSave" or mode=="combatDuringSave") and 1 or 0),"reload guards precede global saves")
+    end
+end
+for _,flavor in ipairs({"retail","forever"})do
+    for _,action in ipairs({"enable","reload"})do
+        local h,pack=client(flavor)
+        local enabled,combat,saves,reloads,armed=0,false,0,0,false
+        h.env.InCombatLockdown=function()return combat end
+        h.env.C_AddOns={DoesAddOnExist=function()return true end,IsAddOnLoaded=function()return false,false end,
+            GetAddOnEnableState=function()
+                if enabled==2 and (action=="enable" or armed)then combat=true end
+                return enabled
+            end,EnableAddOn=function()enabled=2 end,
+            SaveAddOns=function()saves=saves+1;armed=true end}
+        h.env.ReloadUI=function()reloads=reloads+1 end
+        if action=="enable"then
+            pack.EnableProvider()
+            check(saves==0,"combat discovered during enabled readback blocks SaveAddOns")
+        else
+            check(pack.EnableProvider()=="reload-required","setup for fresh reload query guard")
+            armed=false;combat=false
+            pack.ReloadProvider()
+            check(reloads==0 and saves==2,"combat discovered in post-save metadata blocks ReloadUI")
+        end
+    end
+end
 print("Shared font runtime: " .. checks .. " checks passed")

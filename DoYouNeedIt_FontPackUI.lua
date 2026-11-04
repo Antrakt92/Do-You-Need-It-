@@ -5,18 +5,35 @@ local coordinator = namespace.AntraktFontNotice.GetCoordinator()
 local function outOfCombat()
     local ok, combat = pcall(InCombatLockdown)
     if not ok or type(combat) ~= "boolean" then return false end
-    if type(issecretvalue) == "function" and issecretvalue(combat) then return false end
+    if type(issecretvalue)=="function" then
+        local guarded,secret=pcall(issecretvalue,combat)
+        if not guarded or secret~=false then return false end
+    end
     return combat == false
+end
+local function visible(frame)
+    if not frame then return false end
+    local ok,shown=pcall(frame.IsVisible or frame.IsShown,frame)
+    if not ok or type(shown)~="boolean" then return false end
+    if type(issecretvalue)=="function" then
+        local guarded,secret=pcall(issecretvalue,shown)
+        if not guarded or secret~=false then return false end
+    end
+    return shown==true
 end
 function pack.InstallUI(addon, existing, apply, refresh)
     if not existing and DoYouNeedItDB.fontPackNotice == nil then DoYouNeedItDB.fontPackNotice = "fresh" end
     local manualRequest = false
+    local registeredState, registeredStatus, registered = nil, nil, false
+    local executeAction
     local function locale() return Core.ResolveActiveLocale(addon.state.settings.forceLocale, GetLocale()) end
     local function text(id) return pack.Message(locale(), id) end
     local function guidance(owner, activeLocale, notice)
         local id = ({["provider-disabled"]="disabled", ["provider-not-loaded"]="notLoaded",
             ["provider-incompatible"]="incompatible", ready="ready"})[pack.status]
             or (notice and "missing" or "settingsMissing")
+        if pack.status=="provider-disabled" and pack.actionResult=="failed" then id="enableFailed" end
+        if pack.status=="provider-not-loaded" and pack.enabledForCurrentCharacter and pack.actionResult=="reload-required" then id="reloadRequired" end
         local message = pack.Message(activeLocale, id)
         local preferred = pack.Preferred(owner.state.settings)
         local missing = pack.Coverage(preferred) and not owner.FontAvailable(pack.Resolve(preferred))
@@ -48,6 +65,20 @@ function pack.InstallUI(addon, existing, apply, refresh)
         if type(addon.linkFrame.IsVisible) == "function" then return addon.linkFrame:IsVisible() == true end
         return addon.linkFrame:IsShown() == true
     end
+    local function updateAction(frame)
+        frame.body:SetText(guidance(addon,locale(),true))
+        frame.action=pack.status=="provider-disabled" and "enable"
+            or pack.status=="provider-not-loaded" and pack.enabledForCurrentCharacter and "reload" or nil
+        frame.actionButton:SetShown(frame.action~=nil)
+        if frame.action then frame.actionButton:SetText(text(frame.action));frame.actionButton:Enable()
+        else frame.actionButton:Disable() end
+        local downloadNeeded=pack.status~="provider-disabled" and pack.status~="provider-not-loaded"
+        frame.copy:SetShown(downloadNeeded)
+        if not downloadNeeded then frame.copy:Disable()
+        elseif not(pack.snapshot.links.curseforge or pack.snapshot.links.wago or pack.snapshot.links.github)then
+            frame.body:SetText(frame.body:GetText().."\n\n"..text("linkUnavailable"));frame.copy:Disable()
+        else frame.copy:Enable()end
+    end
     local function show(confirm, suspend)
         if not addon.fontPackNotice then
             local frame = CreateFrame("Frame", "DoYouNeedItFontPackNotice", UIParent, "BackdropTemplate")
@@ -66,6 +97,9 @@ function pack.InstallUI(addon, existing, apply, refresh)
             addon.StyleCloseButton(frame.cross)
             frame.copy = addon.CreateFlatSettingsButton(frame, 245, true)
             frame.copy:SetPoint("BOTTOMLEFT", 16, 16)
+            frame.actionButton=addon.CreateFlatSettingsButton(frame,245,true)
+            frame.actionButton:SetPoint("BOTTOMLEFT",16,16)
+            frame.actionButton:SetScript("OnClick",function()executeAction(frame)end)
             frame:SetScript("OnHide", function() if frame.suspend then frame.suspend() end end)
             frame:EnableKeyboard(true)
             frame:SetScript("OnKeyDown", function(self, key)
@@ -80,26 +114,20 @@ function pack.InstallUI(addon, existing, apply, refresh)
         local frame = addon.fontPackNotice
         frame.confirm, frame.suspend = confirm, suspend
         frame.title:SetText(text("title"))
-        frame.body:SetText(guidance(addon, locale(), true))
+        updateAction(frame)
         if not addon.ApplyRegionFont(frame.title, pack.baselinePath, 15, "")
             or not addon.ApplyRegionFont(frame.body, pack.baselinePath, 12, "") then return false end
         frame.close:SetText(text("gotIt")); frame.copy:SetText(text("copyLink"))
         if not addon.ApplyRegionFont(frame.close:GetFontString(), pack.baselinePath, 12, "")
-            or not addon.ApplyRegionFont(frame.copy:GetFontString(), pack.baselinePath, 12, "") then return false end
+            or not addon.ApplyRegionFont(frame.copy:GetFontString(), pack.baselinePath, 12, "")
+            or not addon.ApplyRegionFont(frame.actionButton:GetFontString(),pack.baselinePath,12,"") then return false end
         frame.close:SetScript("OnClick", function() confirm(); frame:Hide() end)
         frame.cross:SetScript("OnClick", function() confirm(); frame:Hide() end)
         frame.copy:SetScript("OnClick", function() if copyLink() then confirm(); frame:Hide() end end)
-        local downloadNeeded = pack.status ~= "provider-disabled" and pack.status ~= "provider-not-loaded"
-        frame.copy:SetShown(downloadNeeded)
-        if not downloadNeeded then frame.copy:Disable()
-        elseif not (pack.snapshot.links.curseforge or pack.snapshot.links.wago or pack.snapshot.links.github) then
-            frame.body:SetText(frame.body:GetText() .. "\n\n" .. text("linkUnavailable")); frame.copy:Disable()
-        else frame.copy:Enable() end
         frame:Show()
         if type(frame.IsVisible) == "function" then return frame:IsVisible() == true end
         return frame:IsShown() == true
     end
-    local registeredState, registeredStatus, registered = nil, nil, false
     pack.registerNotice = function()
         local state = DoYouNeedItDB.fontPackNotice
         if state ~= "fresh" and state ~= "acknowledged" and state ~= "satisfied" then state = nil end
@@ -129,6 +157,22 @@ function pack.InstallUI(addon, existing, apply, refresh)
                 return true
             end,
         })
+    end
+    executeAction=function(frame)
+        if not outOfCombat() or not visible(frame) or not visible(frame.actionButton) then return end
+        local result
+        if frame.action=="enable" then result=pack.EnableProvider()
+        elseif frame.action=="reload" then result=pack.ReloadProvider()
+        else return end
+        pack.actionResult=result
+        addon.availableFontPaths=nil;addon.fontListCache=nil
+        apply();refresh()
+        if pack.status=="ready" then pack.registerNotice();dismiss()
+        else
+            -- Keep this visible presentation's callbacks valid across a state change.
+            registeredStatus=pack.status
+            updateAction(frame)
+        end
     end
     pack.registerNotice()
     pack.RefreshMarker = function(owner, activeLocale)

@@ -53,12 +53,14 @@ local function query(method, ...)
     if ok then return a,b,c,d,e,f end
 end
 function pack.RefreshMetadata()
+    pack.enabledForCurrentCharacter = nil
     local existenceAPI = api("DoesAddOnExist")
     local exists = clean(query(existenceAPI, "AntraktFonts"), "boolean")
     if existenceAPI == nil then
         local info = api("GetAddOnInfo")
         -- Named GetAddOnInfo can echo a missing name; inspect actual indices.
-        local count = clean(query(api("GetNumAddOns")), "number")
+        local countMethod = api("GetNumAddOns")
+        local count = clean(query(countMethod), "number")
         if count and count >= 0 and count <= 1024 and count % 1 == 0 and info then
             local complete = true
             exists = false
@@ -84,10 +86,81 @@ function pack.RefreshMetadata()
             else enabled = query(method, character, "AntraktFonts") end
         end
         if clean(enabled, "number") == 0 then status = "provider-disabled" end
+        if clean(enabled, "number") == 1 or clean(enabled, "number") == 2 then pack.enabledForCurrentCharacter = true end
     end
     pack.metadataStatus = status
     if pack.synced and pack.provider == nil then pack.status = status end
     return status
+end
+local function character()
+    local guid = clean(query(rawget(_G,"UnitGUID"),"player"),"string")
+    if guid and #guid>0 and #guid<=128 and not guid:find("%c") then return guid end
+end
+local function stateFor(guid)
+    local callback, modern = api("GetAddOnEnableState")
+    local state
+    if modern then state=query(callback,"AntraktFonts",guid) else state=query(callback,guid,"AntraktFonts") end
+    state=clean(state,"number")
+    if state==0 or state==1 or state==2 then return state end
+end
+local function enabledFor(guid)
+    local state=stateFor(guid)
+    return state==1 or state==2
+end
+local function actionSafe()
+    if clean(query(rawget(_G,"InCombatLockdown")),"boolean")~=false then return false end
+    local list=rawget(_G,"AddonList")
+    if type(list)=="nil" then return true end
+    local known=false
+    for _,name in ipairs({"IsShown","IsVisible"})do
+        local ok,callback=pcall(function()return list[name]end)
+        if not ok then return false end
+        if type(callback)~="nil" then
+            known=true
+            if clean(query(clean(callback,"function"),list),"boolean")~=false then return false end
+        end
+    end
+    return known and clean(query(rawget(_G,"InCombatLockdown")),"boolean")==false
+end
+local function actorSafe(guid)
+    return character()==guid and actionSafe()
+end
+local function actionContext(status)
+    if not actionSafe() then return nil end
+    pack.RefreshMetadata();pack.Sync()
+    if pack.status~=status then return nil end
+    local guid,save=character(),api("SaveAddOns")
+    if not guid or not clean(save,"function") then return nil end
+    return guid,save
+end
+function pack.EnableProvider()
+    local guid,save=actionContext("provider-disabled")
+    if not guid then return "blocked" end
+    local callback=api("EnableAddOn")
+    if not clean(callback,"function") then return "failed" end
+    if stateFor(guid)~=0 or not actorSafe(guid) then return "blocked" end
+    pcall(callback,"AntraktFonts",guid)
+    if not enabledFor(guid) or not actorSafe(guid) then
+        pack.RefreshMetadata();return "failed"
+    end
+    if not pcall(save) then pack.RefreshMetadata();return "failed" end
+    if not actorSafe(guid) then pack.RefreshMetadata();return "blocked" end
+    pack.RefreshMetadata();pack.Sync()
+    if pack.status=="ready" then return "available" end
+    if pack.status=="provider-not-loaded" and pack.enabledForCurrentCharacter then return "reload-required" end
+    return "failed"
+end
+function pack.ReloadProvider()
+    local guid,save=actionContext("provider-not-loaded")
+    local reload=clean(rawget(_G,"ReloadUI"),"function")
+    if not guid or not reload or not enabledFor(guid) then return "blocked" end
+    if not actorSafe(guid) then return "blocked" end
+    if not pcall(save) then pack.RefreshMetadata();return "failed" end
+    if not actorSafe(guid) then return "blocked" end
+    pack.RefreshMetadata();pack.Sync()
+    if pack.status~="provider-not-loaded" or not enabledFor(guid) or not actorSafe(guid) then return "blocked" end
+    if pcall(reload) then return "reload-requested" end
+    return "failed"
 end
 function pack.Validate(catalog)
     if type(catalog) ~= "table" or catalog.formatMajor ~= 1

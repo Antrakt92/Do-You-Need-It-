@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Enable an installed Antrakt Fonts package for the current character from its information window, then reload the UI with a separate click.
+
 - Distinguish missing, disabled and not-yet-loaded Antrakt Fonts in Font settings and the transition notice.
 
 - Preview hovered fonts across Settings text, then restore the readable menu typography when the preview ends.
