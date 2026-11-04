@@ -13,6 +13,42 @@ local function assertTruthy(value, label)
     end
 end
 
+do
+    local legacy = Core.NormalizeSettings({ whisperTemplate = Core.DEFAULT_WHISPER_TEMPLATE, forceLocale = "ruRU" })
+    assertEqual(legacy.whisperTemplateMode, "auto", "legacy stock template becomes an automatic default")
+    assertEqual(Core.ResolveWhisperTemplate(legacy, "enUS"), "Привет! Тебе нужен {item}?", "default whisper follows committed addon language")
+    for _, locale in ipairs({"enUS","ruRU","deDE","esES","esMX","frFR","itIT","ptBR","koKR","zhCN","zhTW"}) do
+        local template = Core.GetDefaultWhisperTemplate(locale)
+        assertTruthy(template:find("{item}",1,true), "localized default retains the item placeholder: " .. locale)
+        local _, placeholders=template:gsub("{item}","")
+        assertEqual(placeholders,1,"localized default has exactly one complete item placeholder")
+        assertTruthy(#template<=Core.MAX_WHISPER_TEMPLATE_LENGTH,"localized default fits the template byte budget")
+        local automatic = Core.NormalizeSettings({forceLocale=locale})
+        assertEqual(Core.ResolveWhisperTemplate(automatic,"enUS"),template,"automatic template follows selected language: " .. locale)
+        assertEqual(Core.ResolveWhisperTemplate(Core.NormalizeSettings({forceLocale="auto"}),locale),template,"automatic language follows the client: " .. locale)
+        local custom = Core.NormalizeSettings({whisperTemplateMode="custom",whisperTemplate=Core.DEFAULT_WHISPER_TEMPLATE,forceLocale=locale})
+        assertEqual(Core.ResolveWhisperTemplate(custom,"enUS"),Core.DEFAULT_WHISPER_TEMPLATE,"explicit custom English is never translated: " .. locale)
+        assertEqual(Core.CreateState(Core.NormalizeSettings(custom)).settings.whisperTemplateMode,"custom","custom mode survives repeated state normalization")
+        assertEqual(Core.CreateState(automatic).settings.whisperTemplateMode,"auto","automatic mode survives state construction")
+        local translatedCustom = Core.NormalizeSettings({whisperTemplate=template,forceLocale="enUS"})
+        if locale~="enUS" then assertEqual(translatedCustom.whisperTemplateMode,"custom","legacy localized custom is not recognized as an automatic default") end
+        local item="|cffa335ee|Hitem:123|h[Item]|h|r"
+        local message,reason=Core.FormatWhisperMessage(template,item)
+        assertTruthy(message and not reason and message:find(item,1,true),"localized default passes unchanged chat validation: " .. locale)
+        assertEqual(Core.FormatWhisperMessage(template,string.rep("x",256)),nil,"localized default cannot bypass outgoing byte limits")
+    end
+    local before=Core.ResolveWhisperTemplate(legacy,"enUS")
+    assertEqual(Core.GetWhisperTemplateForLocale(legacy,"deDE"),Core.GetDefaultWhisperTemplate("deDE"),"editor can preview another locale")
+    assertEqual(Core.ResolveWhisperTemplate(legacy,"enUS"),before,"preview lookup never mutates the send language")
+    assertEqual(legacy.whisperTemplate,Core.DEFAULT_WHISPER_TEMPLATE,"automatic mode preserves a stable stored sentinel")
+    local custom=Core.NormalizeSettings({whisperTemplate="Need this {item}?",whisperTemplateMode="custom",forceLocale="zhTW"})
+    assertEqual(Core.GetWhisperTemplateForLocale(custom,"ruRU"),"Need this {item}?","custom text survives language previews")
+    assertEqual(Core.NormalizeSettings({whisperTemplateMode="auto",whisperTemplate="old text"}).whisperTemplate,Core.DEFAULT_WHISPER_TEMPLATE,"reset auto mode clears stale custom text")
+    assertEqual(Core.NormalizeSettings({whisperTemplate="   "}).whisperTemplateMode,"auto","blank legacy template resets to automatic default")
+    assertEqual(Core.NormalizeSettings({whisperTemplate="Custom text",whisperTemplateMode="unknown"}).whisperTemplateMode,"custom","unknown mode preserves non-default legacy text")
+    assertEqual(Core.GetDefaultWhisperTemplate("unknown"),Core.DEFAULT_WHISPER_TEMPLATE,"unknown locale defaults to English")
+end
+
 local settings = Core.NormalizeSettings({})
 assertEqual(settings.autoWhisper, false, "auto whisper defaults off")
 assertEqual(settings.autoDelay, 10, "auto delay defaults to 10")

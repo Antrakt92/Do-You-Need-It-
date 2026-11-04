@@ -486,11 +486,29 @@ for locale, labels in pairs(demoLoadLabels) do
     LABELS_BY_LOCALE[locale]["Try Demo again after your equipment has loaded."] = labels[3]
 end
 
+local defaultWhispers = {
+    enUS = DEFAULT_WHISPER_TEMPLATE,
+    ruRU = "Привет! Тебе нужен {item}?",
+    deDE = "Hey, brauchst du {item}?",
+    esES = "Hola, ¿necesitas {item}?",
+    esMX = "Hola, ¿necesitas {item}?",
+    frFR = "Salut, tu as besoin de {item} ?",
+    itIT = "Ciao, ti serve {item}?",
+    ptBR = "Oi, você precisa de {item}?",
+    koKR = "안녕하세요, {item} 필요하세요?",
+    zhCN = "你好，你需要{item}吗？",
+    zhTW = "你好，你需要{item}嗎？",
+}
+for locale, template in pairs(defaultWhispers) do
+    LABELS_BY_LOCALE[locale][DEFAULT_WHISPER_TEMPLATE] = template
+end
+
 local DEFAULTS = {
     autoWhisper = false,
     debug = false,
     autoDelay = 10,
     whisperTemplate = DEFAULT_WHISPER_TEMPLATE,
+    whisperTemplateMode = "auto",
     minDelay = 3,
     maxDelay = 30,
     maxHistoryGroups = 10,
@@ -712,6 +730,30 @@ function Core.NormalizeWhisperTemplate(template)
         return stripPartialItemPlaceholder(truncateUtf8Bytes(template, MAX_WHISPER_TEMPLATE_LENGTH))
     end
     return template
+end
+
+function Core.GetDefaultWhisperTemplate(locale)
+    local labels = LABELS_BY_LOCALE[locale] or LABELS_BY_LOCALE.enUS
+    return labels[DEFAULT_WHISPER_TEMPLATE] or DEFAULT_WHISPER_TEMPLATE
+end
+
+function Core.IsDefaultWhisperTemplate(settings)
+    settings = type(settings) == "table" and settings or {}
+    if settings.whisperTemplateMode == "custom" then return false end
+    if settings.whisperTemplateMode == "auto" then return true end
+    return Core.NormalizeWhisperTemplate(settings.whisperTemplate) == DEFAULT_WHISPER_TEMPLATE
+end
+
+function Core.GetWhisperTemplateForLocale(settings, locale)
+    settings = type(settings) == "table" and settings or {}
+    if Core.IsDefaultWhisperTemplate(settings) then return Core.GetDefaultWhisperTemplate(locale) end
+    return Core.NormalizeWhisperTemplate(settings.whisperTemplate)
+end
+
+function Core.ResolveWhisperTemplate(settings, clientLocale)
+    settings = type(settings) == "table" and settings or {}
+    -- Outgoing text uses committed settings only, never a UI hover locale.
+    return Core.GetWhisperTemplateForLocale(settings, Core.ResolveActiveLocale(settings.forceLocale, clientLocale))
 end
 
 function Core.FormatWhisperMessage(template, itemLink)
@@ -1517,6 +1559,8 @@ function Core.NormalizeSettings(saved)
     settings.autoWhisper = saved.autoWhisper == true
     settings.debug = saved.debug == true
     settings.whisperTemplate = Core.NormalizeWhisperTemplate(saved.whisperTemplate)
+    settings.whisperTemplateMode = Core.IsDefaultWhisperTemplate(saved) and "auto" or "custom"
+    if settings.whisperTemplateMode == "auto" then settings.whisperTemplate = DEFAULT_WHISPER_TEMPLATE end
     local minDelay = asNumber(saved.minDelay, DEFAULTS.minDelay)
     local maxDelay = asNumber(saved.maxDelay, DEFAULTS.maxDelay)
     if minDelay < 0 or minDelay > DEFAULTS.maxDelay or maxDelay < minDelay or maxDelay > DEFAULTS.maxDelay then

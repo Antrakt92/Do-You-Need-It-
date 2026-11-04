@@ -139,6 +139,8 @@ Open the gear button or `/dyni settings` to change whispers, language, font, and
 
 Auto-whisper is **off by default**. If enabled, it waits 10 seconds by default; the delay can be set from 3 to 30 seconds. A pending whisper is cancelled when you ask manually, clear the current rows, disable auto-whisper, or the looter leaves the group.
 
+The standard whisper follows the selected addon language. Custom messages stay as written; Reset restores the standard message for the current language. Hovering a language previews the text without changing outgoing messages.
+
 Use `{item}` in a custom message, for example: `Hey, do you need {item}?` If the completed message is too long or contains invalid characters, the row explains the problem. Edit the message and use Ask again.
 
 Language defaults to **Auto**, following your client locale. Settings and loot-status labels are translated into English, Russian, German, Spanish (Spain/Latin America), French, Italian, Brazilian Portuguese, Korean, and Simplified/Traditional Chinese. Language names use their native spelling.

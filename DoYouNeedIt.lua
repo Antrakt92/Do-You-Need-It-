@@ -2572,7 +2572,8 @@ local function SendWhisper(row, isAuto)
 
     row.pendingAutoWhisper = false
     row.autoToken = nil
-    local message, messageError = Core.FormatWhisperMessage(Addon.state.settings.whisperTemplate, row.itemLink)
+    local message, messageError = Core.FormatWhisperMessage(
+        Core.ResolveWhisperTemplate(Addon.state.settings, ClientLocale()), row.itemLink)
     if not message then
         row.statusKey = messageError
         row.statusSeconds = nil
@@ -5600,13 +5601,12 @@ RefreshSettingsControls = function()
     end
     if Addon.whisperEditBox then
         local text = Addon.whisperEditBox:GetText()
+        local template = Core.GetWhisperTemplateForLocale(settings, ActiveLocale())
         -- An unfocused field can still hold a draft (for example after the
         -- first reset-confirmation click). Only refresh a clean editor.
-        if text == settings.whisperTemplate then
-            Addon.whisperEditorSavedValue = settings.whisperTemplate
-        elseif Addon.whisperEditorSavedValue == nil or text == Addon.whisperEditorSavedValue then
-            Addon.whisperEditBox:SetText(settings.whisperTemplate)
-            Addon.whisperEditorSavedValue = settings.whisperTemplate
+        if Addon.whisperEditorSavedValue == nil or text == Addon.whisperEditorSavedValue then
+            Addon.whisperEditBox:SetText(template)
+            Addon.whisperEditorSavedValue = template
         end
     end
     if Addon.whisperResetButton then
@@ -6269,7 +6269,7 @@ end
 function Addon.CommitFocusedWhisperTemplate()
     if Addon.whisperEditBox and not Addon.committingWhisperTemplate
         and (Addon.whisperTemplateFocused or (Addon.whisperEditorSavedValue ~= nil and Addon.state
-            and Addon.whisperEditBox:GetText() ~= Addon.state.settings.whisperTemplate)) then
+            and Addon.whisperEditBox:GetText() ~= Addon.whisperEditorSavedValue)) then
         Addon.committingWhisperTemplate = true
         Addon.whisperTemplateFocused = false
         Addon.whisperResetArmedAt = nil
@@ -6517,7 +6517,9 @@ CreateSettingsUI = function()
     end)
     frame.whisperEditBox:SetScript("OnEscapePressed", function(editBox)
         Addon.whisperTemplateFocused = false
-        editBox:SetText(Addon.state.settings.whisperTemplate)
+        local template = Core.GetWhisperTemplateForLocale(Addon.state.settings, ActiveLocale())
+        editBox:SetText(template)
+        Addon.whisperEditorSavedValue = template
         SafeCall(editBox.ClearFocus, editBox)
     end)
     frame.whisperEditBox:HookScript("OnEditFocusGained", function(self)
@@ -6747,11 +6749,19 @@ SetDelay = function(value, quiet, previewOnly)
 end
 
 SetWhisperTemplate = function(value)
-    Addon.state.settings.whisperTemplate = Core.NormalizeWhisperTemplate(value)
+    -- Clean localized/preview text is a view of the default, not a custom edit.
+    if type(value) ~= "string" or not value:match("%S") then
+        Addon.state.settings.whisperTemplate = Core.DEFAULT_WHISPER_TEMPLATE
+        Addon.state.settings.whisperTemplateMode = "auto"
+    elseif value ~= Addon.whisperEditorSavedValue then
+        Addon.state.settings.whisperTemplate = Core.NormalizeWhisperTemplate(value)
+        Addon.state.settings.whisperTemplateMode = "custom"
+    end
     Addon.state.settings = Core.NormalizeSettings(Addon.state.settings)
     if Addon.whisperEditBox then
-        Addon.whisperEditBox:SetText(Addon.state.settings.whisperTemplate)
-        Addon.whisperEditorSavedValue = Addon.state.settings.whisperTemplate
+        local template = Core.GetWhisperTemplateForLocale(Addon.state.settings, ActiveLocale())
+        Addon.whisperEditBox:SetText(template)
+        Addon.whisperEditorSavedValue = template
     end
     SaveDB()
     RefreshSettingsControls()
