@@ -84,6 +84,7 @@ function pack.InstallUI(addon, existing, apply, refresh)
             local frame = CreateFrame("Frame", "DoYouNeedItFontPackNotice", UIParent, "BackdropTemplate")
             addon.fontPackNotice = frame
             frame:SetSize(430, 210); frame:SetPoint("CENTER"); frame:SetFrameStrata("DIALOG")
+            frame:SetClampedToScreen(true);frame:EnableMouse(true)
             addon.StylePopup(frame)
             frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             frame.title:SetPoint("TOPLEFT", 18, -16); frame.title:SetWidth(394)
@@ -100,7 +101,10 @@ function pack.InstallUI(addon, existing, apply, refresh)
             frame.actionButton=addon.CreateFlatSettingsButton(frame,245,true)
             frame.actionButton:SetPoint("BOTTOMLEFT",16,16)
             frame.actionButton:SetScript("OnClick",function()executeAction(frame)end)
-            frame:SetScript("OnHide", function() if frame.suspend then frame.suspend() end end)
+            frame:SetScript("OnHide", function()
+                _G.AntraktWindowLayers.Unregister(frame)
+                if frame.suspend then frame.suspend() end
+            end)
             frame:EnableKeyboard(true)
             frame:SetScript("OnKeyDown", function(self, key)
                 if key == "ESCAPE" then
@@ -124,7 +128,9 @@ function pack.InstallUI(addon, existing, apply, refresh)
         frame.close:SetScript("OnClick", function() confirm(); frame:Hide() end)
         frame.cross:SetScript("OnClick", function() confirm(); frame:Hide() end)
         frame.copy:SetScript("OnClick", function() if copyLink() then confirm(); frame:Hide() end end)
+        _G.AntraktWindowLayers.Register(frame)
         frame:Show()
+        _G.AntraktWindowLayers.Focus(frame)
         if type(frame.IsVisible) == "function" then return frame:IsVisible() == true end
         return frame:IsShown() == true
     end
@@ -179,12 +185,22 @@ function pack.InstallUI(addon, existing, apply, refresh)
         if not owner.settingsFrame then return end
         if not owner.fontPackMarker then
             local button = owner.CreateFlatSettingsButton(owner.settingsFrame, 24, true)
-            button:SetPoint("LEFT", owner.fontDropdown, "RIGHT", 4, 0)
+            button:SetSize(24,24)
+            button:SetPoint("LEFT", owner.fontDropdown, "RIGHT", 8, 0)
+            button:EnableMouse(true);button:RegisterForClicks("LeftButtonUp")
+            button:SetFrameLevel(owner.fontDropdown:GetFrameLevel()+1)
+            local label=button:GetFontString()
+            label:ClearAllPoints();label:SetPoint("CENTER",button,"CENTER",0,0);label:SetSize(18,20)
+            owner.ApplyRegionFont(label,pack.baselinePath,12,"")
             button:SetText("i")
             button:SetScript("OnClick", function()
+                if not outOfCombat() or not visible(button) then return end
                 manualRequest = true
-                pcall(coordinator.RequestInfo, coordinator, "DoYouNeedIt")
+                local ok,shown,host=pcall(coordinator.RequestInfo, coordinator, "DoYouNeedIt")
                 manualRequest = false
+                if ok and shown and host=="DoYouNeedIt" and visible(owner.fontPackNotice) then
+                    _G.AntraktWindowLayers.Focus(owner.fontPackNotice)
+                end
             end)
             button:SetScript("OnEnter", function(self)
                 activeLocale = locale()

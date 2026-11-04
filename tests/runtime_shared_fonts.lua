@@ -681,4 +681,52 @@ for _,flavor in ipairs({"retail","forever"})do
         end
     end
 end
+for _,flavor in ipairs({"retail","forever"})do
+    local h,pack=client(flavor)
+    local createFrame=h.env.CreateFrame
+    local markerTextReady=false
+    h.env.CreateFrame=function(...)
+        local frame=createFrame(...)
+        local setText=frame.SetText
+        frame.SetText=function(self,value)
+            if value=="i" and self:GetWidth()==24 and self.GetFontString and self:GetFontString()then
+                check(self:GetFontString():GetFont()==pack.baselinePath,"marker font is initialized before its first glyph")
+                markerTextReady=true
+            end
+            return setText(self,value)
+        end
+        return frame
+    end
+    h:slash("settings");h:fire("PLAYER_ENTERING_WORLD")
+    local settings=h.env.DoYouNeedItSettingsFrame
+    local marker
+    for _,child in ipairs(settings.children)do if child.GetText and child:GetText()=="i"then marker=child end end
+    check(marker:GetFontString():GetFont()==pack.baselinePath,"information marker has an explicit readable font")
+    check(markerTextReady and marker.mouseEnabled==true,"information marker is initialized and mouse enabled")
+    local addon
+    for index=1,30 do local name,value=debug.getupvalue(h.env.SlashCmdList.DOYOUNEEDIT,index);if name=="Addon"then addon=value end end
+    for _,width in ipairs({540,840})do
+        h.env.DoYouNeedItFrame:SetWidth(width);addon.LayoutSettings()
+        local x=settings.fontDropdown.points[1][4]
+        local gap=marker.points[1][4]
+        local right=x+settings.fontDropdown:GetWidth()+gap+marker:GetWidth()
+        local surfaceRight=settings.appearanceSurface.points[2][4]
+        check(gap>=8 and marker:GetWidth()>=24 and marker:GetHeight()>=24,"marker has a separate full click target")
+        check(right<=surfaceRight-8,"marker stays inside Appearance instead of overlapping its gutter")
+        check(right+8<=settings.qualityButtons[1].points[1][4],"information target never overlaps quality controls")
+    end
+    marker:FireScript("OnClick")
+    local notice=h.env.DoYouNeedItFontPackNotice
+    check(notice and notice:IsVisible() and notice:GetFrameLevel()>settings:GetFrameLevel(),"information click opens above Settings, not behind it")
+    h.env.AntraktWindowLayers.Focus(h.env.DoYouNeedItFrame)
+    marker:FireScript("OnClick")
+    check(notice:GetFrameLevel()>settings:GetFrameLevel(),"repeated information click raises the existing coordinated window")
+    check(h.env.DoYouNeedItDB.fontPackNotice=="fresh","information display alone never acknowledges")
+    notice.cross:FireScript("OnClick")
+    check(not notice:IsVisible(),"information window closes normally after layering")
+    local before=settings.fontDropdown:GetWidth()
+    h.env.AntraktFonts={GetCatalog=function()return{formatMajor=1,catalogRevision="marker-ready",fonts=snapshot.fonts}end}
+    h:fire("ADDON_LOADED","AntraktFonts")
+    check(not marker:IsShown() and settings.fontDropdown:GetWidth()==before,"loaded provider hides marker without moving its reserved font field")
+end
 print("Shared font runtime: " .. checks .. " checks passed")

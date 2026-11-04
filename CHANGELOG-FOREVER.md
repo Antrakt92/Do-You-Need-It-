@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Keep the shared-font information button readable and spaced inside Settings, and open its window above Settings.
 - Enable an installed Antrakt Fonts package for the current character and reload the UI with one click in its information window.
 
 - Distinguish missing, disabled and not-yet-loaded Antrakt Fonts in Font settings and the transition notice.
