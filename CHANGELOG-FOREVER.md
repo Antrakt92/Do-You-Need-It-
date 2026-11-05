@@ -1,8 +1,8 @@
 # Do You Need It? — Forever Beta
 
-## 1.2.0 - 04-Nov-2026 — Shared fonts and localized whispers
+## 1.2.0 - 05-Nov-2026 — Shared fonts and localized whispers
 
-- Share the additional font collection through [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts). CurseForge files declare it as a required installation dependency; the addon still works without it using a compact, language-aware fallback. Preserve selected fonts and favorites.
+- Keep a compact multilingual baseline and support the optional [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts) collection when its packaged release becomes available. The addon works without it and preserves selected fonts and favorites.
 - Explain the font-package move once to existing users and show its status in Settings. Enable an installed disabled package and reload the UI with one click.
 - Preview hovered fonts throughout Settings, then restore readable menu typography. Keep font and language menus stable while hovering.
 - Translate the standard whisper into the selected addon language while preserving custom messages. Reset restores the localized default; language previews do not change outgoing messages.

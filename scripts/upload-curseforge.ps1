@@ -170,13 +170,6 @@ $metadata = [ordered]@{
     gameVersionNames = @($GameVersionNames)
     releaseType = $ReleaseType
     isMarkedForManualRelease = [bool]$ManualRelease
-    relations = @{
-        projects = @(@{
-            slug = 'antrakt-fonts'
-            projectID = '1783613'
-            type = 'requiredDependency'
-        })
-    }
 }
 function Resolve-ForeverVersionId {
     param([string]$Json)

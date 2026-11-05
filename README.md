@@ -139,15 +139,15 @@ Open the gear button or `/dyni settings` to change whispers, language, font, and
 
 Auto-whisper is **off by default**. If enabled, it waits 10 seconds by default; the delay can be set from 3 to 30 seconds. A pending whisper is cancelled when you ask manually, clear the current rows, disable auto-whisper, or the looter leaves the group.
 
-> **Upcoming update:** Localized standard whispers and the shared font package described below are being prepared for the next release. The download links above still point to the current released builds.
+> **Shared fonts:** The optional Antrakt Fonts package is not available as a published download yet. DoYouNeedIt works with its embedded multilingual baseline and keeps your saved font choices.
 
-The standard whisper will follow the selected addon language. Custom messages stay as written; Reset restores the standard message for the current language. Hovering a language previews the text without changing outgoing messages.
+The standard whisper follows the selected addon language. Custom messages stay as written; Reset restores the standard message for the current language. Hovering a language previews the text without changing outgoing messages.
 
 Use `{item}` in a custom message, for example: `Hey, do you need {item}?` If the completed message is too long or contains invalid characters, the row explains the problem. Edit the message and use Ask again.
 
 Language defaults to **Auto**, following your client locale. Settings and loot-status labels are translated into English, Russian, German, Spanish (Spain/Latin America), French, Italian, Brazilian Portuguese, Korean, and Simplified/Traditional Chinese. Language names use their native spelling.
 
-The upcoming update keeps a compact multilingual baseline in DoYouNeedIt and moves the additional collection to optional [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts). One installation serves compatible addons in the same client, and the font package updates independently, so routine DoYouNeedIt updates no longer download the whole collection again. Choose its Retail or Forever build when available. Blizzard and LibSharedMedia fonts remain available.
+DoYouNeedIt includes a compact multilingual baseline and supports the additional collection through optional [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts). One installation serves compatible addons in the same client, and the font package updates independently, so routine DoYouNeedIt updates no longer download the whole collection again. Choose its Retail or Forever build when available. Blizzard and LibSharedMedia fonts remain available.
 
 Your selected face and favorites stay saved when a font is unavailable; a readable fallback is used temporarily. Font settings distinguish a missing, disabled or not-yet-loaded package. Existing users receive one explanation of the font-package move, including when the package is already ready. New installations skip this automatic notice, and an explicit acknowledgement prevents it from repeating across compatible addons. If the package is installed but disabled, **Enable Antrakt Fonts** enables it for the current character and reloads the UI in one click.
 
