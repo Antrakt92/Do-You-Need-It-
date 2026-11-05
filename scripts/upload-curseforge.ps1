@@ -173,7 +173,7 @@ $metadata = [ordered]@{
     relations = @{
         projects = @(@{
             slug = 'antrakt-fonts'
-            projectID = '1783613'
+            projectID = 1783613
             type = 'requiredDependency'
         })
     }

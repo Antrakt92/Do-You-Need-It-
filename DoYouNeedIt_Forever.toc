@@ -4,7 +4,7 @@
 ## Group: DoYouNeedIt
 ## Notes: Group gear drops, equipment comparisons and whispers for WoW Forever beta.
 ## Author: Antrakt92
-## Version: 1.2.1
+## Version: 1.2.2
 ## IconTexture: Interface\AddOns\DoYouNeedIt\media\icon.png
 ## OptionalDeps: AntraktFonts
 ## SavedVariables: DoYouNeedItDB DoYouNeedItSelfTest

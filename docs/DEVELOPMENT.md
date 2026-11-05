@@ -52,7 +52,8 @@ recover forward with a new version.
 The upload script reads the project ID, version, and client interfaces from the TOC. Live uploads require `CURSEFORGE_API_TOKEN` in the process environment; never put credentials in source files or reports. Use `-DryRun` when checking metadata.
 
 New CurseForge files declare Antrakt Fonts (`antrakt-fonts`, project `1783613`)
-as a required dependency for both clients. The dependency target is independent
+as a required dependency for both clients. Serialize `projectID` as a JSON integer,
+not a quoted string: the live upload API rejects string values. The dependency target is independent
 of the consumer project ID, including `-ProjectId` overrides. Runtime
 `OptionalDeps` remains in both TOCs, and the embedded baseline keeps manual and
 client installations usable without the collection. Before publication, verify

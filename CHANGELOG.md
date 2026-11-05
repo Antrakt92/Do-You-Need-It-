@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.2 - 05-Nov-2026 — Shared font delivery correction
+
+- Correct the shared-font dependency metadata so CurseForge can accept the upload and obtain Antrakt Fonts alongside this addon.
+- Include the download guidance prepared for 1.2.1; that release attempt was not published.
+
 ## 1.2.1 - 05-Nov-2026 — Shared font installation
 
 - Declare [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts) as a required dependency in new CurseForge files so the app can obtain the matching font collection. Keep the readable fallback and saved font choices when the collection is unavailable.

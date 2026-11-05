@@ -34,14 +34,18 @@ try {
             Assert-Case ($actual -ceq $expected) "Wrong flavor's $entryName was packaged"
         }
     } finally { $archive.Dispose() }
-    $result = & (Join-Path $repoRoot 'scripts/upload-curseforge.ps1') -Flavor Forever -ZipPath $zip -DryRun `
-        -GameVersionsJson '[{"id":111,"name":"1.60.1","gameVersionTypeID":517},{"id":222,"name":"1.60.1","gameVersionTypeID":88568}]' | ConvertFrom-Json
+    $rawJson = & (Join-Path $repoRoot 'scripts/upload-curseforge.ps1') -Flavor Forever -ZipPath $zip -DryRun `
+        -GameVersionsJson '[{"id":111,"name":"1.60.1","gameVersionTypeID":517},{"id":222,"name":"1.60.1","gameVersionTypeID":88568}]'
+    $result = $rawJson | ConvertFrom-Json
     $projects = $result.Metadata.relations.projects
     Assert-Case ($projects -is [array] -and $projects.Count -eq 1 -and
-        $projects[0].slug -ceq 'antrakt-fonts' -and $projects[0].projectID -is [string] -and
-        $projects[0].projectID -ceq '1783613' -and $projects[0].type -ceq 'requiredDependency') 'Forever must require the exact Antrakt Fonts project as a project array'
+        $projects[0].slug -ceq 'antrakt-fonts' -and
+        ($projects[0].projectID -is [int] -or $projects[0].projectID -is [long]) -and
+        $projects[0].projectID -eq 1783613 -and $projects[0].type -ceq 'requiredDependency') 'Forever must require the exact numeric Antrakt Fonts project in a project array'
+    Assert-Case ($rawJson -match '"projectID"\s*:\s*1783613(?=\s*[,}])') 'Forever raw JSON must use an integer project ID'
+    Assert-Case ($rawJson -notmatch '"projectID"\s*:\s*"1783613"') 'Forever must never serialize a quoted project ID'
     $override = & (Join-Path $repoRoot 'scripts/upload-curseforge.ps1') -Flavor Forever -ZipPath $zip -ProjectId 123456 -DryRun | ConvertFrom-Json
-    Assert-Case ($override.ProjectId -eq 123456 -and $override.Metadata.relations.projects[0].projectID -ceq '1783613') 'Consumer override must not redirect the Forever font dependency'
+    Assert-Case ($override.ProjectId -eq 123456 -and $override.Metadata.relations.projects[0].projectID -eq 1783613) 'Consumer override must not redirect the Forever font dependency'
     Assert-Case ((Get-FileHash $zip -Algorithm SHA256).Hash -ceq $firstHash) 'Upload metadata must not change Forever package bytes'
     Assert-Case ($result.Metadata.releaseType -ceq 'beta') 'Forever upload must be beta'
     Assert-Case ($result.ExpectedGameVersionTypeId -eq 88568) 'Wrong marketplace flavor'

@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://github.com/Antrakt92/Do-You-Need-It-/releases/latest"><strong>Download for Retail</strong></a>
   · <a href="https://www.curseforge.com/wow/addons/do-you-need-it"><strong>CurseForge</strong></a>
-  · <a href="https://github.com/Antrakt92/Do-You-Need-It-/releases/tag/forever-v1.1.0"><strong>Forever beta</strong></a>
+  · <a href="https://www.curseforge.com/wow/addons/do-you-need-it/files/all?page=1&amp;pageSize=20&amp;gameVersionTypeId=88568&amp;showAlphaFiles=hide"><strong>Forever beta</strong></a>
 </p>
 
 <p align="center">
@@ -66,7 +66,7 @@ rather than GitHub's automatic source-code ZIP.
 | Client | Download | Release history |
 |---|---|---|
 | Retail: Midnight | [Latest Retail release](https://github.com/Antrakt92/Do-You-Need-It-/releases/latest) | [Retail changelog](CHANGELOG.md) |
-| WoW Forever beta | [Forever beta release](https://github.com/Antrakt92/Do-You-Need-It-/releases/tag/forever-v1.1.0) | [Forever changelog](CHANGELOG-FOREVER.md) |
+| WoW Forever beta | [Forever beta release](https://www.curseforge.com/wow/addons/do-you-need-it/files/all?page=1&pageSize=20&gameVersionTypeId=88568&showAlphaFiles=hide) | [Forever changelog](CHANGELOG-FOREVER.md) |
 
 ## Try the window
 
@@ -75,7 +75,7 @@ Type `/dyni` to open the window. Click **Demo** to preview sample gear, then
 saved to history.
 
 For troubleshooting, `/dyni status` shows the build; the current Retail build
-reports `build=1.2.1`.
+reports `build=1.2.2`.
 
 ### Forever beta
 

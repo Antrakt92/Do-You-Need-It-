@@ -4,7 +4,7 @@
 ## Group: DoYouNeedIt
 ## Notes: Shows likely-tradeable gear drops and helps ask group members if they need them.
 ## Author: Antrakt92
-## Version: 1.2.1
+## Version: 1.2.2
 ## IconTexture: Interface\AddOns\DoYouNeedIt\media\icon.png
 ## OptionalDeps: AntraktFonts
 ## SavedVariables: DoYouNeedItDB DoYouNeedItSelfTest

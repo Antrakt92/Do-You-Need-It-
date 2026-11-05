@@ -48,7 +48,8 @@ function Assert-PackageCase {
     }
     $failure = $null
     try {
-        $result = & $upload -ZipPath $zip -DryRun | ConvertFrom-Json
+        $rawJson = & $upload -ZipPath $zip -DryRun
+        $result = $rawJson | ConvertFrom-Json
     } catch {
         $failure = $_.Exception.Message
     }
@@ -63,17 +64,21 @@ function Assert-PackageCase {
     } elseif ($result.Metadata.changelog -cne $expectedChangelog) {
         throw "${Name}: upload must carry the complete released history"
     }
-    if (-not $ExpectedError) { Assert-RequiredFonts $result }
+    if (-not $ExpectedError) { Assert-RequiredFonts $result $rawJson }
     $script:caseCount++
 }
 
 function Assert-RequiredFonts {
-    param($Result)
+    param($Result, [string]$RawJson)
     $projects = $Result.Metadata.relations.projects
     if ($projects -isnot [array] -or $projects.Count -ne 1 -or
-        $projects[0].slug -cne 'antrakt-fonts' -or $projects[0].projectID -isnot [string] -or
-        $projects[0].projectID -cne '1783613' -or $projects[0].type -cne 'requiredDependency') {
-        throw 'Each uploaded file must require the exact Antrakt Fonts project as a project array'
+        $projects[0].slug -cne 'antrakt-fonts' -or
+        ($projects[0].projectID -isnot [int] -and $projects[0].projectID -isnot [long]) -or
+        $projects[0].projectID -ne 1783613 -or $projects[0].type -cne 'requiredDependency') {
+        throw 'Font dependency projectID must be the exact JSON integer 1783613 in a project array'
+    }
+    if ($RawJson -notmatch '"projectID"\s*:\s*1783613(?=\s*[,}])') {
+        throw 'Raw upload JSON must serialize projectID as an integer, never a quoted string'
     }
 }
 
@@ -98,15 +103,22 @@ try {
         $fullChangelog.Replace("# Changelog`n`n", "# Changelog`n`n## Unreleased`n`n- Future work.`n`n")
     }
     [System.IO.File]::WriteAllText($customChangelog, $futureCopy, [System.Text.UTF8Encoding]::new($false))
-    $customResult = & $upload -ZipPath $referenceZip.FullName -ChangelogPath $customChangelog -DryRun | ConvertFrom-Json
+    $customJson = & $upload -ZipPath $referenceZip.FullName -ChangelogPath $customChangelog -DryRun
+    $customResult = $customJson | ConvertFrom-Json
     if ($customResult.Metadata.changelog -cne $expectedChangelog) {
         throw 'Future work must be excluded while keeping the current release notes'
     }
-    Assert-RequiredFonts $customResult
+    Assert-RequiredFonts $customResult $customJson
     $caseCount++
     $beforeHash = (Get-FileHash $referenceZip.FullName -Algorithm SHA256).Hash
-    $overrideResult = & $upload -ZipPath $referenceZip.FullName -ProjectId 123456 -DryRun | ConvertFrom-Json
-    Assert-RequiredFonts $overrideResult
+    $overrideJson = & $upload -ZipPath $referenceZip.FullName -ProjectId 123456 -DryRun
+    $overrideResult = $overrideJson | ConvertFrom-Json
+    Assert-RequiredFonts $overrideResult $overrideJson
+    $quotedJson = $overrideJson -replace '("projectID"\s*:\s*)1783613', '$1"1783613"'
+    $quotedRejected = $false
+    try { Assert-RequiredFonts ($quotedJson | ConvertFrom-Json) $quotedJson } catch { $quotedRejected = $true }
+    if (-not $quotedRejected) { throw 'Quoted dependency project IDs must be rejected by the upload regression' }
+    $caseCount++
     if ($overrideResult.ProjectId -ne 123456 -or (Get-FileHash $referenceZip.FullName -Algorithm SHA256).Hash -cne $beforeHash) {
         throw 'Consumer project override must not alter the archive'
     }
