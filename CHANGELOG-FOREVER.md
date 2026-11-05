@@ -1,5 +1,10 @@
 # Do You Need It? — Forever Beta
 
+## 1.2.1 - 05-Nov-2026 — Shared font installation
+
+- Declare [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts) as a required dependency in new CurseForge files so the app can obtain the matching font collection. Keep the readable fallback and saved font choices when the collection is unavailable.
+- Add the collection's published download link to font-package guidance.
+
 ## 1.2.0 - 05-Nov-2026 — Shared fonts and localized whispers
 
 - Keep a compact multilingual baseline and support the optional [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts) collection when its packaged release becomes available. The addon works without it and preserves selected fonts and favorites.

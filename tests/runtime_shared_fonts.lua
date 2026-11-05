@@ -70,7 +70,22 @@ for _, flavor in ipairs({ "retail", "forever" }) do
     pending:fire("PLAYER_ENTERING_WORLD")
     local notice = pending.env.DoYouNeedItFontPackNotice
     check(notice and notice:IsShown(), "existing users receive one migration notice")
-    check(notice.copy.enabled == false, "unpublished download URL is not fabricated")
+    check(notice.copy.enabled == true, "verified published download URL enables the copy action")
+    check(not notice.body:GetText():find(pending.env.DoYouNeedItCore.FontPack.Message("enUS", "linkUnavailable"), 1, true),
+        "published URL does not show an unavailable-link claim")
+    local unpublished, unpublishedPack = client(flavor, { db = { settings = { font = old } } })
+    unpublishedPack.snapshot.links = {}
+    unpublished:fire("PLAYER_ENTERING_WORLD")
+    check(unpublished.env.DoYouNeedItFontPackNotice.copy.enabled == false,
+        "explicitly absent download URLs keep the copy action disabled")
+    local download = client(flavor, { db = { settings = { font = old } } })
+    download:fire("PLAYER_ENTERING_WORLD")
+    download.env.DoYouNeedItFontPackNotice.copy:FireScript("OnClick")
+    check(download.env.DoYouNeedItDeveloperLink:IsVisible()
+        and download.env.DoYouNeedItDeveloperLink.editBox:GetText() == snapshot.links.curseforge,
+        "copy action opens the exact verified provider download URL")
+    check(download.env.DoYouNeedItDB.fontPackNotice == "acknowledged",
+        "successful published-link copy acknowledges the campaign")
     notice:FireScript("OnKeyDown", "ESCAPE")
     check(pending.env.DoYouNeedItDB.fontPackNotice == "acknowledged", "Escape acknowledges before OnHide suspension")
     pending:fire("PLAYER_ENTERING_WORLD")
@@ -235,8 +250,8 @@ for _, flavor in ipairs({ "retail", "forever" }) do
     hidden.env.UIParent:Show(); hidden:fire("PLAYER_ENTERING_WORLD")
     check(hidden.env.DoYouNeedItFontPackNotice:IsVisible(), "normal event recovers actual visibility")
     local copyClient, copyPack = client(flavor, { db = { settings = { font = old } } })
-    -- A non-routable test URL exercises the copy UI; product links remain unset.
-    copyPack.snapshot.links.github = "https://example.invalid/fonts"
+    -- A non-routable URL isolates the copy-dialog failure fixture.
+    copyPack.snapshot.links = { github = "https://example.invalid/fonts" }
     copyClient:fire("PLAYER_ENTERING_WORLD")
     local originalCreate = copyClient.env.CreateFrame
     copyClient.env.CreateFrame = function(kind, name, parent, template)
@@ -767,6 +782,7 @@ end
 for _, flavor in ipairs({ "retail", "forever" }) do
     for _, locale in ipairs({"enUS","deDE","esES","esMX","frFR","itIT","ptBR","ruRU","koKR","zhCN","zhTW"}) do
         local h, pack = client(flavor, {db={settings={font="Interface\\AddOns\\DoYouNeedIt\\fonts\\DejaVuSans.ttf",forceLocale=locale}}})
+        pack.snapshot.links = {}
         local message=pack.Message
         local long=true
         pack.Message=function(active,id)

@@ -63,14 +63,17 @@ function Assert-PackageCase {
     } elseif ($result.Metadata.changelog -cne $expectedChangelog) {
         throw "${Name}: upload must carry the complete released history"
     }
-    if (-not $ExpectedError) { Assert-NoFontRelations $result }
+    if (-not $ExpectedError) { Assert-RequiredFonts $result }
     $script:caseCount++
 }
 
-function Assert-NoFontRelations {
+function Assert-RequiredFonts {
     param($Result)
-    if ($null -ne $Result.Metadata.PSObject.Properties['relations']) {
-        throw 'Current uploads must not declare unpublished font-project relations'
+    $projects = $Result.Metadata.relations.projects
+    if ($projects -isnot [array] -or $projects.Count -ne 1 -or
+        $projects[0].slug -cne 'antrakt-fonts' -or $projects[0].projectID -isnot [string] -or
+        $projects[0].projectID -cne '1783613' -or $projects[0].type -cne 'requiredDependency') {
+        throw 'Each uploaded file must require the exact Antrakt Fonts project as a project array'
     }
 }
 
@@ -99,11 +102,11 @@ try {
     if ($customResult.Metadata.changelog -cne $expectedChangelog) {
         throw 'Future work must be excluded while keeping the current release notes'
     }
-    Assert-NoFontRelations $customResult
+    Assert-RequiredFonts $customResult
     $caseCount++
     $beforeHash = (Get-FileHash $referenceZip.FullName -Algorithm SHA256).Hash
     $overrideResult = & $upload -ZipPath $referenceZip.FullName -ProjectId 123456 -DryRun | ConvertFrom-Json
-    Assert-NoFontRelations $overrideResult
+    Assert-RequiredFonts $overrideResult
     if ($overrideResult.ProjectId -ne 123456 -or (Get-FileHash $referenceZip.FullName -Algorithm SHA256).Hash -cne $beforeHash) {
         throw 'Consumer project override must not alter the archive'
     }

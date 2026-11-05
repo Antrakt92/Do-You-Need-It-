@@ -51,12 +51,13 @@ recover forward with a new version.
 
 The upload script reads the project ID, version, and client interfaces from the TOC. Live uploads require `CURSEFORGE_API_TOKEN` in the process environment; never put credentials in source files or reports. Use `-DryRun` when checking metadata.
 
-Current CurseForge uploads deliberately omit font-project relations while
-Antrakt Fonts has no published matching package. Runtime `OptionalDeps` remains
-in both TOCs, and the embedded baseline keeps manual and client installations
-usable without the collection. A future dependency update must first verify an
-approved provider file matching the intended client and eligible release channel;
-a Beta-only file is not a delivery guarantee for Release-only settings. The
-uploader does not change existing files or project-wide default relations.
+New CurseForge files declare Antrakt Fonts (`antrakt-fonts`, project `1783613`)
+as a required dependency for both clients. The dependency target is independent
+of the consumer project ID, including `-ProjectId` overrides. Runtime
+`OptionalDeps` remains in both TOCs, and the embedded baseline keeps manual and
+client installations usable without the collection. Before publication, verify
+an approved provider file matching the intended client and eligible release
+channel; a Beta-only file is not a delivery guarantee for Release-only settings.
+The uploader does not change existing files or project-wide default relations.
 
 Do not rerun an uncertain upload or move a published tag. The manual recovery workflow requires an exact existing tag and a verified state: either upload never started or CurseForge confirmed acceptance.
