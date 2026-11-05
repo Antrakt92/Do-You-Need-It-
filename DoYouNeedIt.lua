@@ -736,7 +736,7 @@ local function ShouldPersistDiagnostics()
 end
 
 local function PersistDiagnostics()
-    DoYouNeedItDB = DoYouNeedItDB or {}
+    if type(DoYouNeedItDB) ~= "table" then DoYouNeedItDB = {} end
     if ShouldPersistDiagnostics() then
         DoYouNeedItDB.diagnostics = Addon.diagnostics or {}
     else
@@ -749,7 +749,7 @@ local function SavedDropListHasEntries(value)
 end
 
 local function PreserveLegacyAccountDrops(settings)
-    DoYouNeedItDB = DoYouNeedItDB or {}
+    if type(DoYouNeedItDB) ~= "table" then DoYouNeedItDB = {} end
     if type(DoYouNeedItDB.legacyAccountDrops) == "table" then
         return
     end
@@ -774,7 +774,7 @@ local function PreserveLegacyAccountDrops(settings)
 end
 
 local function GetCharacterDropsDB(create)
-    DoYouNeedItDB = DoYouNeedItDB or {}
+    if type(DoYouNeedItDB) ~= "table" then DoYouNeedItDB = {} end
     local key = Addon.characterKey or SafePlayerStorageKey()
     Addon.characterKey = key
     if type(DoYouNeedItDB.characters) ~= "table" then
@@ -2342,7 +2342,7 @@ local function RefreshRows()
 end
 
 local function SaveDB()
-    DoYouNeedItDB = DoYouNeedItDB or {}
+    if type(DoYouNeedItDB) ~= "table" then DoYouNeedItDB = {} end
     local settings = Addon.state and Addon.state.settings or Core.NormalizeSettings({})
     local characterDB = GetCharacterDropsDB(true)
     local history = Addon.state and Core.SnapshotHistoryForSave(
@@ -7480,7 +7480,7 @@ local function Initialize()
         return
     end
     local existingFontInstall = type(DoYouNeedItDB) == "table" and next(DoYouNeedItDB) ~= nil
-    DoYouNeedItDB = DoYouNeedItDB or {}
+    if type(DoYouNeedItDB) ~= "table" then DoYouNeedItDB = {} end
     local settings = Core.NormalizeSettings(DoYouNeedItDB.settings or {})
     Addon.characterKey = SafePlayerStorageKey()
     PreserveLegacyAccountDrops(settings)

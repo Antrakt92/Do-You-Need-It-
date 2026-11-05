@@ -2193,4 +2193,122 @@ testSettingsWhisperTemplateEditBoxSaves()
 testSettingsRefreshKeepsFocusedWhisperDraft()
 testSettingsCloseSavesFocusedWhisperDraft()
 
+do
+    local roots = {
+        { "nil", function()
+            return nil
+        end },
+        { "false", function()
+            return false
+        end },
+        { "true", function()
+            return true
+        end },
+        { "number", function()
+            return 123
+        end },
+        { "string", function()
+            return "invalid saved root"
+        end },
+        { "function", function()
+            return function() end
+        end },
+    }
+    local function client(flavor, root)
+        local h = Harness.new({ flavor = flavor })
+        if flavor == "forever" then
+            h.env.GetBuildInfo = function()
+                return "1.60.1", "70790", "", 16001
+            end
+            h.env.WOW_PROJECT_ID = 18
+        end
+        h.env.DoYouNeedItDB = root
+        return h
+    end
+    local function upvalue(fn, wanted)
+        for index = 1, 100 do
+            local name, value = debug.getupvalue(fn, index)
+            if not name then
+                break
+            end
+            if name == wanted then
+                return value
+            end
+        end
+        error("missing existing runtime helper: " .. wanted)
+    end
+    for _, flavor in ipairs({ "retail", "forever" }) do
+        for _, case in ipairs(roots) do
+            local h = client(flavor, case[2]())
+            local ok, err = pcall(h.loadAddon, h)
+            assertTruthy(ok, flavor .. " recovers " .. case[1] .. " database at startup: " .. tostring(err))
+            assertEqual(type(h.env.DoYouNeedItDB), "table", "startup restores a database root")
+            h:slash("settings")
+            h:fire("PLAYER_ENTERING_WORLD")
+            h:fire("PLAYER_LOGOUT")
+            assertEqual(type(h.env.DoYouNeedItDB.settings), "table", "recovered settings survive normal lifecycle")
+            assertEqual(h.env.DoYouNeedItDB.settings.autoWhisper, false, "recovery never enables automatic whispers")
+            assertEqual(#h.sentMessages, 0, "root recovery never sends chat")
+        end
+        local marker = { retained = true }
+        local foreign = { history = {} }
+        local root = {
+            settings = {
+                font = "Fonts\\ARIALN.TTF",
+                forceLocale = "ruRU",
+                autoDelay = 17,
+                whisperTemplate = "Custom message {item}",
+                whisperTemplateMode = "custom",
+            },
+            characters = { Other = foreign },
+            custom = marker,
+        }
+        local h = client(flavor, root)
+        h:loadAddon()
+        assertEqual(h.env.DoYouNeedItDB, root, "valid database root keeps its identity")
+        assertEqual(root.custom, marker, "unrelated saved fields retain nested identities")
+        assertEqual(root.characters.Other, foreign, "another character's saved data keeps its identity")
+        assertEqual(root.settings.autoDelay, 17, "valid user preferences survive initialization")
+        assertEqual(root.settings.whisperTemplate, "Custom message {item}", "custom message survives initialization")
+        local save = upvalue(h.env.SlashCmdList.DOYOUNEEDIT, "SaveDB")
+        local character = upvalue(save, "GetCharacterDropsDB")
+        local diagnostics = upvalue(save, "PersistDiagnostics")
+        local initialize
+        for frame in pairs(h.eventFrames) do
+            local handler = frame.scripts.OnEvent
+            if handler then
+                for index = 1, 100 do
+                    local name, value = debug.getupvalue(handler, index)
+                    if not name then
+                        break
+                    end
+                    if name == "Initialize" then
+                        initialize = value
+                    end
+                end
+            end
+        end
+        assertTruthy(initialize, "startup helper remains reachable through its event registration")
+        local carry = upvalue(initialize, "PreserveLegacyAccountDrops")
+        for _, case in ipairs(roots) do
+            for _, helper in ipairs({ diagnostics, carry, character, save }) do
+                h.env.DoYouNeedItDB = case[2]()
+                local ok, err = pcall(helper)
+                assertTruthy(ok, flavor .. " helper recovers " .. case[1] .. " database: " .. tostring(err))
+                assertEqual(type(h.env.DoYouNeedItDB), "table", "helper restores a root before accessing fields")
+            end
+        end
+        h.env.DoYouNeedItDB = root
+        diagnostics()
+        carry()
+        character()
+        save()
+        assertEqual(h.env.DoYouNeedItDB, root, "normal helper calls preserve an existing root")
+        assertEqual(root.custom, marker, "normal persistence preserves unrelated root data")
+        assertEqual(root.characters.Other, foreign, "normal persistence preserves other character data")
+        assertEqual(root.settings.whisperTemplate, "Custom message {item}", "normal persistence keeps custom template")
+        assertEqual(root.settings.forceLocale, "ruRU", "normal persistence keeps selected locale")
+        assertEqual(#h.sentMessages, 0, "recovery helper paths never send chat")
+    end
+end
 print("runtime smoke ok")

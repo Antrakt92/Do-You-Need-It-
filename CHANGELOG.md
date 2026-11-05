@@ -8,6 +8,7 @@
 - Translate the standard whisper into the selected addon language while preserving custom messages. Reset restores the localized default; language previews do not change outgoing messages.
 - Group the addon under **Antrakt92** in the AddOns list.
 - Keep gray close controls visible and clickable above their window backgrounds, independently of fonts.
+- Recover from malformed saved settings instead of failing at startup.
 - Update the original-code license to 1.4: authors choose a positive CurseForge reward share for covered substantial reuse instead of a fixed minimum.
 - Thanks to [chenrylee](https://github.com/chenrylee) for suggesting a separate font package ([StatsPro #10](https://github.com/Antrakt92/StatsPro/issues/10)).
 
