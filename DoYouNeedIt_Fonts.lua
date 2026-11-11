@@ -1,7 +1,7 @@
 local _, namespace = ...
 local Core = _G.DoYouNeedItCore
 local snapshot = assert(namespace and namespace.AntraktFontCatalog, "Missing font catalog")
-local pack = { snapshot = snapshot, baselinePath = "Interface\\AddOns\\DoYouNeedIt\\fonts\\AntraktUISans.ttf", generation = 0 }
+local pack = { snapshot = snapshot, baselinePath = "Interface\\AddOns\\DoYouNeedIt\\fonts\\AntraktUISans.ttf", generation = 0, currentByID = {} }
 Core.FontPack = pack
 local byPath, byID = {}, {}
 local function key(path) return Core.FontPathKey(path) end
@@ -165,66 +165,98 @@ function pack.ReloadProvider()
     if pcall(reload) then return "reload-requested" end
     return "failed"
 end
+local western = { enUS = true, deDE = true, esES = true, esMX = true, frFR = true, itIT = true, ptBR = true }
+local glyphFields = { "latin", "cyrillic", "hans", "hant", "hangul", "japanese" }
+local reservedFile = snapshot.baseline.file:lower()
+
+local function plain(value)
+    return clean(value, "table") and getmetatable(value) == nil
+end
+
+local function boundedText(value, maxBytes)
+    return clean(value, "string") and #value > 0 and #value <= maxBytes and not value:find("[%c\127]")
+end
+
 function pack.Validate(catalog)
-    if type(catalog) ~= "table" or catalog.formatMajor ~= 1
-        or type(catalog.catalogRevision) ~= "string" or #catalog.catalogRevision < 1 or #catalog.catalogRevision > 128
-        or type(catalog.fonts) ~= "table" or #catalog.fonts < 1 or #catalog.fonts > 256 then return nil end
-    local ids, paths, rows = {}, {}, {}
-    for index, row in ipairs(catalog.fonts) do
-        if type(row) ~= "table" or type(row.id) ~= "string" or not row.id:match("^[a-z0-9%-]+$") or #row.id > 96
-            or type(row.name) ~= "string" or #row.name < 1 or #row.name > 128
-            or type(row.file) ~= "string" or #row.file > 160 or not row.file:match("^[A-Za-z0-9_.%-]+%.[to][tt]f$")
-            or row.path ~= "Interface\\AddOns\\AntraktFonts\\fonts\\" .. row.file
-            or type(row.sha256) ~= "string" or #row.sha256 ~= 64 or row.sha256:find("[^a-fA-F0-9]")
-            or ids[row.id] or paths[key(row.path)] then return nil end
-        for _, flag in ipairs({ "latin", "cyrillic", "hans", "hant", "hangul", "japanese" }) do
-            if type(row[flag]) ~= "boolean" then return nil end
-        end
-        if row.region ~= nil and row.region ~= "zhCN" and row.region ~= "zhTW" then return nil end
-        if row.latinLocales ~= nil then
-            if type(row.latinLocales) ~= "table" then return nil end
-            local count = 0
-            for locale, supported in pairs(row.latinLocales) do
-                count = count + 1
-                if count > 11 then return nil end
-                if not snapshot.messages[locale] or type(supported) ~= "boolean" then return nil end
-            end
-        end
-        ids[row.id], paths[key(row.path)] = true, true
-        rows[index] = copy(row)
-    end
+    if not plain(catalog) or clean(catalog.formatMajor, "number") ~= 1
+        or not boundedText(catalog.catalogRevision, 64) or #catalog.catalogRevision ~= 64
+        or not catalog.catalogRevision:match("^[a-f0-9]+$") or not plain(catalog.fonts) then return nil end
     local count = 0
     for index in pairs(catalog.fonts) do
         count = count + 1
-        if count > 256 then return nil end
-        if type(index) ~= "number" or index < 1 or index > #rows or index % 1 ~= 0 then return nil end
+        if count > 256 or not clean(index, "number") or index < 1 or index > 256 or index % 1 ~= 0 then return nil end
+    end
+    if count == 0 then return nil end
+
+    local ids, files, rows = {}, {}, {}
+    for index = 1, count do
+        local row = catalog.fonts[index]
+        if not plain(row) or not boundedText(row.id, 64) or not row.id:match("^[a-z0-9][a-z0-9%-]*$")
+            or row.id == snapshot.baseline.id or ids[row.id] or not boundedText(row.name, 128)
+            or not boundedText(row.file, 128) or not row.file:match("^[A-Za-z0-9_.%-]+%.[to]tf$")
+            or row.file:lower() == reservedFile or files[row.file:lower()]
+            or clean(row.path, "string") ~= "Interface\\AddOns\\AntraktFonts\\fonts\\" .. row.file
+            or not boundedText(row.sha256, 64) or #row.sha256 ~= 64 or not row.sha256:match("^[a-f0-9]+$") then return nil end
+        local validated = { id = row.id, name = row.name, file = row.file, path = row.path, sha256 = row.sha256 }
+        for _, field in ipairs(glyphFields) do
+            local value = clean(row[field], "boolean")
+            if value == nil then return nil end
+            validated[field] = value
+        end
+        if type(row.region) ~= "nil" then
+            local region = clean(row.region, "string")
+            if region ~= "zhCN" and region ~= "zhTW" then return nil end
+            validated.region = region
+        end
+        if type(row.latinLocales) ~= "nil" then
+            if not plain(row.latinLocales) then return nil end
+            local locales, total = {}, 0
+            for locale, supported in pairs(row.latinLocales) do
+                total = total + 1
+                if total > 7 or not clean(locale, "string") or not western[locale]
+                    or clean(supported, "boolean") ~= true then return nil end
+                locales[locale] = true
+            end
+            validated.latinLocales = locales
+        end
+        ids[row.id], files[row.file:lower()], rows[index] = true, true, validated
     end
     return rows
 end
+
+local syncing = false
 function pack.Sync()
-    local provider = rawget(_G, "AntraktFonts")
-    if pack.synced and provider == pack.provider then return end
-    pack.provider, pack.synced = provider, true
-    pack.status = pack.metadataStatus or pack.RefreshMetadata()
+    if syncing then return end
+    local exported = rawget(_G, "AntraktFonts")
+    local provider
+    if type(exported) ~= "nil" then provider = plain(exported) and exported or false end
+    if pack.synced and rawequal(provider, pack.provider) then return end
+    syncing = true
+    local status = pack.metadataStatus or pack.RefreshMetadata()
     local rows
-    if type(provider) == "table" and type(provider.GetCatalog) == "function" then
-        local ok, catalog = pcall(provider.GetCatalog)
-        local valid, result = pcall(pack.Validate, ok and catalog or nil)
-        if valid and result then rows = result; pack.status = "ready" else pack.status = "provider-incompatible" end
-    elseif provider ~= nil then pack.status = "provider-incompatible" end
-    pack.rows = {}
-    pack.currentByID = {}
+    if provider then
+        local getter = clean(rawget(provider, "GetCatalog"), "function")
+        rows = pack.Validate(query(getter))
+    end
+    if rows then status = "ready"
+    elseif provider ~= nil then status = "provider-incompatible" end
+
     local baseline = copy(snapshot.baseline)
     baseline.path = pack.baselinePath
-    pack.rows[1], pack.currentByID[baseline.id] = baseline, baseline
+    local candidate, currentByID = {baseline}, {[baseline.id] = baseline}
     for _, source in ipairs(rows or snapshot.fonts) do
         local row = copy(source)
         if not rows then row.path = "Interface\\AddOns\\DoYouNeedIt\\fonts\\" .. row.file end
-        pack.rows[#pack.rows + 1], pack.currentByID[row.id] = row, row
+        candidate[#candidate + 1], currentByID[row.id] = row, row
+    end
+    Core.SetBundledFonts(candidate)
+    for index = 2, #candidate do
+        local row = candidate[index]
         byPath[key(row.path)] = row.id
     end
-    Core.SetBundledFonts(pack.rows)
-    pack.generation = pack.generation + 1
+    pack.rows, pack.currentByID, pack.status = candidate, currentByID, status
+    pack.provider, pack.synced, pack.generation = provider, true, pack.generation + 1
+    syncing = false
 end
 function pack.Resolve(path)
     pack.Sync()

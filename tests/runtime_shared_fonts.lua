@@ -31,10 +31,48 @@ local function client(flavor, options)
     return h, h.env.DoYouNeedItCore.FontPack
 end
 for _, flavor in ipairs({ "retail", "forever" }) do
+    local h, pack = client(flavor)
+    local source = snapshot.fonts[1]
+    local function candidate()
+        local row = {}
+        for field, value in pairs(source) do row[field] = value end
+        return {formatMajor = 1, catalogRevision = string.rep("a", 64), fonts = {row}}, row
+    end
+    local broken = setmetatable({}, { __index = function() error("must not access metatable") end })
+    h.env.AntraktFonts = broken
+    h:fire("ADDON_LOADED", "AntraktFonts")
+    check(pack.status == "provider-incompatible" and pack.Resolve(pack.baselinePath) == pack.baselinePath,
+        "an incompatible global uses the baseline and leaves the font adapter usable")
+    for _, corrupt in ipairs({
+        function(_, row) row.id = snapshot.baseline.id end,
+        function(_, row)
+            row.file = snapshot.baseline.file:lower()
+            row.path = "Interface\\AddOns\\AntraktFonts\\fonts\\" .. row.file
+        end,
+        function(catalog) catalog.catalogRevision = "not-a-digest" end,
+        function(_, row) row.id = string.rep("a", 65) end,
+        function(_, row) row.name = "Font\nName" end,
+        function(_, row) row.latinLocales = {ruRU = true} end,
+        function(_, row) row.latinLocales = {enUS = false} end,
+    }) do
+        local catalog, row = candidate()
+        corrupt(catalog, row)
+        check(pack.Validate(catalog) == nil, "invalid format-one record is rejected as a unit")
+    end
+    local catalog = candidate()
+    h.env.AntraktFonts = {GetCatalog = function() return catalog end}
+    h:fire("ADDON_LOADED", "AntraktFonts")
+    check(pack.status == "ready" and pack.Resolve(source.path) == source.path,
+        "a valid provider recovers after a malformed global")
+    check(pack.Resolve(pack.baselinePath) == pack.baselinePath,
+        "provider sync preserves the independent baseline identity")
+end
+
+for _, flavor in ipairs({ "retail", "forever" }) do
     local calls = 0
     local provider = { GetCatalog = function()
         calls = calls + 1
-        return { formatMajor = 1, catalogRevision = "future-compatible-revision", fonts = snapshot.fonts }
+        return { formatMajor = 1, catalogRevision = string.rep("a", 64), fonts = snapshot.fonts }
     end }
     local old = "Interface\\AddOns\\StatsPro\\fonts\\PT_Sans-Web-Regular.ttf"
     local h, pack = client(flavor, { db = { settings = { font = old } } })
@@ -369,7 +407,7 @@ for _, flavor in ipairs({ "retail", "forever" }) do
     for key, value in pairs(snapshot.fonts[1]) do updated[1][key] = value end
     updated[1].name = "Updated Provider Face"
     local _, pack = client(flavor, {fontProvider={GetCatalog=function()
-        return {formatMajor=1,catalogRevision="independent-name-update",fonts=updated}
+        return {formatMajor=1,catalogRevision=string.rep("b", 64),fonts=updated}
     end}})
     check(pack.Name(updated[1].path) == updated[1].name, "current provider name wins for canonical path")
     check(pack.Name(updated[1].aliases[1]) == updated[1].name, "current provider name wins for saved legacy alias")
@@ -378,7 +416,7 @@ for _, flavor in ipairs({"retail", "forever"}) do
     local calls = 0
     local provider = {GetCatalog=function()
         calls = calls + 1
-        return {formatMajor=1,catalogRevision="settings-preview",fonts=snapshot.fonts}
+        return {formatMajor=1,catalogRevision=string.rep("c", 64),fonts=snapshot.fonts}
     end}
     local baseline = "Interface\\AddOns\\DoYouNeedIt\\fonts\\AntraktUISans.ttf"
     local h = client(flavor, {fontProvider=provider,db={settings={font=baseline,forceLocale="enUS"}}})
@@ -525,7 +563,7 @@ for _,flavor in ipairs({"retail","forever"}) do
     enabled=2;h:slash("settings")
     check(pack.status=="provider-not-loaded" and pack.generation==generation,"changed enable state refreshes without rebuilding font catalogue")
     h:fire("PLAYER_ENTERING_WORLD")
-    h.env.AntraktFonts={GetCatalog=function()calls=calls+1;return{formatMajor=1,catalogRevision="loaded-later",fonts=snapshot.fonts}end}
+    h.env.AntraktFonts={GetCatalog=function()calls=calls+1;return{formatMajor=1,catalogRevision=string.rep("d", 64),fonts=snapshot.fonts}end}
     h:fire("ADDON_LOADED","AntraktFonts")
     check(pack.status=="ready" and h.env.DoYouNeedItDB.fontPackNotice==nil,"late compatible package preserves unacknowledged campaign")
     local marker
@@ -668,7 +706,7 @@ for _,flavor in ipairs({"retail","forever"})do
         elseif mode=="secretGUID"then h.env.UnitGUID=function()return h:secretValue("character")end
         elseif mode=="missingGUID"then h.env.UnitGUID=function()return nil end
         elseif mode=="missing"then state.exists=false
-        elseif mode=="ready"then h.env.AntraktFonts={GetCatalog=function()return{formatMajor=1,catalogRevision="ready-before-click",fonts=snapshot.fonts}end}
+        elseif mode=="ready"then h.env.AntraktFonts={GetCatalog=function()return{formatMajor=1,catalogRevision=string.rep("e", 64),fonts=snapshot.fonts}end}
         elseif mode=="reloadMissing"then h.env.ReloadUI=nil
         elseif mode=="saveMissing"then methods.SaveAddOns=nil
         elseif mode=="saveInvalid"then methods.SaveAddOns=123;h.env.SaveAddOns=function()error("no conflicting legacy save")end
@@ -697,7 +735,7 @@ for _,flavor in ipairs({"retail","forever"})do
         if mode=="combat"then h.env.InCombatLockdown=function()return true end
         elseif mode=="missing"then state.exists=false
         elseif mode=="disabled"then state.enabled=0
-        elseif mode=="ready"then h.env.AntraktFonts={GetCatalog=function()return{formatMajor=1,catalogRevision="ready-before-reload",fonts=snapshot.fonts}end}
+        elseif mode=="ready"then h.env.AntraktFonts={GetCatalog=function()return{formatMajor=1,catalogRevision=string.rep("f", 64),fonts=snapshot.fonts}end}
         elseif mode=="saveError"then methods.SaveAddOns=function()state.saves=state.saves+1;error("save failed")end
         elseif mode=="disabledDuringSave"then methods.SaveAddOns=function()state.saves=state.saves+1;state.enabled=0 end
         elseif mode=="combatDuringSave"then methods.SaveAddOns=function()state.saves=state.saves+1;h.env.InCombatLockdown=function()return true end end
@@ -775,7 +813,7 @@ for _,flavor in ipairs({"retail","forever"})do
     notice.cross:FireScript("OnClick")
     check(not notice:IsVisible(),"information window closes normally after layering")
     local before=settings.fontDropdown:GetWidth()
-    h.env.AntraktFonts={GetCatalog=function()return{formatMajor=1,catalogRevision="marker-ready",fonts=snapshot.fonts}end}
+    h.env.AntraktFonts={GetCatalog=function()return{formatMajor=1,catalogRevision=string.rep("0", 64),fonts=snapshot.fonts}end}
     h:fire("ADDON_LOADED","AntraktFonts")
     check(not marker:IsShown() and settings.fontDropdown:GetWidth()==before,"loaded provider hides marker without moving its reserved font field")
 end
