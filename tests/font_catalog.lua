@@ -37,6 +37,45 @@ check(Core.FontSupportsText("Interface/AddOns/DoYouNeedIt/fonts/SourceHanSansCN-
 check(Core.FontSupportsText("Interface/AddOns/DoYouNeedIt/fonts/SourceHanSansTW-Regular.otf", "繁體中文", "zhTW"), "Traditional UI text uses active locale context")
 check(Core.FontSupportsText("Interface/AddOns/DoYouNeedIt/fonts/SourceHanSansTW-Regular.otf", "Игрок 繁體中文", "zhTW"), "mixed Cyrillic and Traditional text keeps TW font")
 check(Core.GetTextGlyphRequirements("繁體中文", "zhTW")[1] == "HANT", "Han detection follows Traditional output context")
+local providerFonts = "Interface/AddOns/AntraktFonts/fonts/"
+local doHyeon = providerFonts .. "DoHyeon-Regular.ttf"
+local nanumPen = providerFonts .. "NanumPenScript-Regular.ttf"
+local kosugi = providerFonts .. "KosugiMaru-Regular.ttf"
+check(Core.FontSupportsLocale(doHyeon, "koKR"), "Do Hyeon remains a choice for Korean UI")
+check(not Core.FontSupportsText(doHyeon, "갂", "koKR"), "partial Hangul coverage cannot promise an arbitrary syllable")
+check(Core.FontSupportsText(nanumPen, "갂", "koKR"), "full modern Hangul coverage accepts the same syllable")
+check(Core.FontSupportsText(kosugi, "あ", "enUS"), "kana is not misclassified as Han")
+local sawarabi = providerFonts .. "SawarabiMincho-Regular.ttf"
+local dejavu = providerFonts .. "DejaVuSans.ttf"
+for _, text in ipairs({ "ゔ", "゙", "゚", "々", "、" }) do
+    check(not Core.FontSupportsText(dejavu, text, "enUS"), "Japanese text cannot pass as Latin")
+    check(Core.FontSupportsText(sawarabi, text, "enUS"), "Sawarabi has this Japanese glyph")
+end
+for _, text in ipairs({ "ゔ", "゙", "゚" }) do
+    check(not Core.FontSupportsText(kosugi, text, "enUS"), "Kosugi lacks this voiced kana glyph")
+    check(Core.FontSupportsText(Core.FontPack.baselinePath, text, "enUS"), "baseline has this voiced kana glyph")
+end
+check(Core.FontSupportsText(kosugi, "々", "enUS"), "Kosugi has the ideographic iteration mark")
+check(not Core.FontSupportsText(providerFonts .. "MaShanZheng-Regular.ttf", "々", "zhCN"), "Chinese script flags do not promise every Japanese punctuation mark")
+check(not Core.FontSupportsText(dejavu, "ㄅ", "zhTW"), "Bopomofo cannot pass as Latin")
+check(not Core.FontSupportsText(Core.FontPack.baselinePath, "ㇰ", "enUS"), "baseline lacks the Katakana phonetic extension")
+check(Core.FontSupportsText(providerFonts .. "SourceHanSansTW-Regular.otf", "ㇰ", "enUS"), "Source Han has the Katakana phonetic extension")
+for _, text in ipairs({ "ゕ", "ゖ", "ヿ" }) do
+    check(not Core.FontSupportsText(Core.FontPack.baselinePath, text, "enUS"), "baseline lacks this extended kana glyph")
+    check(Core.FontSupportsText(sawarabi, text, "enUS"), "Sawarabi has this extended kana glyph")
+end
+check(not Core.FontSupportsText(kosugi, "Игрок · Another", "ruRU"), "known missing punctuation rejects a Cyrillic face")
+check(not Core.FontSupportsText(nanumPen, "한글 – 글꼴", "koKR"), "known missing punctuation rejects a Hangul face")
+check(Core.FontSupportsText(Core.FontPack.baselinePath, "한글 – 글꼴", "koKR"), "baseline supports this mixed punctuation fixture")
+check(not Core.FontSupportsText(Core.FontPack.baselinePath, "ᄀ", "koKR"), "conjoining Jamo is outside baseline coverage")
+check(not Core.FontSupportsText(providerFonts .. "NotoSans-Regular.ttf", "𠀀", "zhCN"), "supplementary Han cannot pass as Latin")
+check(not Core.FontSupportsText(kosugi, "\240\128\128\128", "enUS"), "malformed UTF-8 cannot promise coverage")
+local protected = "protected あ"
+_G.issecretvalue = function(value) return value == protected end
+check(not Core.FontSupportsText(kosugi, protected, "enUS"), "restricted string never authorizes font selection")
+_G.issecretvalue = function() error("unavailable") end
+check(not Core.FontSupportsText(kosugi, protected, "enUS"), "failed secret check also withholds coverage")
+_G.issecretvalue = nil
 local saved = {font = "Interface/AddOns/Old/font.ttf", fontFavorites = {["Fonts/ARIALN.TTF"] = true, [false] = true, ["bad"] = false}}
 local settings = Core.NormalizeSettings(saved)
 check(settings.font == saved.font, "normalization does not rewrite saved custom paths")

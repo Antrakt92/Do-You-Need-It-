@@ -614,12 +614,27 @@ function Addon.LocaleFont(path, locale)
     return nil
 end
 
-function Addon.FontForText(path, text, locale)
-    if path and Core.FontSupportsText(path, text, locale) and Addon.FontAvailable(path) then return path end
-    for _, candidate in ipairs(BuildFontsList(locale)) do
-        if Core.FontSupportsText(candidate.path, text, locale) and Addon.FontAvailable(candidate.path) then return candidate.path end
+function Addon.FontForRequirements(path, requirements, locale)
+    if requirements then
+        -- An unverified glyph can coexist with known requirements. If it is
+        -- the only one, preserve the selected face without guessing coverage.
+        if requirements.unverified and #requirements == 0 then return path or Core.GetDefaultFont() end
+        if path and Core.FontSupportsGlyphRequirements(path, requirements, locale) and Addon.FontAvailable(path) then return path end
+        for _, candidate in ipairs(BuildFontsList(locale)) do
+            if Core.FontSupportsGlyphRequirements(candidate.path, requirements, locale) and Addon.FontAvailable(candidate.path) then
+                return candidate.path
+            end
+        end
     end
-    return nil
+    -- Unreadable text gets the broad baseline by surface. This
+    -- fallback makes no claim that its cmap covers every glyph in the text.
+    local baseline = Core.GetDefaultFont()
+    if Addon.FontAvailable(baseline) then return baseline end
+    return path
+end
+
+function Addon.FontForText(path, text, locale)
+    return Addon.FontForRequirements(path, Core.GetTextGlyphRequirements(text, locale), locale)
 end
 
 local function StableSettingsFont()
@@ -672,8 +687,8 @@ ApplyCurrentFont = function()
     local settings = Addon.state and Addon.state.settings or Core.NormalizeSettings({})
     local previewFont = Addon.ValidatedDisplayFont()
     local stableFont
-    local dynamicFonts
     local dynamicFallbacks = {}
+    local locale = ActiveLocale()
     -- Painters follow an uncommitted slider drag; stable readers
     -- (scheduler, status, saves) keep using settings directly.
     local previewSize = Addon.sliderPreview and Addon.sliderPreview.fontSize
@@ -687,22 +702,17 @@ ApplyCurrentFont = function()
                 font = entry.fixedFont or stableFont
             end
             if entry.dynamic then
-                local text = type(entry.fontString.GetText) == "function" and SafeCall(entry.fontString.GetText, entry.fontString) or nil
-                local requirements = not IsSecret(text) and Core.GetTextGlyphRequirements(text, ActiveLocale()) or {}
-                if #requirements > 0 then
-                    dynamicFonts = dynamicFonts or BuildFontsList(ActiveLocale())
-                    local cacheKey = tostring(font) .. "\001" .. table.concat(requirements, ",")
+                local text = SafeCall(entry.fontString.GetText, entry.fontString)
+                local requirements = Core.GetTextGlyphRequirements(text, locale)
+                if not requirements or requirements.unverified or #requirements > 0 then
+                    -- Cache by clean requirements, never by the source string.
+                    local signature = "unreadable"
+                    if requirements then
+                        signature = table.concat(requirements, ",")
+                    end
+                    local cacheKey = tostring(font) .. "\001" .. signature
                     if dynamicFallbacks[cacheKey] == nil then
-                        local fallback = font
-                        if not Core.FontSupportsText(font, text, ActiveLocale()) then
-                            for _, candidate in ipairs(dynamicFonts) do
-                                if Core.FontSupportsText(candidate.path, text, ActiveLocale()) and Addon.FontAvailable(candidate.path) then
-                                    fallback = candidate.path
-                                    break
-                                end
-                            end
-                        end
-                        dynamicFallbacks[cacheKey] = fallback
+                        dynamicFallbacks[cacheKey] = Addon.FontForRequirements(font, requirements, locale)
                     end
                     font = dynamicFallbacks[cacheKey]
                 end

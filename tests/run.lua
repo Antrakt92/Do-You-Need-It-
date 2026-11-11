@@ -1325,7 +1325,7 @@ assertEqual(Core.GetTextGlyphRequirement(string.char(225, 135, 191)), "HANGUL", 
 assertEqual(Core.GetTextGlyphRequirement("ab" .. string.char(225, 128, 128) .. "cd"), nil, "myanmar lead sharing E1 does not request hangul")
 assertEqual(Core.GetTextGlyphRequirement(string.char(225, 136, 128) .. "player"), nil, "ethiopic lead sharing E1 does not request hangul")
 assertEqual(Core.GetTextGlyphRequirement("玩家"), "HANS", "han text requests a han glyph fallback")
-assertEqual(Core.GetTextGlyphRequirement("プレイヤー"), "HANS", "kana text requests a han-capable glyph fallback")
+assertEqual(Core.GetTextGlyphRequirement("プレイヤー"), "KANA", "kana text requests a Japanese glyph fallback")
 
 local titleGroupState = Core.CreateState({ maxHistoryGroups = 10, maxSessionRows = 10 })
 Core.AddVisibleRow(titleGroupState, {

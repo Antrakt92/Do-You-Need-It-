@@ -121,4 +121,84 @@ for _, flavor in ipairs({"retail", "forever"}) do
     end
     check(again == count, "reopening retains the full cold-loaded catalogue: " .. flavor)
 end
+for _, flavor in ipairs({"retail", "forever"}) do
+    local preferred = "Interface\\AddOns\\DoYouNeedIt\\fonts\\DoHyeon-Regular.ttf"
+    local client = Harness.new({flavor = flavor, db = {settings = {font = preferred, forceLocale = "koKR"}}})
+    if flavor == "forever" then
+        client.env.GetBuildInfo = function() return "1.60.1", "70450", "", 16001 end
+        client.env.WOW_PROJECT_ID = 18
+    end
+    client:setUnit("party1", {name = "갂", realm = "Ravencrest", guid = "KoreanGUID", classToken = "PALADIN"})
+    client:loadAddon()
+    client:slash("")
+    local item = client:addItem(22001, {
+        name = "Sample Trinket", equipLoc = "INVTYPE_TRINKET", classID = 4, subclassID = 0,
+        quality = 4, bindType = 2, equippable = true, usable = true,
+    })
+    client:fireLoot("갂", item)
+    client:runTimers(3, 70)
+    local row = assert(client:visibleRows()[1])
+    local core = client.env.DoYouNeedItCore
+    check(row.looter:GetFont() ~= preferred and core.FontSupportsText(row.looter:GetFont(), "갂", "koKR"),
+        "a Hangul loot name falls back from a partial face: " .. flavor)
+    check(row.drop:GetFont() == preferred, "ASCII loot text preserves the selected face: " .. flavor)
+    check(client.env.DoYouNeedItDB.settings.font == preferred, "loot fallback preserves saved choice: " .. flavor)
+    if flavor == "retail" then
+        local protected = client:secretValue("restricted loot name")
+        row.drop.GetText = function() return protected end
+        client:slash("delay 15")
+        check(row.drop:GetFont() == core.GetDefaultFont(), "restricted loot text uses the baseline")
+        check(client.env.DoYouNeedItDB.settings.font == preferred, "restricted text leaves the saved choice intact")
+    end
+end
+do
+    local preferred = "Interface\\AddOns\\DoYouNeedIt\\fonts\\SourceHanSansTW-Regular.otf"
+    local client = Harness.new({db = {settings = {font = preferred, forceLocale = "zhTW"}}})
+    client:loadAddon()
+    -- U+20021 is in this Source Han face, but not the embedded baseline.
+    local item = client:addItem(22001, {
+        name = "𠀡", equipLoc = "INVTYPE_TRINKET", classID = 4, subclassID = 0,
+        quality = 4, bindType = 2, equippable = true, usable = true,
+    })
+    client:fireLoot("Otherplayer", item)
+    local row = assert(client:visibleRows()[1])
+    check(row.drop:GetFont() == preferred, "unverified supplementary text keeps the selected Han face")
+end
+for _, flavor in ipairs({"retail", "forever"}) do
+    local preferred = "Interface\\AddOns\\DoYouNeedIt\\fonts\\DejaVuSans.ttf"
+    local client = Harness.new({flavor = flavor, db = {settings = {font = preferred}}})
+    if flavor == "forever" then
+        client.env.GetBuildInfo = function() return "1.60.1", "70450", "", 16001 end
+        client.env.WOW_PROJECT_ID = 18
+    end
+    client:loadAddon()
+    client:slash("")
+    local items = {
+        { name = "々ゔ゙", known = "々ゔ゙" },
+        { name = "한글 𠀡", known = "한글" },
+        { name = "𠀡", known = nil },
+    }
+    for index, sample in ipairs(items) do
+        local item = client:addItem(22001 + index, {
+            name = sample.name, equipLoc = "INVTYPE_TRINKET", classID = 4, subclassID = 0,
+            quality = 4, bindType = 2, equippable = true, usable = true,
+        })
+        client:fireLoot("Otherplayer", item)
+    end
+    client:runTimers(3, 70)
+    local core = client.env.DoYouNeedItCore
+    local rows = {}
+    for _, row in ipairs(client:visibleRows()) do rows[row.drop:GetText():match("|h%[(.-)%]|h")] = row.drop:GetFont() end
+    for _, sample in ipairs(items) do
+        local font = rows[sample.name]
+        check(font ~= nil, "expected sample has a visible loot row: " .. flavor)
+        if sample.known then
+            check(font ~= preferred and core.FontSupportsText(font, sample.known, "enUS"),
+                "known Japanese or Hangul text selects a suitable face: " .. flavor)
+        else
+            check(font == preferred, "supplementary-only loot text retains its selected face: " .. flavor)
+        end
+    end
+    check(client.env.DoYouNeedItDB.settings.font == preferred, "runtime adaptation preserves the selected face: " .. flavor)
+end
 print("Font update regressions: PASS (" .. checks .. " assertions)")

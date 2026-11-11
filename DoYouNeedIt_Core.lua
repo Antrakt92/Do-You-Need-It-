@@ -8,6 +8,8 @@ local GLYPH_CYR = "CYR"
 local GLYPH_HANGUL = "HANGUL"
 local GLYPH_HANS = "HANS"
 local GLYPH_HANT = "HANT"
+local GLYPH_KANA = "KANA"
+local GLYPH_CJK_MARK = "CJK_MARK"
 
 local DEFAULT_FONT = "Interface\\AddOns\\DoYouNeedIt\\fonts\\AntraktUISans.ttf"
 local DEFAULT_WHISPER_TEMPLATE = "Hey, do you need {item}?"
@@ -94,10 +96,10 @@ addFontGlyphSupport("Fonts\\SKURRI.TTF", { GLYPH_LATIN })
 addFontGlyphSupport("Fonts\\SKURRI_CYR.TTF", { GLYPH_LATIN, GLYPH_CYR })
 
 local FONT_GLYPH_PATTERNS = {
-    { pattern = "noto.*cjk", glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT, GLYPH_HANGUL } },
+    { pattern = "noto.*cjk", glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT, GLYPH_HANGUL, GLYPH_KANA } },
     { pattern = "^sourcehan.-cn[%-.]", glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS } },
     { pattern = "^sourcehan.-tw[%-.]", glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANT } },
-    { pattern = "^sourcehan.-jp[%-.]", glyphs = { GLYPH_LATIN, GLYPH_CYR } },
+    { pattern = "^sourcehan.-jp[%-.]", glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_KANA } },
     { pattern = "^sourcehan.-kr[%-.]", glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANGUL } },
     { pattern = "sourcehan", glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT, GLYPH_HANGUL } },
     { pattern = "wenquanyi", glyphs = { GLYPH_LATIN, GLYPH_HANS, GLYPH_HANT } },
@@ -114,14 +116,30 @@ local FONT_GLYPH_PATTERNS = {
     { pattern = "nanum", glyphs = { GLYPH_LATIN, GLYPH_HANGUL } },
 }
 
-local CYRILLIC_UTF8_LEAD_PATTERN = "[\208\209]"
--- Hiragana/katakana share lead E3 with CJK Extension A; Unified Ideographs
--- span leads E4-E9. Lead bytes cannot tell Simplified from Traditional apart,
--- so foreign loot text uses HANS as a best-effort CJK hint. The language picker
--- and localized Settings use explicit script and regional coverage instead.
-local CJK_UTF8_LEAD_PATTERN = "[\227-\233]"
--- Hangul syllables U+AC00-U+D7A3 encode with leads EA-ED.
-local HANGUL_UTF8_LEAD_PATTERN = "[\234-\237]"
+-- These punctuation gaps were checked against the bundled catalog faces.
+-- The script flags in the catalog only cover tested language samples.
+local FONT_TEXT_GAPS = {
+    [0x00B7] = { ["kosugi-maru"] = true, ["do-hyeon"] = true, ["nanum-pen-script"] = true,
+        ["ma-shan-zheng"] = true, ["zcool-xiaowei"] = true },
+    [0x2013] = { ["kosugi-maru"] = true, ["sawarabi-mincho"] = true, ["do-hyeon"] = true, ["nanum-pen-script"] = true },
+    [0x2014] = { ["kosugi-maru"] = true, ["sawarabi-mincho"] = true, ["do-hyeon"] = true, ["nanum-pen-script"] = true },
+    [0x2026] = { ["do-hyeon"] = true, ["nanum-pen-script"] = true },
+    [0x3005] = { ["ma-shan-zheng"] = true, ["zcool-xiaowei"] = true },
+    [0x3094] = { ["kosugi-maru"] = true },
+    [0x3095] = { ["kosugi-maru"] = true, ["antrakt-ui-sans"] = true },
+    [0x309F] = { ["kosugi-maru"] = true, ["sawarabi-mincho"] = true, ["antrakt-ui-sans"] = true },
+    [0xFF66] = { ["sawarabi-mincho"] = true },
+}
+-- Group kana by identical gaps in the checked-in faces. The render cache
+-- depends on the groups present, not the player or item name itself.
+local KANA_VARIANT_REQUIREMENTS = {
+    [0x3094] = 0x3094, [0x3099] = 0x3094, [0x309A] = 0x3094,
+    [0x303B] = 0x3095, [0x3095] = 0x3095, [0x3096] = 0x3095,
+    [0x30F7] = 0x3095, [0x30F8] = 0x3095, [0x30F9] = 0x3095, [0x30FA] = 0x3095, [0x30FF] = 0x3095,
+    [0x309F] = 0x309F, [0x30A0] = 0x309F,
+}
+local TEXT_GLYPH_ORDER = { GLYPH_CYR, GLYPH_HANGUL, GLYPH_HANS, GLYPH_HANT, GLYPH_KANA, GLYPH_CJK_MARK,
+    0x00B7, 0x2013, 0x2014, 0x2026, 0x3005, 0x3094, 0x3095, 0x309F, 0xFF66 }
 
 local BLIZZARD_SHIPPED_FONTS = {
     { path = "Fonts\\FRIZQT__.TTF", name = "Friz Quadrata TT" },
@@ -1367,48 +1385,100 @@ function Core.GetLocaleGlyphRequirement(locale)
     return LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN
 end
 
-function Core.GetTextGlyphRequirement(text)
-    if type(text) ~= "string" or text == "" then
-        return nil
-    end
-    -- WHY: WoW Lua is byte-based; this only detects UTF-8 lead bytes
-    -- and does not slice or transform the user-visible text.
-    if text:find(CYRILLIC_UTF8_LEAD_PATTERN) then
-        return GLYPH_CYR
-    end
-    if text:find(HANGUL_UTF8_LEAD_PATTERN) then
-        return GLYPH_HANGUL
-    end
-    -- Hangul Jamo U+1100-U+11FF encodes as E1 84 80-E1 87 BF. Lead E1
-    -- alone would also match Myanmar/Ethiopic, so the second byte is
-    -- constrained to 0x84-0x87 (U+10FF ends in 0x83, U+1200 starts 0x88).
-    if text:find("\225[\132-\135]") then
-        return GLYPH_HANGUL
-    end
-    if text:find(CJK_UTF8_LEAD_PATTERN) then
-        return GLYPH_HANS
-    end
-    return nil
-end
-
 function Core.GetTextGlyphRequirements(text, locale)
     local glyphs = {}
+    if type(_G.issecretvalue) == "function" then
+        local ok, secret = pcall(_G.issecretvalue, text)
+        if not ok or secret ~= false then return nil end
+    end
     if type(text) ~= "string" then return glyphs end
-    if text:find(CYRILLIC_UTF8_LEAD_PATTERN) then glyphs[#glyphs + 1] = GLYPH_CYR end
-    if text:find(HANGUL_UTF8_LEAD_PATTERN) or text:find("\225[\132-\135]") then glyphs[#glyphs + 1] = GLYPH_HANGUL end
-    -- Han codepoints alone do not identify a regional language. Use the active
-    -- locale as context; actual bundled glyph coverage is verified offline.
-    if text:find(CJK_UTF8_LEAD_PATTERN) then
-        glyphs[#glyphs + 1] = locale == "zhTW" and GLYPH_HANT or GLYPH_HANS
+    local index = text:find("[\128-\255]")
+    if not index then return glyphs end
+    local seen = {}
+    while index do
+        local first = text:byte(index)
+        local width = utf8CharByteLength(first)
+        if width == 1 then return nil end
+        local code = first % 2 ^ (7 - width)
+        for offset = 1, width - 1 do
+            local nextByte = text:byte(index + offset)
+            if not nextByte or nextByte < 128 or nextByte >= 192 then return nil end
+            code = code * 64 + nextByte - 128
+        end
+        if (width == 3 and code < 0x800) or (width == 4 and code < 0x10000)
+            or (code >= 0xD800 and code <= 0xDFFF) or code > 0x10FFFF then return nil end
+        if (code >= 0x0400 and code <= 0x052F) or (code >= 0x2DE0 and code <= 0x2DFF)
+            or (code >= 0xA640 and code <= 0xA69F) then
+            seen[GLYPH_CYR] = true
+        elseif (code >= 0x1100 and code <= 0x11FF) or (code >= 0xA960 and code <= 0xA97F)
+            or (code >= 0xD7B0 and code <= 0xD7FF) then
+            -- Conjoining Jamo are distinct from precomposed Hangul syllables.
+            -- Even the embedded baseline has no cmap coverage for this block.
+            seen[GLYPH_HANGUL] = true
+            glyphs.unverified = true
+        elseif (code >= 0x3130 and code <= 0x318F) or (code >= 0xAC00 and code <= 0xD7A3) then
+            seen[GLYPH_HANGUL] = true
+        elseif code == 0x303B or (code >= 0x3041 and code <= 0x3096) or (code >= 0x3099 and code <= 0x30FF) then
+            seen[GLYPH_KANA] = true
+            local variant = KANA_VARIANT_REQUIREMENTS[code]
+            if variant then seen[variant] = true end
+        elseif code >= 0xFF66 and code <= 0xFF9F then
+            seen[GLYPH_KANA], seen[0xFF66] = true, true
+        elseif code >= 0x31F0 and code <= 0x31FF then
+            seen[GLYPH_KANA], seen[0x309F] = true, true
+        elseif (code >= 0x3000 and code <= 0x3003) or code == 0x3005 or (code >= 0x3008 and code <= 0x3015)
+            or code == 0x301D or code == 0x301F then
+            seen[GLYPH_CJK_MARK] = true
+            if code == 0x3003 or code == 0x3005 or code == 0x3012 or code == 0x3013
+                or code == 0x301D or code == 0x301F then seen[0x3005] = true end
+        elseif (code >= 0x3105 and code <= 0x312F) or (code >= 0x31A0 and code <= 0x31BF) then
+            seen[GLYPH_HANT] = true
+        elseif (code >= 0x3004 and code <= 0x303F) or (code >= 0x3190 and code <= 0x33FF)
+            or (code >= 0x3400 and code <= 0x4DBF) or (code >= 0x4E00 and code <= 0x9FFF)
+            or (code >= 0xF900 and code <= 0xFAFF) then
+            -- Han codepoints alone do not identify a regional language.
+            seen[locale == "zhTW" and GLYPH_HANT or GLYPH_HANS] = true
+        elseif (code >= 0x20000 and code <= 0x2FA1F) or (code >= 0x30000 and code <= 0x323AF) then
+            -- Format 1 has no coverage evidence for supplementary ideographs.
+            glyphs.unverified = true
+        elseif FONT_TEXT_GAPS[code] then
+            seen[code] = true
+        end
+        index = text:find("[\128-\255]", index + width)
+    end
+    for _, glyph in ipairs(TEXT_GLYPH_ORDER) do
+        if seen[glyph] then glyphs[#glyphs + 1] = glyph end
     end
     return glyphs
 end
 
-function Core.FontSupportsText(path, text, locale)
-    for _, glyph in ipairs(Core.GetTextGlyphRequirements(text, locale)) do
-        if not Core.FontSupports(path, glyph, locale) then return false end
+function Core.GetTextGlyphRequirement(text)
+    local requirements = Core.GetTextGlyphRequirements(text)
+    local first = requirements and requirements[1]
+    if type(first) == "string" then return first end
+end
+
+function Core.FontSupportsGlyphRequirements(path, requirements, locale)
+    if not requirements then return false end
+    if #requirements == 0 then return true end
+    local font = bundledByPath[Core.FontPathKey(path)] or (Core.FontPack and Core.FontPack.Coverage(path))
+    for _, glyph in ipairs(requirements) do
+        if type(glyph) == "number" then
+            if font and FONT_TEXT_GAPS[glyph][font.id] then return false end
+        elseif glyph == GLYPH_HANGUL and font and font.id == "do-hyeon" then
+            -- Do Hyeon covers the Korean UI sample, but only part of modern
+            -- Hangul. Keep it in the picker and use a wider face for loot.
+            return false
+        elseif not Core.FontSupports(path, glyph, locale) then
+            return false
+        end
     end
     return true
+end
+
+function Core.FontSupportsText(path, text, locale)
+    local requirements = Core.GetTextGlyphRequirements(text, locale)
+    return requirements ~= nil and not requirements.unverified and Core.FontSupportsGlyphRequirements(path, requirements, locale)
 end
 
 function Core.GetLocaleLabel(key, locale)
@@ -1485,6 +1555,10 @@ function Core.FontSupportsLocale(path, locale)
 end
 
 function Core.FontSupports(fontPath, glyph, clientLocale)
+    if glyph == GLYPH_CJK_MARK then
+        return Core.FontSupports(fontPath, GLYPH_KANA, clientLocale)
+            or Core.FontSupports(fontPath, GLYPH_HANS, clientLocale) or Core.FontSupports(fontPath, GLYPH_HANT, clientLocale)
+    end
     if fontPath == nil then
         return glyph == GLYPH_LATIN
     end
@@ -1505,6 +1579,7 @@ function Core.FontSupports(fontPath, glyph, clientLocale)
         if glyph == GLYPH_HANS then return bundled.hans == true end
         if glyph == GLYPH_HANT then return bundled.hant == true end
         if glyph == GLYPH_HANGUL then return bundled.hangul == true end
+        if glyph == GLYPH_KANA then return bundled.japanese == true end
         return false
     end
     local entry = FONT_GLYPH_SUPPORT[key]
